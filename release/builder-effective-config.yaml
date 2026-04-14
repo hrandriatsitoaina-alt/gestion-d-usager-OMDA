@@ -1,0 +1,22 @@
+directories:
+  output: release
+  buildResources: build
+appId: com.omda.electron
+productName: OMDA App
+files:
+  - filter:
+      - dist/**/*
+      - main.js
+      - build/icon.ico
+win:
+  target: nsis
+  artifactName: ${productName}-Setup-${version}.exe
+  icon: build/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+electronVersion: 40.6.0
