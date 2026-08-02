@@ -1,197 +1,962 @@
-import React, { useState } from 'react';
+// src/pages/PayementChoix.jsx
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import '../styles/gestionPaiement.css';
-import Header from '../components/Header';
-import Sidebar from '../components/Sidebar';
 import MiniSidebar from '../components/MiniSidebar';
 
-const PayementChoix = () => {
+const API_URL = 'http://localhost:3001/api';
+
+const PaiementChoix = () => {
   const navigate = useNavigate();
-  const [usagers, setUsagers] = useState([
-    { id: 1342, organisateur: 'IVENCO', responsable: 'RAKOTONIAINA', lieu: 'ANTSAHAMANITRA', nbEvenements: 30, montant: 530000, statut: 'payé', retard: 0 },
-    { id: 1142, organisateur: 'LA MOZIKA', responsable: 'SOARY', lieu: 'COLESIUM', nbEvenements: 10, montant: 630000, statut: 'payé', retard: 0 },
-    { id: 1392, organisateur: 'LAC PROD', responsable: 'HERY', lieu: 'COLBERT', nbEvenements: 1, montant: 530000, statut: 'non payé', retard: 45 },
-    { id: 1456, organisateur: 'FENOARIVO', responsable: 'RANDRIAN', lieu: 'MAHAJANGA', nbEvenements: 25, montant: 780000, statut: 'partiel', retard: 15 },
-    { id: 1567, organisateur: 'TSANGANGA', responsable: 'ANDRIANA', lieu: 'TOAMASINA', nbEvenements: 40, montant: 1200000, statut: 'non payé', retard: 60 },
-  ]);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
+  const [adminError, setAdminError] = useState('');
+  const [regions, setRegions] = useState([]);
+  const [usagersList, setUsagersList] = useState([]);
+  const [financeData, setFinanceData] = useState(null);
+  const [loadingFinance, setLoadingFinance] = useState(false);
+  const [montantTotalRecu, setMontantTotalRecu] = useState(0);
+  const [filterContext, setFilterContext] = useState('Toutes les régions et tous les types');
+  const [paymentHistory, setPaymentHistory] = useState([]);
+  const [availableYears, setAvailableYears] = useState([]);
 
-  const [filtre, setFiltre] = useState('tout');
-  const [recherche, setRecherche] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [newUsager, setNewUsager] = useState({ organisateur: '', responsable: '', lieu: '', nbEvenements: 0, montant: 0 });
+  // États pour les cartes
+  const [totalUsagersFiltres, setTotalUsagersFiltres] = useState(0);
+  const [totalPayes, setTotalPayes] = useState(0);
+  const [totalNonPayes, setTotalNonPayes] = useState(0);
+  const [tauxPaiement, setTauxPaiement] = useState(0);
 
-  const getRetardClass = (retard) => {
-    if (retard > 30) return 'retard-rouge';
-    if (retard >= 10) return 'retard-bleu';
-    if (retard > 0) return 'retard-jaune';
-    return 'retard-vert';
-  };
+  // État pour le diagramme
+  const [chartData, setChartData] = useState([]);
+  const [chartMax, setChartMax] = useState(0);
 
-  const getRetardTexte = (retard) => {
-    if (retard === 0) return '✅ À jour';
-    if (retard > 30) return `🔴 ${retard} jours de retard`;
-    if (retard >= 10) return `🟡 ${retard} jours de retard`;
-    return `🟠 ${retard} jours de retard`;
-  };
+  // États pour les filtres
+  const [selectedRegion, setSelectedRegion] = useState('tous');
+  const [selectedUsagerType, setSelectedUsagerType] = useState('tous');
+  const [selectedMonth, setSelectedMonth] = useState('tous');
+  const [selectedYear, setSelectedYear] = useState('tous');
 
-  const usagersFiltres = usagers.filter(u => {
-    if (filtre === 'payé' && u.statut !== 'payé') return false;
-    if (filtre === 'non payé' && u.statut !== 'non payé') return false;
-    if (filtre === 'partiel' && u.statut !== 'partiel') return false;
-    if (recherche && !u.organisateur.toLowerCase().includes(recherche.toLowerCase()) && !u.responsable.toLowerCase().includes(recherche.toLowerCase())) return false;
-    return true;
-  });
+  // 6 types d'usagers
+  const usagerTypes = [
+    { id: 'hotel', label: 'Hôtel', icon: '🏨' },
+    { id: 'grand-surface', label: 'Grand Surface', icon: '🏪' },
+    { id: 'media', label: 'Télé/Radio', icon: '📻' },
+    { id: 'occ', label: 'OCC', icon: '📅' },
+    { id: 'bus', label: 'Bus', icon: '🚌' },
+    { id: 'nightclub', label: 'Night club', icon: '🎵' }
+  ];
 
-  const handlePaiement = (id) => {
-    setUsagers(usagers.map(u => 
-      u.id === id ? { ...u, statut: 'payé', retard: 0 } : u
-    ));
-    alert(`💰 Paiement en ligne simulé pour l'usager ${id}. Montant réglé.`);
-  };
+  const monthNames = [
+    'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+  ];
 
-  const handleAjout = () => {
-    if (!newUsager.organisateur || !newUsager.responsable || !newUsager.lieu || newUsager.nbEvenements <= 0 || newUsager.montant <= 0) {
-      alert('⚠️ Veuillez remplir tous les champs correctement.');
-      return;
+  const monthLabels = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+
+  useEffect(() => {
+    fetchAllData();
+  }, []);
+
+  useEffect(() => {
+    fetchFinanceData();
+    fetchPaymentHistory();
+    fetchChartData();
+  }, [selectedRegion, selectedUsagerType, selectedMonth, selectedYear]);
+
+  const fetchAllData = async () => {
+    try {
+      setLoading(true);
+      await Promise.all([
+        fetchStats(),
+        fetchRegions(),
+        fetchUsagers(),
+        fetchAvailableYears()
+      ]);
+      await fetchFinanceData();
+      await fetchPaymentHistory();
+      await fetchChartData();
+    } catch (err) {
+      console.error('Erreur chargement données:', err);
+    } finally {
+      setLoading(false);
     }
-    const newId = Math.max(...usagers.map(u => u.id)) + 1;
-    setUsagers([...usagers, { 
-      id: newId, 
-      ...newUsager, 
-      statut: 'non payé', 
-      retard: 0 
-    }]);
-    setNewUsager({ organisateur: '', responsable: '', lieu: '', nbEvenements: 0, montant: 0 });
-    setShowModal(false);
-    alert('✅ Usager ajouté avec succès !');
   };
+
+  const fetchStats = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/paiements/stats`);
+      if (response.data.success) {
+        setStats(response.data.stats);
+        console.log('📊 Stats reçues:', response.data.stats);
+      }
+      setError(null);
+    } catch (err) {
+      console.error('❌ Erreur fetchStats:', err);
+      setError('Erreur lors du chargement des statistiques');
+    }
+  };
+
+  const fetchRegions = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/regions`);
+      if (response.data.success) {
+        setRegions(response.data.regions);
+        console.log('📍 Régions chargées:', response.data.regions);
+      }
+    } catch (err) {
+      console.error('❌ Erreur chargement régions:', err);
+    }
+  };
+
+  const fetchUsagers = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/usagers`);
+      console.log('📥 Réponse brute /usagers:', response.data);
+      
+      let usagers = [];
+      
+      if (Array.isArray(response.data)) {
+        usagers = response.data;
+      } else if (response.data.usagers && Array.isArray(response.data.usagers)) {
+        usagers = response.data.usagers;
+      } else if (response.data.data && Array.isArray(response.data.data)) {
+        usagers = response.data.data;
+      }
+      
+      if (usagers.length > 0) {
+        const normalizedUsagers = usagers.map(u => ({
+          id: u.id,
+          type_usager: u.type_usager || u.type || 'hotel',
+          region: u.region || 'N/A',
+          denomination: u.denomination || u.nom || 'Sans nom',
+          telephone: u.telephone || '',
+          email: u.email || '',
+          created_at: u.created_at || new Date().toISOString()
+        }));
+        
+        setUsagersList(normalizedUsagers);
+        console.log(`👥 ${normalizedUsagers.length} usagers chargés et normalisés`);
+      } else {
+        console.warn('⚠️ Aucun usager trouvé dans la réponse');
+        setUsagersList([]);
+      }
+    } catch (err) {
+      console.error('❌ Erreur chargement usagers:', err);
+      setUsagersList([]);
+    }
+  };
+
+  const fetchAvailableYears = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/paiements/annees-disponibles/tous`);
+      if (response.data.success && response.data.annees.length > 0) {
+        setAvailableYears(response.data.annees);
+        const currentYear = new Date().getFullYear();
+        if (response.data.annees.includes(currentYear)) {
+          setSelectedYear(currentYear.toString());
+        } else {
+          setSelectedYear(response.data.annees[0].toString());
+        }
+        console.log('📆 Années disponibles:', response.data.annees);
+      } else {
+        const currentYear = new Date().getFullYear();
+        const years = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
+        setAvailableYears(years);
+        setSelectedYear(currentYear.toString());
+      }
+    } catch (err) {
+      console.error('❌ Erreur chargement années:', err);
+      const currentYear = new Date().getFullYear();
+      const years = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
+      setAvailableYears(years);
+      setSelectedYear(currentYear.toString());
+    }
+  };
+
+  const fetchPaymentHistory = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/paiements/historique-complet`);
+      if (response.data.success) {
+        let history = response.data.historique || [];
+        
+        if (selectedRegion !== 'tous') {
+          history = history.filter(p => p.region === selectedRegion);
+        }
+        
+        if (selectedUsagerType !== 'tous') {
+          history = history.filter(p => p.usager_type === selectedUsagerType);
+        }
+
+        if (selectedMonth !== 'tous' && selectedYear !== 'tous') {
+          history = history.filter(p => {
+            return p.mois === parseInt(selectedMonth) && 
+                   p.annee === parseInt(selectedYear);
+          });
+        } else if (selectedMonth !== 'tous') {
+          history = history.filter(p => p.mois === parseInt(selectedMonth));
+        } else if (selectedYear !== 'tous') {
+          history = history.filter(p => p.annee === parseInt(selectedYear));
+        }
+        
+        history.sort((a, b) => {
+          const dateA = new Date(a.date_paiement || a.created_at);
+          const dateB = new Date(b.date_paiement || b.created_at);
+          return dateB - dateA;
+        });
+        
+        setPaymentHistory(history);
+        console.log(`📄 ${history.length} paiements dans l'historique (filtrés)`);
+      } else {
+        setPaymentHistory([]);
+      }
+    } catch (err) {
+      console.error('❌ Erreur chargement historique:', err);
+      setPaymentHistory([]);
+    }
+  };
+
+  // ============================================================
+  // FETCH CHART DATA - Diagramme en barres
+  // ============================================================
+  const fetchChartData = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/paiements/tous`);
+      
+      if (response.data.success) {
+        const paiements = response.data.paiements || [];
+        
+        // Filtrer les paiements payés
+        let paiementsFiltres = paiements.filter(p => p.statut === 'paye');
+        
+        // Appliquer les filtres
+        if (selectedRegion !== 'tous') {
+          paiementsFiltres = paiementsFiltres.filter(p => p.region === selectedRegion);
+        }
+        
+        if (selectedUsagerType !== 'tous') {
+          paiementsFiltres = paiementsFiltres.filter(p => p.usager_type === selectedUsagerType);
+        }
+        
+        // Grouper par mois pour l'année sélectionnée ou toutes les années
+        const yearToUse = selectedYear !== 'tous' ? parseInt(selectedYear) : new Date().getFullYear();
+        const moisData = {};
+        
+        // Initialiser les 12 mois
+        for (let i = 1; i <= 12; i++) {
+          moisData[i] = 0;
+        }
+        
+        // Si un mois spécifique est sélectionné, on affiche tous les mois de l'année
+        // mais on met en évidence le mois sélectionné
+        for (const p of paiementsFiltres) {
+          if (p.annee === yearToUse) {
+            const mois = p.mois || 1;
+            if (moisData[mois] !== undefined) {
+              moisData[mois] += parseFloat(p.montant) || 0;
+            }
+          }
+        }
+        
+        // Si un mois spécifique est sélectionné, on filtre aussi
+        if (selectedMonth !== 'tous') {
+          const moisSelectionne = parseInt(selectedMonth);
+          for (let i = 1; i <= 12; i++) {
+            if (i !== moisSelectionne) {
+              moisData[i] = 0;
+            }
+          }
+        }
+        
+        // Convertir en tableau pour le rendu
+        const chartDataArray = [];
+        let maxValue = 0;
+        
+        for (let i = 1; i <= 12; i++) {
+          const value = moisData[i] || 0;
+          chartDataArray.push({
+            mois: i,
+            label: monthLabels[i - 1],
+            value: value,
+            isSelected: selectedMonth !== 'tous' ? i === parseInt(selectedMonth) : false
+          });
+          if (value > maxValue) maxValue = value;
+        }
+        
+        setChartData(chartDataArray);
+        setChartMax(maxValue > 0 ? maxValue : 1);
+        
+        console.log('📊 Données du diagramme:', chartDataArray);
+      }
+    } catch (err) {
+      console.error('❌ Erreur chargement données diagramme:', err);
+      // Données par défaut
+      const defaultData = [];
+      for (let i = 1; i <= 12; i++) {
+        defaultData.push({
+          mois: i,
+          label: monthLabels[i - 1],
+          value: 0,
+          isSelected: false
+        });
+      }
+      setChartData(defaultData);
+      setChartMax(1);
+    }
+  };
+
+  // ============================================================
+  // FETCH FINANCE DATA
+  // ============================================================
+  const fetchFinanceData = async () => {
+    try {
+      setLoadingFinance(true);
+      
+      let data = [];
+      let totalRecu = 0;
+      let context = 'Toutes les régions et tous les types';
+      
+      const response = await axios.get(`${API_URL}/paiements/tous`);
+      console.log('📥 Réponse paiements/tous:', response.data);
+      
+      if (response.data.success) {
+        const paiements = response.data.paiements || [];
+        console.log(`📊 ${paiements.length} paiements reçus`);
+        
+        let paiementsFiltres = paiements.filter(p => p.statut === 'paye');
+        console.log(`💰 ${paiementsFiltres.length} paiements payés`);
+        
+        if (selectedMonth !== 'tous' && selectedYear !== 'tous') {
+          paiementsFiltres = paiementsFiltres.filter(p => {
+            return p.mois === parseInt(selectedMonth) && 
+                   p.annee === parseInt(selectedYear);
+          });
+        } else if (selectedMonth !== 'tous') {
+          paiementsFiltres = paiementsFiltres.filter(p => p.mois === parseInt(selectedMonth));
+        } else if (selectedYear !== 'tous') {
+          paiementsFiltres = paiementsFiltres.filter(p => p.annee === parseInt(selectedYear));
+        }
+        
+        if (selectedRegion !== 'tous') {
+          paiementsFiltres = paiementsFiltres.filter(p => p.region === selectedRegion);
+        }
+        
+        console.log(`🎯 ${paiementsFiltres.length} paiements après filtres`);
+        
+        const usagersPayesMap = new Map();
+        for (const p of paiementsFiltres) {
+          const key = `${p.usager_id}-${p.usager_type}`;
+          if (!usagersPayesMap.has(key)) {
+            usagersPayesMap.set(key, {
+              usager_id: p.usager_id,
+              usager_type: p.usager_type,
+              montant_total: 0,
+              region: p.region || 'Non spécifiée'
+            });
+          }
+          const usager = usagersPayesMap.get(key);
+          usager.montant_total += parseFloat(p.montant) || 0;
+        }
+        
+        const payesCount = usagersPayesMap.size;
+        console.log(`👤 ${payesCount} usagers payés uniques`);
+        
+        let usagersFiltres = [...usagersList];
+        console.log(`📋 ${usagersFiltres.length} usagers dans la liste`);
+        
+        if (selectedRegion !== 'tous') {
+          usagersFiltres = usagersFiltres.filter(u => u.region === selectedRegion);
+          console.log(`📍 Après filtre région ${selectedRegion}: ${usagersFiltres.length}`);
+        }
+        
+        if (selectedUsagerType !== 'tous') {
+          usagersFiltres = usagersFiltres.filter(u => u.type_usager === selectedUsagerType);
+          console.log(`🏢 Après filtre type ${selectedUsagerType}: ${usagersFiltres.length}`);
+        }
+        
+        const totalUsagersFiltres = usagersFiltres.length;
+        const nonPayesCount = Math.max(0, totalUsagersFiltres - payesCount);
+        const taux = totalUsagersFiltres > 0 ? Math.round((payesCount / totalUsagersFiltres) * 100) : 0;
+        
+        console.log('📊 RÉSULTATS FINAUX:', {
+          totalUsagersFiltres,
+          payesCount,
+          nonPayesCount,
+          taux
+        });
+        
+        setTotalUsagersFiltres(totalUsagersFiltres);
+        setTotalPayes(payesCount);
+        setTotalNonPayes(nonPayesCount);
+        setTauxPaiement(taux);
+        
+        let montantTotal = 0;
+        for (const [key, usager] of usagersPayesMap) {
+          montantTotal += usager.montant_total;
+        }
+        setMontantTotalRecu(montantTotal);
+        
+        context = `${selectedRegion !== 'tous' ? `Région: ${selectedRegion}, ` : 'Toutes les régions, '}${selectedMonth !== 'tous' ? monthNames[parseInt(selectedMonth) - 1] : 'Tous mois'} ${selectedYear !== 'tous' ? selectedYear : 'Toutes années'}`;
+        setFilterContext(context);
+        
+        data = usagerTypes.map(type => {
+          const typeUsagers = usagersFiltres.filter(u => u.type_usager === type.id);
+          const typeTotal = typeUsagers.length;
+          let typePayes = 0;
+          let typeMontant = 0;
+          
+          for (const [key, usager] of usagersPayesMap) {
+            if (usager.usager_type === type.id) {
+              typePayes++;
+              typeMontant += usager.montant_total;
+            }
+          }
+          
+          return {
+            type: type.id,
+            label: type.label,
+            totalUsagers: typeTotal,
+            usagersAvecPaiement: typePayes,
+            usagersSansPaiement: Math.max(0, typeTotal - typePayes),
+            montantTotalPaye: typeMontant,
+            details: []
+          };
+        });
+        
+        for (const typeData of data) {
+          const typePayesMap = new Map();
+          for (const [key, usager] of usagersPayesMap) {
+            if (usager.usager_type === typeData.type) {
+              const regionKey = usager.region || 'Non spécifiée';
+              if (!typePayesMap.has(regionKey)) {
+                typePayesMap.set(regionKey, { montant: 0, count: 0 });
+              }
+              const regionData = typePayesMap.get(regionKey);
+              regionData.montant += usager.montant_total;
+              regionData.count++;
+            }
+          }
+          
+          for (const [region, regionData] of typePayesMap) {
+            typeData.details.push({
+              region: region,
+              montant_total: regionData.montant,
+              nombre_usagers: regionData.count
+            });
+          }
+        }
+      }
+      
+      setFinanceData(data);
+      
+    } catch (err) {
+      console.error('❌ Erreur chargement données financières:', err);
+      if (stats) {
+        let totalUsagers = 0;
+        let totalPayes = 0;
+        let totalRecu = 0;
+        
+        const dataTemp = usagerTypes.map(type => {
+          const typeStats = stats[type.id] || { total: 0, totalPayes: 0, nonPayes: 0, montantTotal: 0 };
+          totalUsagers += typeStats.total || 0;
+          totalPayes += typeStats.totalPayes || 0;
+          totalRecu += typeStats.montantTotal || 0;
+          
+          return {
+            type: type.id,
+            label: type.label,
+            totalUsagers: typeStats.total || 0,
+            usagersAvecPaiement: typeStats.totalPayes || 0,
+            usagersSansPaiement: typeStats.nonPayes || 0,
+            montantTotalPaye: typeStats.montantTotal || 0,
+            details: []
+          };
+        });
+        
+        setFinanceData(dataTemp);
+        setMontantTotalRecu(totalRecu);
+        setTotalUsagersFiltres(totalUsagers);
+        setTotalPayes(totalPayes);
+        setTotalNonPayes(Math.max(0, totalUsagers - totalPayes));
+        setTauxPaiement(totalUsagers > 0 ? Math.round((totalPayes / totalUsagers) * 100) : 0);
+      }
+    } finally {
+      setLoadingFinance(false);
+    }
+  };
+
+  const handleAdminLogin = async (e) => {
+    e.preventDefault();
+    setAdminError('');
+    try {
+      const response = await axios.post(`${API_URL}/admin/verify`, {
+        password: adminPassword
+      });
+      if (response.data.success) {
+        setShowAdminModal(false);
+        setAdminPassword('');
+        localStorage.setItem('adminToken', response.data.token);
+        localStorage.setItem('adminRole', response.data.role || 'daf');
+        navigate('/gere-payer');
+      } else {
+        setAdminError('Mot de passe incorrect');
+      }
+    } catch (err) {
+      setAdminError('Erreur de vérification');
+      console.error(err);
+    }
+  };
+
+  const handlePrintPDF = () => {
+    window.print();
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('fr-FR');
+  };
+
+  const getTypeLabel = (typeId) => {
+    const type = usagerTypes.find(t => t.id === typeId);
+    return type ? type.label : typeId;
+  };
+
+  const getCorrectedStats = (typeId) => {
+    const typeStats = stats?.[typeId] || { total: 0, totalPayes: 0, nonPayes: 0, montantTotal: 0 };
+    if (typeStats.nonPayes < 0) {
+      typeStats.nonPayes = 0;
+    }
+    return typeStats;
+  };
+
+  const handleRetour = () => {
+    navigate('/dashboard');
+  };
+
+  const getPeriodLabel = () => {
+    if (selectedMonth === 'tous' && selectedYear === 'tous') {
+      return 'Toutes périodes';
+    } else if (selectedMonth === 'tous') {
+      return `Année ${selectedYear}`;
+    } else if (selectedYear === 'tous') {
+      return `Mois de ${monthNames[parseInt(selectedMonth) - 1]}`;
+    } else {
+      return `${monthNames[parseInt(selectedMonth) - 1]} ${selectedYear}`;
+    }
+  };
+
+  if (loading) {
+    return (
+      <>
+        <MiniSidebar />
+        <div className="payment-loading">
+          <div className="spinner"></div>
+          <p>Chargement des données financières...</p>
+        </div>
+      </>
+    );
+  }
+
+  if (error) {
+    return (
+      <>
+        <MiniSidebar />
+        <div className="payment-error">
+          <p>{error}</p>
+          <button onClick={fetchAllData} className="btn-retry">Réessayer</button>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
-      <Header />
-      <Sidebar />
       <MiniSidebar />
-      
-      <main className="contenu">
-
-  {/* otion */}
-  <div class="cont">
-         <div class="cont1">
-                 <div class="cont11">
-                    <select class="form-select">
-                        <option value="">Sélectionnez votre usage</option>
-                        <option value="OCC">OCC</option>
-                        <option value="Bus">Bus</option>
-                        <option value="Grand Surface">Grand Surface</option>
-                        <option value="Night club">Night club</option>
-                        <option value="Télé/Radio">Télé/Radio</option>
-                        <option value="Hôtel">Hôtel</option>
-                    </select>
-                 </div>
-
-                 <div class="cont12">
-                      <div class="btn"><button> ➕ Ajout Nouveau</button></div>
-                      <div class="btn"><button> ✔ Valider</button></div>
-                 </div>
-         </div>
-         <div class="cont2">
-           <div class="cont21"><h3>Éléments sélectionnés : <span>OCC</span></h3></div>
-           <div class="cont22">
-                <div class="izr">
-                     <div><h3>Usg : <span>Occ</span></h3></div>
-                     <div><h4>Ins: <span>30</span> |  Fonct : <span>40</span> | Ret : <span>300</span></h4></div>
-                </div>
+      <div className="payment-container">
+        {/* En-tête */}
+        <div className="payment-header">
+          <div className="header-left">
+            <h1>
+              <span className="header-icon">📊</span>
+              Tableau de Bord Financier
+            </h1>
+            <p className="header-subtitle">Suivi des paiements et statistiques des usagers</p>
           </div>
-         </div><br />
-   </div>
+          <div className="header-actions">
+            <button onClick={handlePrintPDF} className="btn-pdf">
+              📄 Aperçu PDF
+            </button>
+            <button 
+              onClick={() => setShowAdminModal(true)} 
+              className="btn-gestion"
+            >
+              🔒 Gestion des paiements
+            </button>
+            <button className="btn-retour" onClick={handleRetour}>
+              ← Retour
+            </button>
+          </div>
+        </div>
 
-  {/* option */}
-
-
-        <section className="paiement-section">
-          <div className="paiement-header">
-            <h1>📋 Gestion des paiements</h1>
-            <div className="filtres-recherche">
-              <select value={filtre} onChange={(e) => setFiltre(e.target.value)} className="filtre-select">
-                <option value="tout">🌐 Tous</option>
-                <option value="payé">✅ Payés</option>
-                <option value="non payé">❌ Non payés</option>
-                <option value="partiel">🔄 Partiels</option>
+        {/* Filtres */}
+        <div className="filters-section">
+          <div className="filters-left">
+            <div className="filter-group">
+              <label>📍 Région</label>
+              <select 
+                value={selectedRegion} 
+                onChange={(e) => setSelectedRegion(e.target.value)}
+                className="filter-select"
+              >
+                <option value="tous">Toutes les régions</option>
+                {regions.map(region => (
+                  <option key={region.id} value={region.nom}>{region.nom}</option>
+                ))}
               </select>
-              <input 
-                type="text" 
-                placeholder="🔍 Rechercher (organisateur/responsable)" 
-                value={recherche} 
-                onChange={(e) => setRecherche(e.target.value)} 
-                className="recherche-input" 
+            </div>
+            <div className="filter-group">
+              <label>🏢 Type d'usager</label>
+              <select 
+                value={selectedUsagerType} 
+                onChange={(e) => setSelectedUsagerType(e.target.value)}
+                className="filter-select"
+              >
+                <option value="tous">Tous les types</option>
+                {usagerTypes.map(type => (
+                  <option key={type.id} value={type.id}>{type.icon} {type.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="filters-right">
+            <div className="filter-group">
+              <label>📅 Mois</label>
+              <select 
+                value={selectedMonth} 
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="filter-select"
+              >
+                <option value="tous">Tous les mois</option>
+                {monthNames.map((month, index) => (
+                  <option key={index + 1} value={index + 1}>{month}</option>
+                ))}
+              </select>
+            </div>
+            <div className="filter-group">
+              <label>📆 Année</label>
+              <select 
+                value={selectedYear} 
+                onChange={(e) => setSelectedYear(e.target.value)}
+                className="filter-select"
+              >
+                <option value="tous">Toutes les années</option>
+                {availableYears.map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {loadingFinance && <span className="loading-spinner">⏳</span>}
+        </div>
+
+        {/* ⭐⭐⭐ CARTES DE SYNTHÈSE AVEC DIAGRAMME ⭐⭐⭐ */}
+        <div className="summary-cards">
+          {/* Carte 1: Total Usagers */}
+          <div className="summary-card total-usagers">
+            <div className="card-icon">👥</div>
+            <div className="card-content">
+              <span className="card-label">Total Usagers</span>
+              <span className="card-value">{totalUsagersFiltres}</span>
+              <span className="card-sub-label">
+                {selectedRegion !== 'tous' ? `Région: ${selectedRegion}` : 'Toutes régions'}
+                {selectedUsagerType !== 'tous' && ` • ${usagerTypes.find(t => t.id === selectedUsagerType)?.label}`}
+              </span>
+            </div>
+          </div>
+
+          {/* Carte 2: Total Payés */}
+          <div className="summary-card total-payes">
+            <div className="card-icon">💰</div>
+            <div className="card-content">
+              <span className="card-label">Total Payés</span>
+              <span className="card-value">{totalPayes}</span>
+              <span className="card-sub-label">Usagers avec paiement</span>
+            </div>
+          </div>
+
+          {/* Carte 3: Non Payés */}
+          <div className="summary-card total-non-payes">
+            <div className="card-icon">💳</div>
+            <div className="card-content">
+              <span className="card-label">Non Payés</span>
+              <span className="card-value">{totalNonPayes}</span>
+              <span className="card-sub-label">
+                {selectedMonth !== 'tous' ? monthNames[parseInt(selectedMonth) - 1] : 'Tous mois'}
+                {selectedYear !== 'tous' && ` ${selectedYear}`}
+              </span>
+            </div>
+          </div>
+
+          {/* Carte 4: Taux de Paiement */}
+          <div className="summary-card taux-paiement">
+            <div className="card-icon">📈</div>
+            <div className="card-content">
+              <span className="card-label">Taux de Paiement</span>
+              <span className="card-value">{tauxPaiement}%</span>
+              <span className="card-sub-label">
+                {totalUsagersFiltres > 0 ? `${totalPayes}/${totalUsagersFiltres} payés` : 'Aucun usager'}
+              </span>
+            </div>
+          </div>
+
+          {/* Carte 5: Montant Reçu */}
+          <div className="summary-card montant-recu">
+            <div className="card-icon">💵</div>
+            <div className="card-content">
+              <span className="card-label">Montant Reçu</span>
+              <span className="card-value montant-recu-value">
+                {montantTotalRecu.toLocaleString()} Ar
+              </span>
+              <span className="card-sub-label">{filterContext}</span>
+            </div>
+          </div>
+
+        </div>
+
+        {/* 6 usagers sur une ligne */}
+        <div className="usagers-stats-row">
+          {usagerTypes.map(type => {
+            if (selectedUsagerType !== 'tous' && selectedUsagerType !== type.id) {
+              return null;
+            }
+
+            const typeStats = getCorrectedStats(type.id);
+            let financeType = financeData?.find(f => f.type === type.id) || { 
+              totalUsagers: 0, 
+              usagersAvecPaiement: 0, 
+              usagersSansPaiement: 0, 
+              montantTotalPaye: 0,
+              details: []
+            };
+            
+            const total = financeType.totalUsagers || typeStats.total || 0;
+            const payes = financeType.usagersAvecPaiement || typeStats.totalPayes || 0;
+            const nonPayes = Math.max(0, financeType.usagersSansPaiement || typeStats.nonPayes || 0);
+            const montant = financeType.montantTotalPaye || typeStats.montantTotal || 0;
+            const taux = total > 0 ? Math.round((payes / total) * 100) : 0;
+
+            return (
+              <div key={type.id} className="usager-stat-card">
+                <div className="usager-stat-header">
+                  <span className="usager-icon">{type.icon}</span>
+                  <span className="usager-label">{type.label}</span>
+                </div>
+                <div className="usager-stat-body">
+                  <div className="usager-stat-item">
+                    <span className="usager-stat-label">Total</span>
+                    <span className="usager-stat-value">{total}</span>
+                  </div>
+                  <div className="usager-stat-item">
+                    <span className="usager-stat-label">Payés</span>
+                    <span className="usager-stat-value success">{payes}</span>
+                  </div>
+                  <div className="usager-stat-item">
+                    <span className="usager-stat-label">Non Payés</span>
+                    <span className="usager-stat-value danger">{nonPayes}</span>
+                  </div>
+                  <div className="usager-stat-item montant-item">
+                    <span className="usager-stat-label">Montant</span>
+                    <span className="usager-stat-value montant-value">
+                      {montant.toLocaleString()} Ar
+                    </span>
+                  </div>
+                  <div className="usager-progress">
+                    <div className="usager-progress-bar">
+                      <div 
+                        className="usager-progress-fill" 
+                        style={{ width: `${taux}%` }}
+                      />
+                    </div>
+                    <span className="usager-progress-label">{taux}% payé</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Régions */}
+        <div className="regions-section">
+          <h2 className="section-title">
+            <span className="section-icon">📈</span>
+            Aperçu par Région
+            {selectedRegion !== 'tous' && (
+              <span className="filter-badge">Filtré: {selectedRegion}</span>
+            )}
+            {selectedUsagerType !== 'tous' && (
+              <span className="filter-badge">Type: {usagerTypes.find(t => t.id === selectedUsagerType)?.label || ''}</span>
+            )}
+            <span className="filter-badge" style={{ backgroundColor: '#2980b9', color: '#fff' }}>
+              {getPeriodLabel()}
+            </span>
+          </h2>
+          <div className="regions-grid">
+            <div className="region-card region-total">
+              <div className="region-header">
+                <span className="region-name">Toutes les régions</span>
+                <span className="region-total-amount">
+                  {montantTotalRecu.toLocaleString()} Ar
+                </span>
+              </div>
+              <div className="region-stats">
+                <span>Usagers: {totalUsagersFiltres}</span>
+                <span>Taux: {tauxPaiement}%</span>
+                <span>Reçu: {montantTotalRecu.toLocaleString()} Ar</span>
+              </div>
+            </div>
+            {regions.map(region => {
+              if (selectedRegion !== 'tous' && selectedRegion !== region.nom) {
+                return null;
+              }
+
+              let regionMontant = 0;
+              let regionUsagers = 0;
+              
+              if (financeData) {
+                for (const type of financeData) {
+                  if (type.details) {
+                    for (const detail of type.details) {
+                      if (detail.region === region.nom) {
+                        regionMontant += detail.montant_total || 0;
+                        regionUsagers += detail.nombre_usagers || 0;
+                      }
+                    }
+                  }
+                }
+              }
+              
+              return (
+                <div key={region.id} className="region-card">
+                  <div className="region-header">
+                    <span className="region-name">{region.nom}</span>
+                    <span className="region-amount">
+                      {regionMontant.toLocaleString()} Ar
+                    </span>
+                  </div>
+                  <div className="region-stats">
+                    <span>Usagers: {regionUsagers}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Historique des paiements */}
+        <div className="history-section">
+          <h2 className="section-title">
+            <span className="section-icon">📄</span>
+            Historique des paiements
+            {selectedRegion !== 'tous' && (
+              <span className="filter-badge">Région: {selectedRegion}</span>
+            )}
+            {selectedUsagerType !== 'tous' && (
+              <span className="filter-badge">Type: {usagerTypes.find(t => t.id === selectedUsagerType)?.label || ''}</span>
+            )}
+            <span className="filter-badge" style={{ backgroundColor: '#27ae60', color: '#fff' }}>
+              {getPeriodLabel()}
+            </span>
+            <span className="filter-badge" style={{ backgroundColor: '#8e44ad', color: '#fff' }}>
+              Total: {paymentHistory.length} paiements
+            </span>
+          </h2>
+          <div className="history-table-container">
+            <table className="history-table">
+              <thead>
+                <tr>
+                  <th>Usager</th>
+                  <th>Type</th>
+                  <th>Montant</th>
+                  <th>Mois/Année</th>
+                  <th>Date Paiement</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paymentHistory && paymentHistory.length > 0 ? (
+                  paymentHistory.map((payment, index) => (
+                    <tr key={payment.id || index}>
+                      <td>{payment.usager_nom || 'Inconnu'}</td>
+                      <td>
+                        <span className="type-badge">
+                          {usagerTypes.find(t => t.id === payment.usager_type)?.label || payment.usager_type}
+                        </span>
+                      </td>
+                      <td>{(payment.montant || 0).toLocaleString()} Ar</td>
+                      <td>
+                        {payment.mois ? monthNames[(payment.mois || 1) - 1] : ''} 
+                        {payment.annee || ''}
+                      </td>
+                      <td>{formatDate(payment.date_paiement || payment.created_at)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="5" className="no-data">
+                      Aucun paiement enregistré pour {getPeriodLabel().toLowerCase()}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="payment-footer">
+          <p>© 2026 OMDA - Gestion Financière</p>
+          <p>Dernière mise à jour: {new Date().toLocaleDateString('fr-FR')}</p>
+        </div>
+      </div>
+
+      {/* Modal Admin */}
+      {showAdminModal && (
+        <div className="modal-overlay">
+          <div className="modal-content admin-modal">
+            <button 
+              className="modal-close"
+              onClick={() => {
+                setShowAdminModal(false);
+                setAdminPassword('');
+                setAdminError('');
+              }}
+            >
+              ✕
+            </button>
+            <div className="modal-header">
+              <span className="modal-icon">🔒</span>
+              <h2>Accès Gestion des Paiements</h2>
+              <p>Veuillez entrer votre code d'authentification (DAF)</p>
+            </div>
+            <form onSubmit={handleAdminLogin} className="admin-form">
+              <input
+                type="password"
+                placeholder="Code à 4 chiffres"
+                value={adminPassword}
+                onChange={(e) => setAdminPassword(e.target.value)}
+                maxLength={4}
+                pattern="[0-9]{4}"
+                className="admin-input"
+                autoFocus
               />
-              <button className="btn-ajout" onClick={() => setShowModal(true)}>
-                ➕ Ajouter
+              {adminError && <p className="error-message">{adminError}</p>}
+              <button type="submit" className="btn-admin-login">
+                🔓 Vérifier l'accès
               </button>
-            </div>
-          </div>
-
-          <div className="tableau-paiements">
-            <div className="table-header">
-              <div>ID</div>
-              <div>Organisateur</div>
-              <div>Responsable</div>
-              <div>Lieu</div>
-              <div>Événements</div>
-              <div>Montant (Ar)</div>
-              <div>Situation</div>
-              <div>Action</div>
-            </div>
-            {usagersFiltres.map(u => (
-              <div key={u.id} className="table-row">
-                <div>{u.id}</div>
-                <div>{u.organisateur}</div>
-                <div>{u.responsable}</div>
-                <div>{u.lieu}</div>
-                <div>{u.nbEvenements}</div>
-                <div>{u.montant.toLocaleString()} Ar</div>
-                <div>
-                  <span className={`situation-badge ${u.statut === 'payé' ? 'paye' : u.statut === 'partiel' ? 'partiel' : 'non-paye'}`}>
-                    {u.statut === 'payé' ? '✅ Payé' : u.statut === 'partiel' ? '🔄 Partiel' : '❌ Non payé'}
-                  </span>
-                  <span className={getRetardClass(u.retard)}>
-                    {getRetardTexte(u.retard)}
-                  </span>
-                </div>
-                <div>
-                  {u.statut !== 'payé' && (
-                    <button className="btn-payer" onClick={() => handlePaiement(u.id)}>
-                      💳 Payer en ligne
-                    </button>
-                  )}
-                  {u.statut === 'payé' && <span className="paye-texte">✔ Réglé</span>}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mive">
-            <div><h3>⬅️ Retour à la page d'accueil</h3></div>
-            <div><button className="btn-modern outline" onClick={() => navigate('/dashboard')}>← Retour</button></div>
-          </div>
-        </section>
-      </main>
-
-      {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>➕ Ajouter un usager / événement</h2>
-            <div className="modal-form">
-              <input type="text" placeholder="Organisateur" value={newUsager.organisateur} onChange={(e) => setNewUsager({...newUsager, organisateur: e.target.value})} />
-              <input type="text" placeholder="Responsable" value={newUsager.responsable} onChange={(e) => setNewUsager({...newUsager, responsable: e.target.value})} />
-              <input type="text" placeholder="Lieu" value={newUsager.lieu} onChange={(e) => setNewUsager({...newUsager, lieu: e.target.value})} />
-              <input type="number" placeholder="Nombre d'événements" value={newUsager.nbEvenements} onChange={(e) => setNewUsager({...newUsager, nbEvenements: parseInt(e.target.value) || 0})} />
-              <input type="number" placeholder="Montant (Ar)" value={newUsager.montant} onChange={(e) => setNewUsager({...newUsager, montant: parseInt(e.target.value) || 0})} />
-              <div className="modal-buttons">
-                <button className="btn-valider" onClick={handleAjout}>✔ Valider</button>
-                <button className="btn-annuler" onClick={() => setShowModal(false)}>✖ Annuler</button>
-              </div>
-            </div>
+            </form>
           </div>
         </div>
       )}
@@ -199,4 +964,4 @@ const PayementChoix = () => {
   );
 };
 
-export default PayementChoix;
+export default PaiementChoix;

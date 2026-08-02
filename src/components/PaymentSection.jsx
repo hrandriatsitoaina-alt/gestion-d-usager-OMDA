@@ -10,7 +10,9 @@ const PaymentSection = () => {
         <div className="omda17A">
           <h1>Gestion d'événements et paiement</h1>
           <h3>Lorem ipsum dolor sit amet consectetur adipisicing elit. Iure esse debitis natus, consequatur molestias quos in qui fugiat odit saepe corrupti voluptate corporis aliquam adipisci eum voluptates consequuntur non eaque!</h3>
-          <button onClick={() => navigate('/choix-payement')}>💰 Nouveau Payement</button>
+          {/* <button onClick={() => navigate('/billan')}>💰 Bord Financier</button>  */}
+       
+          <button onClick={() => navigate('/gere-dossier')}>💰 Gestion des dossier et impresion </button>  
         </div>
         
         <div className="omda17B">
@@ -30,7 +32,9 @@ const PaymentSection = () => {
                 ].map((item, idx) => (
                   <h2 key={idx}>{item.icon} <p>{item.value}</p></h2>
                 ))}
-                <div className="omda7Q"><a href="#">Gérer paiement ➕</a></div>
+                {/* <div className="omda7Q"><a href="#" onClick={() => navigate('/gere-payer')}>Gérer paiement ➕</a></div> */}
+                <div className="omda7Q"><a href="#" onClick={() => navigate('/billan')}>💰 Billan Financier</a></div>
+
                 
               </div>
             </div>
@@ -62,8 +66,8 @@ const PaymentSection = () => {
           </div>
           
           <div className="omdasac">
+            <div className="osac2"onClick={() => navigate('/gere-contra')}><a href="#">💳 Gestion de contra 💳</a></div>
             <div className="osac1" onClick={() => navigate('/facture-usager')}><a href="#">📝 Gestion facture 📝</a></div>
-            <div className="osac2"><a href="#">💳 Mode paiement 💳</a></div>
             <div className="osac3"><a href="#">📄 Gestion quittance 📄</a></div>
           </div>
         </div>

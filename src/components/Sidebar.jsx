@@ -14,7 +14,7 @@ const Sidebar = () => {
         <div className="scrollbox-inner">
           <div className="OmdCont">
           <div className="promd">
-              <h2 align="center" onClick={() => navigate('/dashboard')}><a href="#">⛪ Home ✨</a> </h2>
+              <h2 align="center" onClick={() => navigate('/dashboard')}><a href="#">⛪ Acceuil ✨</a> </h2>
             </div>
             <div className="souligne"></div>
             

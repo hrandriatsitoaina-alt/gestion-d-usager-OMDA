@@ -4,23 +4,30 @@ import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import MiniSidebar from '../components/MiniSidebar';
-
+import AdminPanel from './AdminPanel';
 import omdaLogo from '../assets/imagesOMDA.png'; 
-
 
 const Authentification = () => {
     const navigate = useNavigate();
     const [selectedNetwork, setSelectedNetwork] = useState(null);
     const [currentPage, setCurrentPage] = useState('sync');
     const [serverStatusText, setServerStatusText] = useState('Recherche du serveur...');
-    const [successMessage, setSuccessMessage] = useState('⏳ Sélectionnez un réseau puis cliquez sur "Serveur OK"');
     const [selectedNetworkName, setSelectedNetworkName] = useState('Aucun');
     const [connectedNetwork, setConnectedNetwork] = useState(null);
     
-    // États pour le formulaire
+    // États pour le formulaire de login
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [isFormValid, setIsFormValid] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    
+    // États pour le Super Admin Panel
+    const [showAdminPasswordModal, setShowAdminPasswordModal] = useState(false);
+    const [adminPasswordInput, setAdminPasswordInput] = useState('');
+    const [showAdminPassword, setShowAdminPassword] = useState(false);
+    const [adminToken, setAdminToken] = useState(null);
+    const [showAdminPanel, setShowAdminPanel] = useState(false);
 
     // Vérifier si le formulaire est valide
     const checkFormValidity = (user, pass) => {
@@ -41,16 +48,14 @@ const Authentification = () => {
         checkFormValidity(username, value);
     };
 
-    // Fonction pour connecter à un réseau
+    // Fonction pour connecter à un réseau (simulé)
     const connectToNetwork = (networkName, btnElement) => {
-        setSuccessMessage(`🔌 Connexion à ${networkName} en cours...`);
-        setServerStatusText(`🔄 Connexion à ${networkName}...`);
+        setServerStatusText(`Connexion à ${networkName}...`);
         
         setTimeout(() => {
             setSelectedNetwork(networkName);
             setSelectedNetworkName(networkName);
-            setServerStatusText(`✅ Connecté à ${networkName} - Serveur prêt`);
-            setSuccessMessage(`✅ Connecté à ${networkName}. Cliquez sur "Serveur OK" pour continuer.`);
+            setServerStatusText(`Connecté à ${networkName} - Serveur prêt`);
             
             btnElement.textContent = 'Connecté ✓';
             btnElement.style.background = '#2ecc71';
@@ -62,10 +67,7 @@ const Authentification = () => {
     // Fonction pour passer à l'authentification
     const goToAuthPage = () => {
         if (!selectedNetwork) {
-            setSuccessMessage('❌ Veuillez d\'abord sélectionner un réseau !');
-            setTimeout(() => {
-                setSuccessMessage('⏳ Sélectionnez un réseau puis cliquez sur "Serveur OK"');
-            }, 3000);
+            alert('Veuillez d\'abord sélectionner un réseau !');
             return;
         }
         setConnectedNetwork(selectedNetwork);
@@ -78,18 +80,107 @@ const Authentification = () => {
         setUsername('');
         setPassword('');
         setIsFormValid(false);
+        setShowPassword(false);
     };
 
-    // Gestionnaire de connexion - Redirection vers Dashboard
-    const handleLogin = () => {
+    // ============================================================
+    // GESTIONNAIRE DE CONNEXION - AVEC SAUVEGARDE DU TOKEN
+    // ============================================================
+    const handleLogin = async () => {
         if (username.trim() === '' || password.trim() === '') {
             alert('Veuillez remplir tous les champs');
             return;
         }
         
-        // Connexion réussie - Redirection vers Dashboard
-        alert(`Bienvenue ${username} ! Connexion réussie sur le réseau ${connectedNetwork}.`);
-        navigate('/dashboard');
+        setIsLoading(true);
+        
+        try {
+            const response = await fetch('http://localhost:3001/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    username: username,
+                    password: password
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // ============================================
+                // SAUVEGARDER LE TOKEN ADMIN
+                // ============================================
+                if (data.adminToken) {
+                    localStorage.setItem('adminToken', data.adminToken);
+                    console.log('✅ Token Admin sauvegardé:', data.adminToken);
+                } else {
+                    // Pour les utilisateurs normaux, créer un token temporaire
+                    const tempToken = 'user_' + data.user.id + '_' + Date.now();
+                    localStorage.setItem('adminToken', tempToken);
+                    console.log('✅ Token Utilisateur sauvegardé:', tempToken);
+                }
+                
+                // Stocker les informations utilisateur
+                localStorage.setItem('user', JSON.stringify(data.user));
+                localStorage.setItem('isLoggedIn', 'true');
+                localStorage.setItem('userRole', data.user.role);
+                localStorage.setItem('userName', data.user.nom);
+                localStorage.setItem('userId', data.user.id);
+                
+                console.log('✅ Connexion réussie:', data.user.nom, 'Rôle:', data.user.role);
+                
+                setTimeout(() => {
+                    navigate('/dashboard');
+                }, 500);
+            } else {
+                alert(`❌ ${data.message || 'Identifiants incorrects'}`);
+                setIsLoading(false);
+            }
+        } catch (error) {
+            console.error('Erreur de connexion:', error);
+            alert('❌ Erreur de connexion au serveur.\n\nVérifiez que le serveur backend est démarré :\nnode src/server/server.js');
+            setIsLoading(false);
+        }
+    };
+
+    // ============================================================
+    // ACCÈS SUPER ADMIN PANEL
+    // ============================================================
+    const openAdminPanel = () => {
+        setShowAdminPasswordModal(true);
+    };
+
+    const verifyAdminPassword = async () => {
+        if (!adminPasswordInput || adminPasswordInput.length !== 4) {
+            alert('Veuillez entrer un code à 4 chiffres');
+            return;
+        }
+        
+        try {
+            const response = await fetch('http://localhost:3001/api/admin/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: adminPasswordInput })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                localStorage.setItem('adminToken', data.token);
+                setAdminToken(data.token);
+                setShowAdminPasswordModal(false);
+                setShowAdminPanel(true);
+                setAdminPasswordInput('');
+                setShowAdminPassword(false);
+            } else {
+                alert('Mot de passe incorrect');
+            }
+        } catch (error) {
+            console.error('Erreur:', error);
+            alert('Erreur de vérification');
+        }
     };
 
     return (
@@ -165,8 +256,16 @@ const Authentification = () => {
                                 ✅ Serveur OK - Passer à l'authentification
                             </button>
 
+                            {/* Bouton Accès Super Admin - visible après connexion réseau */}
+                            {selectedNetwork && (
+                                <div className="admin-link-container">
+                                    <button className="admin-link-btn" onClick={openAdminPanel}>
+                                        👑 Accès Super Admin
+                                    </button>
+                                </div>
+                            )}
+
                             <hr className="divider" />
-                            <h4 className="success-message">{successMessage}</h4>
                         </div>
                     </div>
                 )}
@@ -176,16 +275,8 @@ const Authentification = () => {
                     <div className="page-auth">
                         <div className="sauth1">
                             <div className="logo-wrapper">
-                                <div className="ip1"><img src={omdaLogo} alt="OMDA Logo"className=""/></div>
-                                
+                                <div className="ip1"><img src={omdaLogo} alt="OMDA Logo" className=""/></div>
                                 <h1>OMDA</h1>
-                            </div>
-                            
-                            <div className="server-connection-status">
-                                <div className="status-indicator connected">
-                                    <span className="status-dot connected-dot"></span>
-                                    <span className="status-text">Serveur connecté ✅</span>
-                                </div>
                             </div>
                             
                             <div className="network-info-auth">
@@ -198,32 +289,44 @@ const Authentification = () => {
                                     <legend>🔐 Identification</legend><br />
                                     <input 
                                         type="text" 
-                                        placeholder="Nom d'utilisateur" 
+                                        placeholder="Nom d'utilisateur ou Email" 
                                         className="input-field" 
                                         id="username"
                                         value={username}
                                         onChange={handleUsernameChange}
+                                        disabled={isLoading}
                                     />
                                     
                                     <legend>🔒 Mot de passe</legend><br />
-                                    <input 
-                                        type="password" 
-                                        placeholder="Mot de passe" 
-                                        className="input-field" 
-                                        id="password"
-                                        value={password}
-                                        onChange={handlePasswordChange}
-                                    />
+                                    <div className="password-wrapper">
+                                        <input 
+                                            type={showPassword ? "text" : "password"} 
+                                            placeholder="Mot de passe" 
+                                            className="input-field password-input" 
+                                            id="password"
+                                            value={password}
+                                            onChange={handlePasswordChange}
+                                            disabled={isLoading}
+                                        />
+                                        <button 
+                                            type="button" 
+                                            className="password-toggle"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            disabled={isLoading}
+                                        >
+                                            {showPassword ? '👁️' : '👁️‍🗨️'}
+                                        </button>
+                                    </div>
                                     
                                     <button 
-                                        className={`btn-login ${!isFormValid ? 'disabled' : ''}`}
+                                        className={`btn-login ${(!isFormValid || isLoading) ? 'disabled' : ''}`}
                                         onClick={handleLogin}
-                                        disabled={!isFormValid}
+                                        disabled={!isFormValid || isLoading}
                                     >
-                                        Se connecter
+                                        {isLoading ? '⏳ Connexion...' : 'Se connecter'}
                                     </button><br /><br />
                                     
-                                    <button className="btn-back" onClick={goToSyncPage}>
+                                    <button className="btn-back" onClick={goToSyncPage} disabled={isLoading}>
                                         ← Retour à la synchronisation
                                     </button>
                                 </div>
@@ -251,6 +354,13 @@ const Authentification = () => {
                                     <div className="help-card">
                                         <h4>❓ Besoin d'aide ?</h4>
                                         <p>Contactez l'administrateur au <strong>omda@moov.mg</strong></p>
+                                        <hr />
+                                        <p style={{fontSize: '11px', marginTop: '8px'}}>
+                                            <strong>Comptes de test:</strong><br />
+                                            ⭐ Super Admin: superadmin@omda.mg / 1234<br />
+                                            👑 Admin: admin@omda.mg / admin123<br />
+                                            👤 User: user@omda.mg / user123
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -265,6 +375,55 @@ const Authentification = () => {
                     </div>
                 )}
             </main>
+
+            {/* Modal pour le mot de passe Super Admin */}
+            {showAdminPasswordModal && (
+                <div className="modal-overlay">
+                    <div className="modal-container">
+                        <h3>🔐 Accès Super Administrateur</h3>
+                        <p>Entrez le mot de passe à 4 chiffres</p>
+                        <div className="password-wrapper-modal">
+                            <input 
+                                type={showAdminPassword ? "text" : "password"} 
+                                maxLength="4" 
+                                pattern="[0-9]*" 
+                                inputMode="numeric"
+                                value={adminPasswordInput}
+                                onChange={(e) => setAdminPasswordInput(e.target.value)}
+                                placeholder="- - - -"
+                                className="admin-password-input"
+                                autoFocus
+                            />
+                            <button 
+                                type="button" 
+                                className="password-toggle-modal"
+                                onClick={() => setShowAdminPassword(!showAdminPassword)}
+                            >
+                                {showAdminPassword ? '🔐' : '👁️'}
+                            </button>
+                        </div>
+                        <div className="modal-buttons">
+                            <button onClick={verifyAdminPassword}>✅ Valider</button>
+                            <button onClick={() => { 
+                                setShowAdminPasswordModal(false); 
+                                setAdminPasswordInput('');
+                                setShowAdminPassword(false);
+                            }}>❌ Annuler</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Admin Panel */}
+            {showAdminPanel && (
+                <AdminPanel 
+                    onClose={() => {
+                        setShowAdminPanel(false);
+                        localStorage.removeItem('adminToken');
+                    }} 
+                    adminToken={adminToken}
+                />
+            )}
         </>
     );
 };

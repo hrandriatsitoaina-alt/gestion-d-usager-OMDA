@@ -399,23 +399,6 @@ legend {
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/* ===== STYLES AMÉLIORÉS POUR LES INPUTS ===== */
-/* ===== STYLES AMÉLIORÉS POUR LA GESTION DES USAGERS ===== */
-
 .stat_occ_ameliore {
     background: #f0f7ff;
     width: 100%;
@@ -437,7 +420,7 @@ legend {
 }
 
 .action-btn.edit {
-    background: #ffd700;
+    background: #757ac4;
     color: #2c3e50;
 }
 

@@ -1,13 +1,63 @@
-import React from 'react'
-import Header from '../components/Header'
-import Sidebar from '../components/Sidebar'
-import MiniSidebar from '../components/MiniSidebar'
-import ParamCards from '../components/ParamCards'
-import MainCards from '../components/MainCards'
-import PaymentSection from '../components/PaymentSection'
-import BilanCards from '../components/BilanCards'
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import Header from '../components/Header';
+import Sidebar from '../components/Sidebar';
+import MiniSidebar from '../components/MiniSidebar';
+import ParamCards from '../components/ParamCards';
+import MainCards from '../components/MainCards';
+import PaymentSection from '../components/PaymentSection';
+import BilanCards from '../components/BilanCards';
 
-function Dashboard () {
+function Dashboard() {
+  const navigate = useNavigate();
+  const [userName, setUserName] = useState('');
+  const [userRole, setUserRole] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Récupérer les informations de l'utilisateur connecté
+    const userData = localStorage.getItem('user');
+    const isLoggedIn = localStorage.getItem('isLoggedIn');
+    
+    if (!isLoggedIn || !userData) {
+      navigate('/authentification');
+      return;
+    }
+    
+    try {
+      const user = JSON.parse(userData);
+      setUserName(user.nom || 'Utilisateur');
+      setUserRole(user.role || 'user');
+    } catch (error) {
+      console.error('Erreur:', error);
+      navigate('/authentification');
+    } finally {
+      setLoading(false);
+    }
+  }, [navigate]);
+
+  // Déterminer le libellé du rôle
+  const getRoleLabel = () => {
+    if (userRole === 'super_admin') return 'Super Administrateur';
+    if (userRole === 'admin') return 'Administrateur';
+    return 'Utilisateur';
+  };
+
+  if (loading) {
+    return (
+      <>
+        <Header />
+        <Sidebar />
+        <MiniSidebar />
+        <main className="contenu">
+          <div style={{ textAlign: 'center', padding: '50px' }}>
+            <p>Chargement...</p>
+          </div>
+        </main>
+      </>
+    );
+  }
+
   return (
     <>
       <Header />
@@ -20,7 +70,7 @@ function Dashboard () {
             <div className="OM15A"></div>
             <div className="OM15B">
               <h1>OMDA</h1>
-              <h3>OFFICE MALAGASY DU DROIT D'AUTEURSSSS</h3>
+              <h3>OFFICE MALAGASY DU DROIT D'AUTEUR</h3>
             </div>
             <div className="OM15C"></div>
           </div>
@@ -32,15 +82,11 @@ function Dashboard () {
         
         <section>
           <fieldset>
-            <legend>Tableau de bord OMDA</legend>
+            <legend>Perception OMDA : {userName} </legend>
             
             <div className="omd16">
               {/* 1. PARAMÈTRES DU DROIT PUBLIC */}
-
               <ParamCards />
-              
-              {/* BARRE D'ACTIONS RAPIDES */}
-
               
               {/* 2. SECTION AJOUT ET VÉRIFICATION */}
               <h2 className="section-title">
@@ -52,7 +98,6 @@ function Dashboard () {
               <h2 className="section-title">
                 <span>💰</span> Gestion des paiements
               </h2>
-
               <PaymentSection />
               
               {/* 4. SECTION BILAN ET DIAGNOSTIC */}
@@ -65,7 +110,7 @@ function Dashboard () {
         </section>
       </main>
     </>
-  )
+  );
 }
 
-export default Dashboard
+export default Dashboard;

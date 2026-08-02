@@ -19,27 +19,31 @@
     },
     "files": [
       "dist/**/*",
-      "main.js",
-      "build/icon.ico"
+      "main.js"
     ],
     "win": {
       "target": "nsis",
-      "artifactName": "${productName}-Setup-${version}.exe",
-      "icon": "build/icon.ico"
+      "artifactName": "${productName}-Setup-${version}.exe"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico"
+      "createStartMenuShortcut": true
     }
   },
   "dependencies": {
     "@fortawesome/fontawesome-svg-core": "^7.2.0",
     "@fortawesome/free-solid-svg-icons": "^7.2.0",
     "@fortawesome/react-fontawesome": "^3.3.0",
+    "axios": "^1.18.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.7",
+    "pg": "^8.20.0",
+    "qrcode.react": "^4.2.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-joyride": "^3.0.2",
@@ -53,5 +57,17 @@
     "electron-builder": "^26.8.1",
     "vite": "^4.4.0",
     "wait-on": "^7.2.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hrandriatsitoaina-alt/OMDA-projet-definitif.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/hrandriatsitoaina-alt/OMDA-projet-definitif/issues"
+  },
+  "homepage": "https://github.com/hrandriatsitoaina-alt/OMDA-projet-definitif#readme"
 }

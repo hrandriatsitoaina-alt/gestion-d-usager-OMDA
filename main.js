@@ -1,12 +1,7 @@
-const { app, BrowserWindow } = require('electron')
+const { app, BrowserWindow, session } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const http = require('http')
-
-// ===== DÉSACTIVER LES WARNINGS DE SÉCURITÉ =====
-process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = true
-app.commandLine.appendSwitch('ignore-certificate-errors')
-// ================================================
 
 let server = null
 
@@ -14,7 +9,7 @@ function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    icon: path.join(__dirname, 'build', 'icon.ico'),
+    icon: path.join(__dirname, 'build', 'icon.ico'), // Ajout de l'icône
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -25,10 +20,9 @@ function createWindow() {
     backgroundColor: '#d4e8ff'
   })
 
-  // Ouvrir les outils de développement
   mainWindow.webContents.openDevTools()
 
-  // Serveur HTTP local pour servir les fichiers
+  // SOLUTION : Créer un petit serveur HTTP local
   const distPath = path.join(__dirname, 'dist')
   
   server = http.createServer((req, res) => {
@@ -62,8 +56,20 @@ function createWindow() {
   })
 }
 
+// Injection de CSS pour corriger les inputs dans Electron
 app.whenReady().then(() => {
   console.log('✅ Electron prêt')
+  
+  // Injecter du CSS global pour corriger les inputs
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': ["default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:*"]
+      }
+    })
+  })
+  
   createWindow()
 })
 

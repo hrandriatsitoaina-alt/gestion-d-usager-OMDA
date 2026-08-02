@@ -1,0 +1,5 @@
+Corrige le le nombre de dossioer total est fonction bien mais le 
+Dossier fait par le utilisateurs ne s'increment , corrige le parcequ'il enfin afficher dans
+le facture lier au reference de dossier
+
+?? Dossier N° 18/05/2026               AND 0/05/202

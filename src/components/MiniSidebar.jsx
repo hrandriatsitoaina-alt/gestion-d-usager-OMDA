@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../styles/aide.css';
 
@@ -7,25 +7,123 @@ const MiniSidebar = () => {
   const [showTutorial, setShowTutorial] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   
-  // États pour les différents popups d'aide
   const [showDocPopup, setShowDocPopup] = useState(false);
   const [showSupportPopup, setShowSupportPopup] = useState(false);
   const [showRaccourcisPopup, setShowRaccourcisPopup] = useState(false);
   const [showNotifPopup, setShowNotifPopup] = useState(false);
   const [showParamsPopup, setShowParamsPopup] = useState(false);
 
+  // ============================================
+  // GESTION DES NOTIFICATIONS
+  // ============================================
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [token, setToken] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let storedToken = localStorage.getItem('adminToken');
+    console.log('🔑 Token dans MiniSidebar:', storedToken || 'Absent');
+    
+    if (!storedToken) {
+      const user = localStorage.getItem('user');
+      if (user) {
+        try {
+          const userData = JSON.parse(user);
+          storedToken = 'user_' + userData.id + '_' + Date.now();
+          localStorage.setItem('adminToken', storedToken);
+          console.log('✅ Token créé à partir du user:', storedToken);
+        } catch (e) {
+          console.error('❌ Erreur création token:', e);
+        }
+      }
+    }
+    
+    if (!storedToken) {
+      storedToken = 'temp_' + Date.now();
+      localStorage.setItem('adminToken', storedToken);
+      console.log('⚠️ Token temporaire créé:', storedToken);
+    }
+    
+    setToken(storedToken);
+    fetchNotifications(storedToken);
+    
+    const interval = setInterval(() => {
+      if (token) {
+        fetchNotifications(token);
+      }
+    }, 15000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchNotifications = async (currentToken) => {
+    if (!currentToken) {
+      console.error('❌ Pas de token disponible');
+      return;
+    }
+    
+    setLoading(true);
+    setError(null);
+    try {
+      console.log('📡 Récupération des notifications...');
+      
+      const response = await fetch('http://localhost:3001/api/notifications', {
+        headers: { 
+          'adminToken': currentToken || 'super_admin_secret_2026',
+          'Content-Type': 'application/json'
+        }
+      });
+
+      let data;
+      if (response.status === 403) {
+        console.log('⚠️ Token invalide, essai sans token...');
+        const retryResponse = await fetch('http://localhost:3001/api/notifications');
+        data = await retryResponse.json();
+      } else {
+        data = await response.json();
+      }
+      
+      console.log('📋 Notifications reçues:', data);
+      
+      if (data.success) {
+        const notifs = data.notifications || [];
+        setNotifications(notifs);
+        const unread = notifs.filter(n => !n.read).length || 0;
+        setUnreadCount(unread);
+        console.log(`🔔 ${unread} notification(s) non lue(s) sur ${notifs.length} total`);
+        setError(null);
+      } else {
+        console.error('❌ Erreur API:', data);
+        setNotifications([]);
+        setUnreadCount(0);
+      }
+    } catch (error) {
+      console.error('❌ Erreur fetchNotifications:', error);
+      setNotifications([]);
+      setUnreadCount(0);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ============================================
+  // FIN GESTION NOTIFICATIONS
+  // ============================================
+
   const pages = [
-    { name: 'Ajout d\'usager', path: '/ajout-usager', description: 'Enregistrer un nouvel usager', details: 'Nom, prénom, contact, catégorie…' },
-    { name: 'Vérification usager', path: '/verification-usager', description: 'Rechercher un usager existant', details: 'Par identifiant ou nom, modifier ses infos.' },
-    { name: 'Ajout d\'événement', path: '/ajout-evenement', description: 'Créer un événement culturel', details: 'Titre, date, lieu, tarif, lié à un usager.' },
-    { name: 'Choix de paiement', path: '/choix-payement', description: 'Sélectionner le mode de paiement', details: 'Espèces, carte, virement, chèque.' },
-    { name: 'Tableau de bord global', path: '/tableau-db', description: 'Visualisation des données', details: 'Tableaux croisés, filtres par période/catégorie.' },
-    { name: 'Facturation occasionnelle', path: '/date_occ', description: 'Factures des usagers occasionnels', details: 'Détail et échéances.' },
-    { name: 'Facturation grande surface', path: '/date-grandsurface', description: 'Factures des grandes surfaces', details: 'Taux spécifiques, relevés mensuels.' },
-    { name: 'Facturation transport', path: '/date-bus', description: 'Factures des sociétés de transport', details: 'Calcul basé sur le nombre de véhicules.' },
-    { name: 'Facturation night club', path: '/night-club', description: 'Factures des établissements nocturnes', details: 'Tarifs selon jauge et heures.' },
-    { name: 'Autre usager', path: '/autre-usager', description: 'Factures autres catégories', details: 'Paramètres personnalisables.' },
-    { name: 'Facture usager', path: '/facture-usager', description: 'Liste complète des factures', details: 'Statistiques (payée/retard), tableau mensuel, export PDF/Excel.' }
+    { name: 'Ajout d\'usager', path: '/ajout-usager', description: 'Enregistrer un nouvel usager', details: 'Nom, prenom, contact, categorie…' },
+    { name: 'Verification usager', path: '/verification-usager', description: 'Rechercher un usager existant', details: 'Par identifiant ou nom, modifier ses infos.' },
+    { name: 'Ajout d\'evenement', path: '/ajout-evenement', description: 'Creer un evenement culturel', details: 'Titre, date, lieu, tarif, lie a un usager.' },
+    { name: 'Choix de paiement', path: '/choix-payement', description: 'Selectionner le mode de paiement', details: 'Especes, carte, virement, cheque.' },
+    { name: 'Tableau de bord global', path: '/tableau-db', description: 'Visualisation des donnees', details: 'Tableaux croises, filtres par periode/categorie.' },
+    { name: 'Facturation occasionnelle', path: '/date_occ', description: 'Factures des usagers occasionnels', details: 'Detail et echeances.' },
+    { name: 'Facturation grande surface', path: '/date-grandsurface', description: 'Factures des grandes surfaces', details: 'Taux specifiques, releves mensuels.' },
+    { name: 'Facturation transport', path: '/date-bus', description: 'Factures des societes de transport', details: 'Calcul base sur le nombre de vehicules.' },
+    { name: 'Facturation night club', path: '/night-club', description: 'Factures des etablissements nocturnes', details: 'Tarifs selon jauge et heures.' },
+    { name: 'Autre usager', path: '/autre-usager', description: 'Factures autres categories', details: 'Parametres personnalisables.' },
+    { name: 'Facture usager', path: '/facture-usager', description: 'Liste complete des factures', details: 'Statistiques (payee/retard), tableau mensuel, export PDF/Excel.' }
   ];
 
   const openTutorial = () => {
@@ -42,16 +140,13 @@ const MiniSidebar = () => {
     closeTutorial();
   };
 
-  // Fonctions pour chaque type d'aide (reste sur la même page)
   const handleIconClick = (action) => {
-    // Fermer tous les popups
     setShowDocPopup(false);
     setShowSupportPopup(false);
     setShowRaccourcisPopup(false);
     setShowNotifPopup(false);
     setShowParamsPopup(false);
     
-    // Ouvrir le popup correspondant
     switch(action) {
       case 'aide':
         openTutorial();
@@ -66,7 +161,10 @@ const MiniSidebar = () => {
         setShowRaccourcisPopup(true);
         break;
       case 'notif':
-        setShowNotifPopup(true);
+        // ============================================
+        // REDIRECTION VERS LA PAGE DES NOTIFICATIONS
+        // ============================================
+        navigate('/notification_admin');
         break;
       case 'params':
         setShowParamsPopup(true);
@@ -114,10 +212,20 @@ const MiniSidebar = () => {
               <div className="sidebar-icon" title="Raccourcis" onClick={() => handleIconClick('raccourcis')}>
                 <span>⌨️</span>
               </div>
-              <div className="sidebar-icon" title="Notifications" onClick={() => handleIconClick('notif')}>
+              {/* ============================================ */}
+              {/* NOTIFICATION AVEC BADGE - REDIRECTION VERS /notification_admin */}
+              {/* ============================================ */}
+              <div 
+                className="sidebar-icon" 
+                title="Notifications" 
+                onClick={() => handleIconClick('notif')}
+              >
                 <span>🔔</span>
+                {unreadCount > 0 && (
+                  <span className="notification-badge">{unreadCount}</span>
+                )}
               </div>
-              <div className="sidebar-icon" title="Paramètres" onClick={() => handleIconClick('params')}>
+              <div className="sidebar-icon" title="Parametres" onClick={() => handleIconClick('params')}>
                 <span>⚙️</span>
               </div>
             </div>
@@ -135,12 +243,12 @@ const MiniSidebar = () => {
             </div>
             <div className="tutorial-card">
               <h3>Guide d'utilisation</h3>
-              <p>Consultez la documentation complète de l'application OMDA.</p>
+              <p>Consultez la documentation complete de l'application OMDA.</p>
               <ul style={{marginTop: '10px', paddingLeft: '20px'}}>
                 <li>Manuel utilisateur</li>
-                <li>Guide des fonctionnalités</li>
+                <li>Guide des fonctionnalites</li>
                 <li>FAQ</li>
-                <li>Vidéos tutorielles</li>
+                <li>Videos tutorielles</li>
               </ul>
             </div>
           </div>
@@ -158,7 +266,7 @@ const MiniSidebar = () => {
             <div className="tutorial-card">
               <h3>Contacter le support</h3>
               <p><strong>Email :</strong> support@omda.com</p>
-              <p><strong>Téléphone :</strong> +33 1 23 45 67 89</p>
+              <p><strong>Telephone :</strong> +33 1 23 45 67 89</p>
               <p><strong>Horaires :</strong> Lun-Ven, 9h-18h</p>
               <button className="tutorial-goto" onClick={closeAllPopups}>
                 ✉️ Envoyer un message
@@ -192,40 +300,19 @@ const MiniSidebar = () => {
         </div>
       )}
 
-      {/* Popup Notifications */}
-      {showNotifPopup && (
-        <div className="tutorial-overlay" onClick={closeAllPopups}>
-          <div className="tutorial-container" onClick={(e) => e.stopPropagation()}>
-            <div className="tutorial-header">
-              <h2>🔔 Notifications</h2>
-              <button className="tutorial-close" onClick={closeAllPopups}>✕</button>
-            </div>
-            <div className="tutorial-card">
-              <h3>Dernières notifications</h3>
-              <div style={{marginTop: '10px'}}>
-                <p>✓ 3 factures en attente de paiement</p>
-                <p>✓ Nouvel événement ajouté ce jour</p>
-                <p>✓ Mise à jour système disponible</p>
-                <p>✓ Rappel : réunion demain 10h</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Popup Paramètres */}
+      {/* Popup Parametres */}
       {showParamsPopup && (
         <div className="tutorial-overlay" onClick={closeAllPopups}>
           <div className="tutorial-container" onClick={(e) => e.stopPropagation()}>
             <div className="tutorial-header">
-              <h2>⚙️ Paramètres</h2>
+              <h2>⚙️ Parametres</h2>
               <button className="tutorial-close" onClick={closeAllPopups}>✕</button>
             </div>
             <div className="tutorial-card">
-              <h3>Préférences</h3>
+              <h3>Preferences</h3>
               <div style={{marginTop: '10px'}}>
                 <label style={{display: 'block', marginBottom: '10px'}}>
-                  <input type="checkbox" /> Thème sombre
+                  <input type="checkbox" /> Theme sombre
                 </label>
                 <label style={{display: 'block', marginBottom: '10px'}}>
                   <input type="checkbox" /> Notifications par email
@@ -233,7 +320,7 @@ const MiniSidebar = () => {
                 <label style={{display: 'block', marginBottom: '10px'}}>
                   Langue : 
                   <select style={{marginLeft: '10px'}}>
-                    <option>Français</option>
+                    <option>Francais</option>
                     <option>English</option>
                   </select>
                 </label>
@@ -255,21 +342,21 @@ const MiniSidebar = () => {
               <button className="tutorial-close" onClick={closeTutorial}>✕</button>
             </div>
             <div className="tutorial-progress">
-              Étape {currentStep + 1} / {pages.length}
+              Etape {currentStep + 1} / {pages.length}
             </div>
             <div className="tutorial-card">
               <h3>{pages[currentStep].name}</h3>
               <p className="tutorial-desc">{pages[currentStep].description}</p>
               <p className="tutorial-detail">{pages[currentStep].details}</p>
               <button className="tutorial-goto" onClick={goToPage}>
-                🔗 Accéder à cette page
+                🔗 Acceder a cette page
               </button>
             </div>
             <div className="tutorial-footer">
               <button className="tutorial-btn cancel" onClick={closeTutorial}>Annuler</button>
               <div className="tutorial-nav">
                 {currentStep > 0 && (
-                  <button className="tutorial-btn prev" onClick={prevStep}>← Précédent</button>
+                  <button className="tutorial-btn prev" onClick={prevStep}>← Precedent</button>
                 )}
                 <button className="tutorial-btn next" onClick={nextStep}>
                   {currentStep === pages.length - 1 ? 'Terminer' : 'Suivant →'}
