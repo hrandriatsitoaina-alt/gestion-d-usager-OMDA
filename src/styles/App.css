@@ -21,7 +21,7 @@ body {
 .omd1 {
   background: linear-gradient(135deg, #7bc8ff, #5aadff);
   width: 100%;
-  height: 65px;
+  height: 60px;
   display: flex;
   justify-content: space-between;
   align-items: center;
