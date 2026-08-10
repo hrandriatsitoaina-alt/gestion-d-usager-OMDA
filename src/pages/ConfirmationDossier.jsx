@@ -1,12 +1,17 @@
-// src/pages/ConfirmationDossier.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { QRCodeCanvas } from 'qrcode.react';
 import html2canvas from 'html2canvas';
+import {
+  FileText, Receipt, QrCode, Download, Printer, CheckCircle, XCircle,
+  Info, AlertCircle, Building2, User, Phone, MapPin, Calendar, Star,
+  Hotel, Store, Bus, PartyPopper, Tv2, Ticket, File, ArrowLeft,
+  Clock, CreditCard, FileCheck, Loader2
+} from 'lucide-react';
 import '../styles/confirmation-dossier.css';
 import MiniSidebar from '../components/MiniSidebar';
 
-// Importations des générateurs de PDF
+// Import des générateurs PDF (inchangés)
 import { generateHotelPDF } from './pdf/hotel_pdf';
 import { generateMagasinPDF } from './pdf/magasin_pdf';
 import { generateMediaPDF } from './pdf/media_pdf';
@@ -19,7 +24,7 @@ const ConfirmationDossier = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const qrRef = useRef(null);
-  
+
   const [usager, setUsager] = useState(null);
   const [usagerType, setUsagerType] = useState('');
   const [loading, setLoading] = useState(true);
@@ -31,7 +36,7 @@ const ConfirmationDossier = () => {
   const [validatedDossiers, setValidatedDossiers] = useState({});
   const [currentUser, setCurrentUser] = useState(null);
 
-  // Type d'usager
+  // Mapping des types
   const typeLabels = {
     hotel: 'Hôtel',
     'grand-surface': 'Grande Surface',
@@ -42,12 +47,12 @@ const ConfirmationDossier = () => {
   };
 
   const typeIcons = {
-    hotel: '🏨',
-    'grand-surface': '🏬',
-    bus: '🚌',
-    nightclub: '🎭',
-    media: '📺',
-    occ: '🎪'
+    hotel: Hotel,
+    'grand-surface': Store,
+    bus: Bus,
+    nightclub: PartyPopper,
+    media: Tv2,
+    occ: Ticket
   };
 
   const typeColors = {
@@ -59,16 +64,25 @@ const ConfirmationDossier = () => {
     occ: '#1abc9c'
   };
 
+  const typeBgColors = {
+    hotel: '#E8F0FE',
+    'grand-surface': '#E8F8ED',
+    bus: '#FFF8E1',
+    nightclub: '#F3E5F5',
+    media: '#FDE8E8',
+    occ: '#E0F7F4'
+  };
+
+  // Effet pour récupérer l'usager
   useEffect(() => {
     const state = location.state;
     console.log('📍 State reçu dans ConfirmationDossier:', state);
-    
+
     if (state && state.usager) {
       setUsager(state.usager);
       setUsagerType(state.type || 'hotel');
       setLoading(false);
     } else {
-      // Essayer de récupérer depuis sessionStorage
       const savedUsager = sessionStorage.getItem('lastUsager');
       if (savedUsager) {
         try {
@@ -90,9 +104,7 @@ const ConfirmationDossier = () => {
       try {
         const token = localStorage.getItem('userId');
         const response = await fetch('http://localhost:3001/api/auth/current-user', {
-          headers: {
-            'Authorization': token ? `Bearer ${token}` : ''
-          }
+          headers: { 'Authorization': token ? `Bearer ${token}` : '' }
         });
         const data = await response.json();
         if (data.success && data.user) {
@@ -105,19 +117,16 @@ const ConfirmationDossier = () => {
     fetchCurrentUser();
   }, []);
 
+  // Fonctions utilitaires (inchangées)
   const formatDateForQR = (dateString) => {
     if (!dateString) return 'Date non spécifiée';
     try {
       const date = new Date(dateString);
       if (isNaN(date.getTime())) return 'Date invalide';
       return date.toLocaleDateString('fr-FR', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric'
+        day: 'numeric', month: 'long', year: 'numeric'
       });
-    } catch {
-      return 'Date invalide';
-    }
+    } catch { return 'Date invalide'; }
   };
 
   const formatDateForReference = () => {
@@ -130,11 +139,9 @@ const ConfirmationDossier = () => {
 
   const generateQRTextContent = (usager, type) => {
     if (!usager) return '© OMDA - Document officiel';
-    
     const dateStr = formatDateForReference();
     const compteurValue = usager.id || 1;
     const andReference = `AND ${dateStr}-${compteurValue}`;
-    
     let typePrefix = '';
 
     switch(type) {
@@ -159,9 +166,7 @@ const ConfirmationDossier = () => {
         const adresseHotel = usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
         const etoiles = usager.etoiles || 'Non spécifié';
         let anneePaiementHotel = new Date().getFullYear();
-        if (usager.annee_dernier_paiement) {
-          anneePaiementHotel = usager.annee_dernier_paiement;
-        }
+        if (usager.annee_dernier_paiement) { anneePaiementHotel = usager.annee_dernier_paiement; }
         return `${typePrefix} : ${nomHotel}, Adresse: ${adresseHotel}, Étoiles: ${etoiles}, Validation année: ${anneePaiementHotel}, ${andReference}`;
 
       case 'grand-surface':
@@ -170,9 +175,7 @@ const ConfirmationDossier = () => {
         const adresseGS = usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
         const nbMagasins = usager.nombre_magasins || 0;
         let anneePaiementGS = new Date().getFullYear();
-        if (usager.annee_dernier_paiement) {
-          anneePaiementGS = usager.annee_dernier_paiement;
-        }
+        if (usager.annee_dernier_paiement) { anneePaiementGS = usager.annee_dernier_paiement; }
         return `${typePrefix} : ${nomGS}, Adresse: ${adresseGS}, Nb magasins: ${nbMagasins}, Validation année: ${anneePaiementGS}, ${andReference}`;
 
       case 'bus':
@@ -183,9 +186,7 @@ const ConfirmationDossier = () => {
         const nbBus = usager.nombre_vehicules || 0;
         const lignes = usager.lignes || 'Non spécifiées';
         let anneePaiementBus = new Date().getFullYear();
-        if (usager.annee_dernier_paiement) {
-          anneePaiementBus = usager.annee_dernier_paiement;
-        }
+        if (usager.annee_dernier_paiement) { anneePaiementBus = usager.annee_dernier_paiement; }
         return `${typePrefix} : ${nomBus}, type: ${typeBus}, Nb bus: ${nbBus}, Lignes: ${lignes}, Validation année: ${anneePaiementBus}, ${andReference}`;
 
       case 'nightclub':
@@ -195,9 +196,7 @@ const ConfirmationDossier = () => {
         const jauge = usager.jauge_max || 0;
         const horaires = usager.horaires || 'Non spécifiés';
         let anneePaiementNC = new Date().getFullYear();
-        if (usager.annee_dernier_paiement) {
-          anneePaiementNC = usager.annee_dernier_paiement;
-        }
+        if (usager.annee_dernier_paiement) { anneePaiementNC = usager.annee_dernier_paiement; }
         return `${typePrefix} : ${nomNC}, Adresse: ${adresseNC}, Jauge: ${jauge}, Horaires: ${horaires}, Validation année: ${anneePaiementNC}, ${andReference}`;
 
       case 'media':
@@ -206,9 +205,7 @@ const ConfirmationDossier = () => {
         const adresseMedia = usager.siege || usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
         const canal = usager.canal || usager.frequence || 'Non spécifié';
         let anneePaiementMedia = new Date().getFullYear();
-        if (usager.annee_dernier_paiement) {
-          anneePaiementMedia = usager.annee_dernier_paiement;
-        }
+        if (usager.annee_dernier_paiement) { anneePaiementMedia = usager.annee_dernier_paiement; }
         return `${typePrefix} : ${nomMedia}, Adresse: ${adresseMedia}, Canal/Fréquence: ${canal}, Validation année: ${anneePaiementMedia}, ${andReference}`;
 
       default:
@@ -216,11 +213,11 @@ const ConfirmationDossier = () => {
     }
   };
 
+  // Génération des documents
   const generateDocument = async (docType) => {
     if (!usager) return;
-    
     setIsGenerating(true);
-    
+
     const pdfData = {
       date: usager.created_at || new Date().toISOString().split('T')[0],
       annee: new Date().getFullYear(),
@@ -253,15 +250,10 @@ const ConfirmationDossier = () => {
           setShowQrModal(true);
           setIsGenerating(false);
           return;
-        default:
-          break;
+        default: break;
       }
 
-      setValidatedDossiers(prev => ({
-        ...prev,
-        [docType]: true
-      }));
-
+      setValidatedDossiers(prev => ({ ...prev, [docType]: true }));
       setNotification({ type: 'success', message: `✅ ${docType} généré avec succès` });
       setTimeout(() => setNotification(null), 3000);
     } catch (error) {
@@ -279,15 +271,13 @@ const ConfirmationDossier = () => {
     setTimeout(() => generateDocument('QR Code'), 1000);
   };
 
-  // Téléchargement du QR Code
+  // Téléchargement QR
   const handleDownloadQR = async () => {
     if (!qrRef.current) {
       alert('QR code non disponible');
       return;
     }
-    
     setIsDownloading(true);
-    
     try {
       const canvas = await html2canvas(qrRef.current, {
         scale: 3,
@@ -296,13 +286,11 @@ const ConfirmationDossier = () => {
         allowTaint: true,
         logging: false
       });
-      
       const link = document.createElement('a');
       const timestamp = new Date().toISOString().split('T')[0];
       link.download = `qr-code-omda-${timestamp}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
-      
       setNotification({ type: 'success', message: '✅ QR Code téléchargé avec succès' });
       setTimeout(() => setNotification(null), 3000);
     } catch (error) {
@@ -314,28 +302,17 @@ const ConfirmationDossier = () => {
     }
   };
 
-  // Impression du QR Code
-  const handlePrintQR = () => {
-    window.print();
-  };
+  const handlePrintQR = () => window.print();
 
-  const handleGoDashboard = () => {
-    navigate('/dashboard');
-  };
+  const handleGoDashboard = () => navigate('/dashboard');
 
   const formatDate = (dateString) => {
     if (!dateString) return '';
     try {
       const date = new Date(dateString);
       if (isNaN(date.getTime())) return dateString;
-      return date.toLocaleDateString('fr-FR', { 
-        day: '2-digit', 
-        month: '2-digit', 
-        year: 'numeric' 
-      });
-    } catch {
-      return dateString;
-    }
+      return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    } catch { return dateString; }
   };
 
   if (loading) {
@@ -343,7 +320,7 @@ const ConfirmationDossier = () => {
       <>
         <MiniSidebar />
         <div className="confirmation-loading">
-          <div className="spinner"></div>
+          <Loader2 size={48} className="spinner" strokeWidth={1.5} />
           <p>Chargement du dossier...</p>
         </div>
       </>
@@ -355,14 +332,17 @@ const ConfirmationDossier = () => {
       <>
         <MiniSidebar />
         <div className="confirmation-error">
+          <AlertCircle size={48} strokeWidth={1.5} />
           <p>Aucun usager trouvé</p>
-          <button onClick={handleGoDashboard} className="btn-retour">
-            Retour au tableau de bord
-          </button>
+          <button onClick={handleGoDashboard} className="btn-retour">Retour au tableau de bord</button>
         </div>
       </>
     );
   }
+
+  const IconComponent = typeIcons[usagerType] || Building2;
+  const color = typeColors[usagerType] || '#4A90D9';
+  const bgColor = typeBgColors[usagerType] || '#f0f0f0';
 
   return (
     <>
@@ -370,95 +350,103 @@ const ConfirmationDossier = () => {
       <main className="confirmation-dossier-container">
         {notification && (
           <div className={`notif ${notification.type}`}>
-            <span>{notification.type === 'success' ? '✅' : notification.type === 'info' ? 'ℹ️' : '❌'}</span>
+            <span>
+              {notification.type === 'success' && <CheckCircle size={20} />}
+              {notification.type === 'info' && <Info size={20} />}
+              {notification.type === 'error' && <XCircle size={20} />}
+            </span>
             <span>{notification.message}</span>
-            <button className="notif-close" onClick={() => setNotification(null)}>✕</button>
+            <button className="notif-close" onClick={() => setNotification(null)}>×</button>
           </div>
         )}
 
         <div className="confirmation-card">
+          {/* Header */}
           <div className="confirmation-header">
-            <h1>
-              <span className="header-icon">{typeIcons[usagerType] || '📂'}</span>
-              Confirmation du dossier
-            </h1>
-            <p className="header-subtitle">
-              {typeLabels[usagerType] || 'Usager'} ajouté avec succès ! 
-              Téléchargez les documents ci-dessous.
-            </p>
+            <div className="header-left">
+              <div className="header-icon-wrapper" style={{ background: color }}>
+                <IconComponent size={28} color="#fff" strokeWidth={1.5} />
+              </div>
+              <div>
+                <h1>Confirmation du dossier</h1>
+                <p className="header-subtitle">
+                  {typeLabels[usagerType] || 'Usager'} ajouté avec succès – Téléchargez les documents ci-dessous.
+                </p>
+              </div>
+            </div>
+            <div className="header-badge" style={{ background: bgColor, color: color }}>
+              <span>{typeLabels[usagerType] || 'Usager'}</span>
+            </div>
           </div>
 
-          {/* Information de l'usager */}
-          <div className="usager-info-card" style={{ borderColor: typeColors[usagerType] || '#4A90D9' }}>
-            <div className="usager-info-header" style={{ background: typeColors[usagerType] || '#4A90D9' }}>
-              <span className="usager-type-icon">{typeIcons[usagerType] || '🏨'}</span>
-              <span className="usager-type-label">{typeLabels[usagerType] || 'Usager'}</span>
-              <span className="usager-id">#{String(usager.id).padStart(3, '0')}</span>
-            </div>
-            <div className="usager-info-body">
-              <div className="info-row">
-                <span className="info-label">Nom / Dénomination</span>
+          {/* Carte usager */}
+          <div className="usager-info-card" style={{ borderColor: color, background: bgColor }}>
+            <div className="usager-info-grid">
+              <div className="info-item">
+                <span className="info-label"><FileText size={16} strokeWidth={1.5} /> ID</span>
+                <span className="info-value">#{String(usager.id).padStart(3, '0')}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label"><Building2 size={16} strokeWidth={1.5} /> Dénomination</span>
                 <span className="info-value">{usager.denomination || usager.nom_evenement || usager.organisateurs || '-'}</span>
               </div>
-              <div className="info-row">
-                <span className="info-label">Demandeur</span>
+              <div className="info-item">
+                <span className="info-label"><User size={16} strokeWidth={1.5} /> Demandeur</span>
                 <span className="info-value">{usager.demandeur || usager.organisateurs || usager.representant_par || '-'}</span>
               </div>
-              <div className="info-row">
-                <span className="info-label">Téléphone</span>
+              <div className="info-item">
+                <span className="info-label"><Phone size={16} strokeWidth={1.5} /> Téléphone</span>
                 <span className="info-value">{usager.telephone || '-'}</span>
               </div>
-              <div className="info-row">
-                <span className="info-label">Région</span>
+              <div className="info-item">
+                <span className="info-label"><MapPin size={16} strokeWidth={1.5} /> Région</span>
                 <span className="info-value">{usager.region || '-'}</span>
               </div>
-              <div className="info-row">
-                <span className="info-label">Date création</span>
+              <div className="info-item">
+                <span className="info-label"><Calendar size={16} strokeWidth={1.5} /> Date création</span>
                 <span className="info-value">{formatDate(usager.created_at) || formatDate(new Date())}</span>
               </div>
               {usagerType === 'occ' && (
                 <>
-                  <div className="info-row">
-                    <span className="info-label">Genre manifestation</span>
+                  <div className="info-item">
+                    <span className="info-label"><Ticket size={16} strokeWidth={1.5} /> Genre manifestation</span>
                     <span className="info-value">{usager.genre_manifestation || '-'}</span>
                   </div>
-                  <div className="info-row">
-                    <span className="info-label">Date événement</span>
+                  <div className="info-item">
+                    <span className="info-label"><Calendar size={16} strokeWidth={1.5} /> Date événement</span>
                     <span className="info-value">{formatDate(usager.date_evenement) || '-'}</span>
                   </div>
-                  <div className="info-row">
-                    <span className="info-label">Lieu</span>
+                  <div className="info-item">
+                    <span className="info-label"><MapPin size={16} strokeWidth={1.5} /> Lieu</span>
                     <span className="info-value">{usager.lieu_evenement || '-'}</span>
                   </div>
                 </>
               )}
               {usager.etoiles && (
-                <div className="info-row">
-                  <span className="info-label">Étoiles</span>
+                <div className="info-item">
+                  <span className="info-label"><Star size={16} strokeWidth={1.5} /> Étoiles</span>
                   <span className="info-value">{'⭐'.repeat(parseInt(usager.etoiles) || 0)}</span>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Documents à télécharger */}
+          {/* Documents */}
           <div className="documents-card">
-            <h3>📄 Documents disponibles</h3>
-            <p className="documents-subtitle">
-              Générez et téléchargez les documents du dossier
-            </p>
+            <h3><FileText size={20} strokeWidth={1.5} /> Documents disponibles</h3>
+            <p className="documents-subtitle">Générez et téléchargez les documents du dossier</p>
 
             <div className="documents-grid">
               {/* Contrat */}
               <div className="doc-item" onClick={() => generateDocument('Contrat')}>
-                <div className="doc-icon">📄</div>
+                <div className="doc-icon"><FileText size={24} strokeWidth={1.5} color={color} /></div>
                 <div className="doc-info">
                   <span className="doc-name">Contrat de représentation</span>
                   <span className="doc-size">PDF • Cliquer pour générer</span>
                 </div>
                 <div className="doc-status">
                   {validatedDossiers['Contrat'] ? (
-                    <span className="badge-success">✅</span>
+                    <span className="badge-success"><CheckCircle size={18} color="#27ae60" /></span>
                   ) : (
                     <button className="btn-generate">Générer</button>
                   )}
@@ -467,14 +455,14 @@ const ConfirmationDossier = () => {
 
               {/* Facture */}
               <div className="doc-item" onClick={() => generateDocument('Facture')}>
-                <div className="doc-icon">🧾</div>
+                <div className="doc-icon"><Receipt size={24} strokeWidth={1.5} color={color} /></div>
                 <div className="doc-info">
                   <span className="doc-name">Facture officielle</span>
                   <span className="doc-size">PDF • Cliquer pour générer</span>
                 </div>
                 <div className="doc-status">
                   {validatedDossiers['Facture'] ? (
-                    <span className="badge-success">✅</span>
+                    <span className="badge-success"><CheckCircle size={18} color="#27ae60" /></span>
                   ) : (
                     <button className="btn-generate">Générer</button>
                   )}
@@ -483,14 +471,14 @@ const ConfirmationDossier = () => {
 
               {/* QR Code */}
               <div className="doc-item" onClick={() => generateDocument('QR Code')}>
-                <div className="doc-icon">📱</div>
+                <div className="doc-icon"><QrCode size={24} strokeWidth={1.5} color={color} /></div>
                 <div className="doc-info">
                   <span className="doc-name">QR Code sécurisé</span>
                   <span className="doc-size">PNG • Cliquer pour générer</span>
                 </div>
                 <div className="doc-status">
                   {validatedDossiers['QR Code'] ? (
-                    <span className="badge-success">✅</span>
+                    <span className="badge-success"><CheckCircle size={18} color="#27ae60" /></span>
                   ) : (
                     <button className="btn-generate">Générer</button>
                   )}
@@ -499,32 +487,33 @@ const ConfirmationDossier = () => {
             </div>
 
             <div className="documents-actions">
-              <button 
+              <button
                 className="btn-generate-all"
                 onClick={handleGenerateAll}
                 disabled={isGenerating}
               >
-                {isGenerating ? '⏳ Génération...' : '🖨️ Tout générer et télécharger'}
+                {isGenerating ? (
+                  <><Loader2 size={18} className="spinner" strokeWidth={2} /> Génération...</>
+                ) : (
+                  <><FileCheck size={18} strokeWidth={2} /> Tout générer et télécharger</>
+                )}
               </button>
-              <button 
-                className="btn-dashboard"
-                onClick={handleGoDashboard}
-              >
-                ← Retour Dashboard
+              <button className="btn-dashboard" onClick={handleGoDashboard}>
+                <ArrowLeft size={18} strokeWidth={2} /> Retour Dashboard
               </button>
             </div>
           </div>
         </div>
 
-        {/* MODALE QR CODE AVEC LOGO */}
+        {/* MODALE QR CODE */}
         {showQrModal && qrCodeData && (
           <div className="modal-overlay qr-modal-overlay" onClick={() => setShowQrModal(false)}>
             <div className="modal-content qr-modal-content" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header qr-modal-header">
-                <h3>📱 QR Code</h3>
-                <button className="modal-close" onClick={() => setShowQrModal(false)}>✕</button>
+                <h3><QrCode size={20} strokeWidth={1.5} /> QR Code</h3>
+                <button className="modal-close" onClick={() => setShowQrModal(false)}>×</button>
               </div>
-              
+
               <div className="qr-body">
                 <div className="qr-preview-container" ref={qrRef}>
                   <div className="qr-code-wrapper-only">
@@ -544,32 +533,26 @@ const ConfirmationDossier = () => {
                           </div>
                         </div>
                       </div>
-                      <div className="qr-omda-footer">
-                        OFFICE MALAGASY DU DROIT D'AUTEUR
-                      </div>
+                      <div className="qr-omda-footer">OFFICE MALAGASY DU  <br /> DROIT D'AUTEUR</div>
                     </div>
                   </div>
                 </div>
 
                 <div className="qr-actions-only">
-                  <button 
-                    className="btn-cancel" 
-                    onClick={() => setShowQrModal(false)}
-                  >
-                    Fermer
+                  <button className="btn-cancel" onClick={() => setShowQrModal(false)}>Fermer</button>
+                  <button className="btn-print-qr-only" onClick={handlePrintQR}>
+                    <Printer size={18} strokeWidth={2} /> Imprimer
                   </button>
-                  <button 
-                    className="btn-print-qr-only"
-                    onClick={handlePrintQR}
-                  >
-                    🖨️ Imprimer
-                  </button>
-                  <button 
+                  <button
                     className="btn-download-qr-only"
                     onClick={handleDownloadQR}
                     disabled={isDownloading}
                   >
-                    {isDownloading ? '⏳ Téléchargement...' : '📥 Télécharger'}
+                    {isDownloading ? (
+                      <><Loader2 size={18} className="spinner" strokeWidth={2} /> Téléchargement...</>
+                    ) : (
+                      <><Download size={18} strokeWidth={2} /> Télécharger</>
+                    )}
                   </button>
                 </div>
               </div>

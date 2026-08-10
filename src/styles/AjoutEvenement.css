@@ -10,80 +10,187 @@
     width: calc(100% - 320px);
 }
 
+
+
+
+
+
+
+
 /* En-tête du contenu - CORRECTION IMAGES */
+/* ===== EN-TÊTE COMPACT ===== */
 .OM15 {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 15px;
-    margin-bottom: 15px;
+    gap: 12px;
+    margin-bottom: 10px;
     background: #f5fbff;
-    padding: 15px;
+    padding: 10px 16px;          /* Réduit de 15px à 10px */
     border-radius: 18px;
     border: 1px solid rgba(109, 181, 255, 0.2);
-}
-
-.OM15A {
-    width: 90px;
-    height: 90px;
+  }
+  
+  .OM15A {
+    width: 65px;                /* Réduit de 90px */
+    height: 65px;
     border-radius: 50%;
     border: 3px solid #6db5ff;
     background-image: url('../assets/imagesOMDA.png');
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
-}
-
-
-.OM15C {
-    width: 90px;
-    height: 90px;
+  }
+  
+  .OM15C {
+    width: 65px;                /* Réduit de 90px */
+    height: 65px;
     border-radius: 50%;
     border: 3px solid #6db5ff;
     background-image: url('../assets/graphe6.PNG');
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
-}
-
-.OM15B {
+  }
+  
+  .OM15B {
     text-align: center;
-}
-
-.OM15B h1 {
-    font-size: 42px;
+  }
+  
+  .OM15B h1 {
+    font-size: 32px;            /* Réduit de 42px */
     font-weight: 700;
     color: #5aadff;
-    line-height: 1.2;
-}
-
-.OM15B h3 {
-    font-size: 16px;
+    line-height: 1.1;
+  }
+  
+  .OM15B h3 {
+    font-size: 13px;            /* Réduit de 16px */
     color: #4a6fa5;
     background: rgba(109, 181, 255, 0.1);
-    padding: 5px 15px;
+    padding: 3px 14px;          /* Réduit de 5px 15px */
     border-radius: 25px;
     display: inline-block;
-}
-
-.OM15T {
+  }
+  
+  .OM15T {
     height: 2px;
     background: linear-gradient(90deg, transparent, #6db5ff, #5aadff, #6db5ff, transparent);
-    margin: 10px 0 15px;
-}
-
-fieldset {
+    margin: 6px 0 12px;         /* Réduit de 10px 0 15px */
+  }
+  
+  /* ===== FIELDEST COMPACT ===== */
+  .dashboard-fieldset {
     border: none;
     background: #fafdff;
     border-radius: 18px;
-    padding: 20px;
+    padding: 14px 18px;          /* Réduit de 20px */
     border: 1px solid rgba(109, 181, 255, 0.2);
-}
+    margin-top: 4px;
+  }
+  
+  .dashboard-fieldset legend {
+    font-size: 16px;
+    font-weight: 600;
+    color: #4198f5;
+    padding: 0 14px;
+    background: white;
+    border-radius: 25px;
+    border: 1px solid rgba(109, 181, 255, 0.2);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: 6px;
+  }
+  
+  .dashboard-fieldset legend svg {
+    color: #3d99f5;
+  }
+  
+  .dashboard-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;                    /* Espace entre les sections */
+  }
+  
+  /* ===== TITRES DE SECTION COMPACTS ===== */
+  .section-title-compact {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 17px;
+    font-weight: 600;
+    color: #1a3a5c;
+    margin: 8px 0 4px 4px;       /* Réduit de 12px 0 8px */
+    padding: 6px 0 6px 2px;      /* Réduit de 8px 0 8px 2px */
+    border-bottom: 2px solid rgba(109, 181, 255, 0.12);
+  }
+  
+  .section-title-compact svg {
+    color: #3d99f5;
+    flex-shrink: 0;
+  }
+  
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 768px) {
+    .OM15A, .OM15C {
+      width: 50px;
+      height: 50px;
+    }
+    .OM15B h1 {
+      font-size: 26px;
+    }
+    .OM15B h3 {
+      font-size: 12px;
+      padding: 2px 10px;
+    }
+    .dashboard-fieldset {
+      padding: 10px 12px;
+    }
+    .section-title-compact {
+      font-size: 15px;
+    }
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 legend {
     font-size: 22px;
     font-weight: 600;
-    color: #5aadff;
+    color: #000000;
     padding: 0 15px;
     background: white;
     border-radius: 25px;

@@ -1,6 +1,13 @@
 // src/pages/ajout/MediaAjout.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  Users, User, Building2, MapPin, FileText, Phone, Mail,
+  CreditCard, Calendar, Clock, DollarSign, Hash,
+  ArrowLeft, ArrowRight, Save, X, Edit, Briefcase, Home,
+  PlusCircle, Radio, Tv, Antenna, Globe, Layers, CheckCircle,
+  UserPlus, Headphones, Sparkles, Monitor, Mic, Music
+} from 'lucide-react';
 
 const MediaAjout = ({ onCancel }) => {
   const navigate = useNavigate();
@@ -94,7 +101,6 @@ const MediaAjout = ({ onCancel }) => {
     }
   };
 
-  // CALCUL DU SOIT TOTAL
   useEffect(() => {
     const tauxVal = parseFloat(mediaData.taux) || 0;
     const fraisVal = parseFloat(fraisDossier) || 0;
@@ -220,8 +226,6 @@ const MediaAjout = ({ onCancel }) => {
       const result = await response.json();
       if (result.success) {
         alert('✅ Télé/Radio ajouté avec succès !');
-        
-        // ⭐ REDIRECTION VERS LA PAGE DE CONFIRMATION DE PAIEMENT AVEC SOIT_TOTAL
         navigate('/confirme-paiement', { 
           state: { 
             usager: { 
@@ -270,54 +274,73 @@ const MediaAjout = ({ onCancel }) => {
 
     return (
       <>
-        <div className="user-info-header" style={{ background: '#e8f4f8', padding: '15px', borderRadius: '10px', marginBottom: '25px', borderLeft: '4px solid #007bff' }}>
-          <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#2c3e50' }}>
-            👤 Utilisateur: <span style={{ color: '#007bff' }}>{userInfo.nom}</span> ({userInfo.prefix})
+        <div className="user-info-header">
+          <div className="user-info-row">
+            <Users size={18} strokeWidth={2} />
+            <span>Utilisateur: <strong>{userInfo.nom}</strong> ({userInfo.prefix})</span>
           </div>
-          <div className="dossier-number" style={{ fontSize: '18px', fontWeight: 'bold', color: '#2c3e50', marginTop: '10px' }}>
-            📄 Prochain dossier: {userDossierDisplay}
+          <div className="user-info-row">
+            <FileText size={18} strokeWidth={2} />
+            <span>Prochain dossier: <strong>{userDossierDisplay}</strong></span>
           </div>
         </div>
 
-        <div className="form-section-title">📋 1) PROPRIÉTAIRE DE LA STATION</div>
+        <div className="form-section-title">
+          <UserPlus size={18} strokeWidth={2} /> 1) PROPRIÉTAIRE DE LA STATION
+        </div>
         
-        <div className="form-row"><div className="form-label"><h2>👤 Nom et prénoms :</h2></div><div className="form-input">
-          <input type="text" name="proprietaireNom" value={mediaData.proprietaireNom} onChange={handleMediaChange} className="input-style" required />
-        </div></div>
-
-        <div className="form-row"><div className="form-label"><h2>🏠 Adresse :</h2></div><div className="form-input">
-          <input type="text" name="proprietaireAdresse" value={mediaData.proprietaireAdresse} onChange={handleMediaChange} className="input-style" required />
-        </div></div>
-
-        <div className="form-row"><div className="form-label"><h2>📞 Téléphone :</h2></div><div className="form-input">
-          <input type="tel" name="proprietaireTel" value={mediaData.proprietaireTel} onChange={handleMediaChange} className="input-style" required />
-        </div></div>
-
-        <div className="form-row"><div className="form-label"><h2>🆔 N° CIN :</h2></div><div className="form-input">
-          <input type="text" name="proprietaireCin" value={mediaData.proprietaireCin} onChange={handleMediaChange} className="input-style" required />
-        </div></div>
-
-        <div className="form-row"><div className="form-label"><h2>📅 Délivrée le / Lieu :</h2></div><div className="form-input-horizontal">
-          <input type="date" name="proprietaireCinDelivree" value={mediaData.proprietaireCinDelivree} onChange={handleMediaChange} className="input-date" />
-          <input type="text" name="proprietaireCinLieu" value={mediaData.proprietaireCinLieu} onChange={handleMediaChange} placeholder="Lieu" className="input-lieu" />
-        </div></div>
+        <div className="form-row">
+          <div className="form-label"><h2><User size={18} strokeWidth={2} /> Nom et prénoms :</h2></div>
+          <div className="form-input">
+            <input type="text" name="proprietaireNom" value={mediaData.proprietaireNom} onChange={handleMediaChange} className="input-style" placeholder="Nom et prénoms du propriétaire" required />
+          </div>
+        </div>
 
         <div className="form-row">
-          <div className="form-label"><h2>📍 Région :</h2></div>
+          <div className="form-label"><h2><Home size={18} strokeWidth={2} /> Adresse :</h2></div>
+          <div className="form-input">
+            <input type="text" name="proprietaireAdresse" value={mediaData.proprietaireAdresse} onChange={handleMediaChange} className="input-style" placeholder="Adresse du propriétaire" required />
+          </div>
+        </div>
+
+        <div className="form-row">
+          <div className="form-label"><h2><Phone size={18} strokeWidth={2} /> Téléphone :</h2></div>
+          <div className="form-input">
+            <input type="tel" name="proprietaireTel" value={mediaData.proprietaireTel} onChange={handleMediaChange} className="input-style" placeholder="Numéro de téléphone" required />
+          </div>
+        </div>
+
+        <div className="form-row">
+          <div className="form-label"><h2><CreditCard size={18} strokeWidth={2} /> N° CIN :</h2></div>
+          <div className="form-input">
+            <input type="text" name="proprietaireCin" value={mediaData.proprietaireCin} onChange={handleMediaChange} className="input-style" placeholder="Numéro de la carte CIN" required />
+          </div>
+        </div>
+
+        <div className="form-row">
+          <div className="form-label"><h2><Calendar size={18} strokeWidth={2} /> Délivrée le / Lieu :</h2></div>
+          <div className="form-input-horizontal">
+            <input type="date" name="proprietaireCinDelivree" value={mediaData.proprietaireCinDelivree} onChange={handleMediaChange} className="input-date" />
+            <input type="text" name="proprietaireCinLieu" value={mediaData.proprietaireCinLieu} onChange={handleMediaChange} placeholder="Lieu de délivrance" className="input-lieu" />
+          </div>
+        </div>
+
+        <div className="form-row">
+          <div className="form-label"><h2><MapPin size={18} strokeWidth={2} /> Région :</h2></div>
           <div className="form-input" style={{ display: 'flex', gap: '10px' }}>
             <select name="region" value={mediaData.region || ''} onChange={handleMediaChange} className="input-style" style={{ flex: 1 }} required>
               <option value="">Sélectionner une région</option>
               {regionsList.map((region, idx) => (<option key={idx} value={region}>{region}</option>))}
             </select>
-            <button type="button" onClick={() => setShowAddRegion(!showAddRegion)} style={{ padding: '8px 15px', background: '#28a745', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '18px', fontWeight: 'bold' }}>+</button>
+            <button type="button" onClick={() => setShowAddRegion(!showAddRegion)} className="btn-add-region">+</button>
           </div>
         </div>
         {showAddRegion && (
           <div className="form-row">
-            <div className="form-label"><h2>➕ Nouvelle région :</h2></div>
+            <div className="form-label"><h2><PlusCircle size={18} strokeWidth={2} /> Nouvelle région :</h2></div>
             <div className="form-input" style={{ display: 'flex', gap: '10px' }}>
               <input type="text" value={newRegion} onChange={(e) => setNewRegion(e.target.value)} placeholder="Nom de la nouvelle région" className="input-style" style={{ flex: 1 }} />
-              <button type="button" onClick={handleAddRegion} style={{ padding: '8px 20px', background: '#007bff', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Ajouter</button>
+              <button type="button" onClick={handleAddRegion} className="btn-add-region-confirm">Ajouter</button>
             </div>
           </div>
         )}
@@ -327,156 +350,275 @@ const MediaAjout = ({ onCancel }) => {
 
   const renderStep2 = () => (
     <>
-      <div className="form-section-title">📋 2) REPRÉSENTANT LÉGAL</div>
+      <div className="form-section-title">
+        <UserPlus size={18} strokeWidth={2} /> 2) REPRÉSENTANT LÉGAL
+      </div>
       
-      <div className="form-row"><div className="form-label"><h2>👤 Nom et prénoms :</h2></div><div className="form-input">
-        <input type="text" name="representantNom" value={mediaData.representantNom} onChange={handleMediaChange} className="input-style" required />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><User size={18} strokeWidth={2} /> Nom et prénoms :</h2></div>
+        <div className="form-input">
+          <input type="text" name="representantNom" value={mediaData.representantNom} onChange={handleMediaChange} className="input-style" placeholder="Nom et prénoms du représentant" required />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>🏠 Adresse :</h2></div><div className="form-input">
-        <input type="text" name="representantAdresse" value={mediaData.representantAdresse} onChange={handleMediaChange} className="input-style" required />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><Home size={18} strokeWidth={2} /> Adresse :</h2></div>
+        <div className="form-input">
+          <input type="text" name="representantAdresse" value={mediaData.representantAdresse} onChange={handleMediaChange} className="input-style" placeholder="Adresse du représentant" required />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>📞 Téléphone :</h2></div><div className="form-input">
-        <input type="tel" name="representantTel" value={mediaData.representantTel} onChange={handleMediaChange} className="input-style" required />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><Phone size={18} strokeWidth={2} /> Téléphone :</h2></div>
+        <div className="form-input">
+          <input type="tel" name="representantTel" value={mediaData.representantTel} onChange={handleMediaChange} className="input-style" placeholder="Numéro de téléphone" required />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>🆔 N° CIN :</h2></div><div className="form-input">
-        <input type="text" name="representantCin" value={mediaData.representantCin} onChange={handleMediaChange} className="input-style" required />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><CreditCard size={18} strokeWidth={2} /> N° CIN :</h2></div>
+        <div className="form-input">
+          <input type="text" name="representantCin" value={mediaData.representantCin} onChange={handleMediaChange} className="input-style" placeholder="Numéro de la carte CIN" required />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>📅 Délivrée le / Lieu :</h2></div><div className="form-input-horizontal">
-        <input type="date" name="representantCinDelivree" value={mediaData.representantCinDelivree} onChange={handleMediaChange} className="input-date" />
-        <input type="text" name="representantCinLieu" value={mediaData.representantCinLieu} onChange={handleMediaChange} placeholder="Lieu" className="input-lieu" />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><Calendar size={18} strokeWidth={2} /> Délivrée le / Lieu :</h2></div>
+        <div className="form-input-horizontal">
+          <input type="date" name="representantCinDelivree" value={mediaData.representantCinDelivree} onChange={handleMediaChange} className="input-date" />
+          <input type="text" name="representantCinLieu" value={mediaData.representantCinLieu} onChange={handleMediaChange} placeholder="Lieu de délivrance" className="input-lieu" />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>📜 Pouvoir donné le :</h2></div><div className="form-input-horizontal">
-        <input type="date" name="representantPouvoirDate" value={mediaData.representantPouvoirDate} onChange={handleMediaChange} className="input-date" />
-        <span>par</span>
-        <input type="text" name="representantPouvoirPar" value={mediaData.representantPouvoirPar} onChange={handleMediaChange} placeholder="Nom" className="input-lieu" />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><FileText size={18} strokeWidth={2} /> Pouvoir donné le :</h2></div>
+        <div className="form-input-horizontal">
+          <input type="date" name="representantPouvoirDate" value={mediaData.representantPouvoirDate} onChange={handleMediaChange} className="input-date" />
+          <span style={{ margin: '0 8px' }}>par</span>
+          <input type="text" name="representantPouvoirPar" value={mediaData.representantPouvoirPar} onChange={handleMediaChange} placeholder="Nom" className="input-lieu" />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>💼 Fonction :</h2></div><div className="form-input">
-        <input type="text" name="representantFonction" value={mediaData.representantFonction} onChange={handleMediaChange} className="input-style" />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><Briefcase size={18} strokeWidth={2} /> Fonction :</h2></div>
+        <div className="form-input">
+          <input type="text" name="representantFonction" value={mediaData.representantFonction} onChange={handleMediaChange} className="input-style" placeholder="Fonction du représentant" />
+        </div>
+      </div>
     </>
   );
 
   const renderStep3 = () => (
     <>
-      <div className="form-section-title">📋 3) RENSEIGNEMENTS SUR LA STATION</div>
+      <div className="form-section-title">
+        <Monitor size={18} strokeWidth={2} /> 3) RENSEIGNEMENTS SUR LA STATION
+      </div>
       
-      <div className="form-row"><div className="form-label"><h2>🏢 Dénomination :</h2></div><div className="form-input">
-        <input type="text" name="denomination" value={mediaData.denomination} onChange={handleMediaChange} className="input-style" required />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><Building2 size={18} strokeWidth={2} /> Dénomination :</h2></div>
+        <div className="form-input">
+          <input type="text" name="denomination" value={mediaData.denomination} onChange={handleMediaChange} className="input-style" placeholder="Nom de la station" required />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>📻 Fréquence :</h2></div><div className="form-input">
-        <input type="text" name="frequence" value={mediaData.frequence} onChange={handleMediaChange} className="input-style" required />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><Radio size={18} strokeWidth={2} /> Fréquence :</h2></div>
+        <div className="form-input">
+          <input type="text" name="frequence" value={mediaData.frequence} onChange={handleMediaChange} className="input-style" placeholder="Ex: 101.5 FM" required />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>📺 Canal :</h2></div><div className="form-input">
-        <input type="text" name="canal" value={mediaData.canal} onChange={handleMediaChange} className="input-style" />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><Tv size={18} strokeWidth={2} /> Canal :</h2></div>
+        <div className="form-input">
+          <input type="text" name="canal" value={mediaData.canal} onChange={handleMediaChange} className="input-style" placeholder="Canal (ex: Canal 4)" />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>📍 Siège social :</h2></div><div className="form-input">
-        <input type="text" name="siege" value={mediaData.siege} onChange={handleMediaChange} className="input-style" required />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><MapPin size={18} strokeWidth={2} /> Siège social :</h2></div>
+        <div className="form-input">
+          <input type="text" name="siege" value={mediaData.siege} onChange={handleMediaChange} className="input-style" placeholder="Adresse du siège social" required />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>📞 Téléphone :</h2></div><div className="form-input">
-        <input type="tel" name="telephone" value={mediaData.telephone} onChange={handleMediaChange} className="input-style" required />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><Phone size={18} strokeWidth={2} /> Téléphone :</h2></div>
+        <div className="form-input">
+          <input type="tel" name="telephone" value={mediaData.telephone} onChange={handleMediaChange} className="input-style" placeholder="Numéro de téléphone" required />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>✉️ E-mail :</h2></div><div className="form-input">
-        <input type="email" name="email" value={mediaData.email} onChange={handleMediaChange} className="input-style" />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><Mail size={18} strokeWidth={2} /> E-mail :</h2></div>
+        <div className="form-input">
+          <input type="email" name="email" value={mediaData.email} onChange={handleMediaChange} className="input-style" placeholder="Adresse e-mail" />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>📄 NIF :</h2></div><div className="form-input">
-        <input type="text" name="nif" value={mediaData.nif} onChange={handleMediaChange} className="input-style" />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><FileText size={18} strokeWidth={2} /> NIF :</h2></div>
+        <div className="form-input">
+          <input type="text" name="nif" value={mediaData.nif} onChange={handleMediaChange} className="input-style" placeholder="Numéro NIF" />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>📊 STAT :</h2></div><div className="form-input">
-        <input type="text" name="stat" value={mediaData.stat} onChange={handleMediaChange} className="input-style" />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><FileText size={18} strokeWidth={2} /> STAT :</h2></div>
+        <div className="form-input">
+          <input type="text" name="stat" value={mediaData.stat} onChange={handleMediaChange} className="input-style" placeholder="Numéro STAT" />
+        </div>
+      </div>
 
-      <div className="form-section-subtitle">🌍 Couverture :</div>
-      <div className="form-row"><div className="form-label"></div><div className="form-input checkbox-group">
-        <label><input type="checkbox" name="couvertureCapitale" checked={mediaData.couvertureCapitale} onChange={handleMediaChange} /> Capitale</label>
-        <label><input type="checkbox" name="couvertureChefLieuProvince" checked={mediaData.couvertureChefLieuProvince} onChange={handleMediaChange} /> Chef-lieu de Province</label>
-        <label><input type="checkbox" name="couvertureChefLieuRegion" checked={mediaData.couvertureChefLieuRegion} onChange={handleMediaChange} /> Chef-lieu de Région</label>
-        <label><input type="checkbox" name="couvertureDistrict" checked={mediaData.couvertureDistrict} onChange={handleMediaChange} /> District</label>
-      </div></div>
+      <div className="form-section-subtitle">
+        <Globe size={16} strokeWidth={2} /> Couverture :
+      </div>
+      <div className="form-row">
+        <div className="form-label"></div>
+        <div className="form-input checkbox-group">
+          <label className="checkbox-label">
+            <input type="checkbox" name="couvertureCapitale" checked={mediaData.couvertureCapitale} onChange={handleMediaChange} />
+            Capitale
+          </label>
+          <label className="checkbox-label">
+            <input type="checkbox" name="couvertureChefLieuProvince" checked={mediaData.couvertureChefLieuProvince} onChange={handleMediaChange} />
+            Chef-lieu de Province
+          </label>
+          <label className="checkbox-label">
+            <input type="checkbox" name="couvertureChefLieuRegion" checked={mediaData.couvertureChefLieuRegion} onChange={handleMediaChange} />
+            Chef-lieu de Région
+          </label>
+          <label className="checkbox-label">
+            <input type="checkbox" name="couvertureDistrict" checked={mediaData.couvertureDistrict} onChange={handleMediaChange} />
+            District
+          </label>
+        </div>
+      </div>
 
-      <div className="form-section-subtitle">⏰ Horaires de diffusion :</div>
-      <div className="form-row"><div className="form-label"></div><div className="form-input checkbox-group">
-        <label><input type="checkbox" name="horairesJusqua12" checked={mediaData.horairesJusqua12} onChange={handleMediaChange} /> Jusqu'à 12 heures</label>
-        <label><input type="checkbox" name="horaires13a24" checked={mediaData.horaires13a24} onChange={handleMediaChange} /> 13 à 24 heures</label>
-      </div></div>
+      <div className="form-section-subtitle">
+        <Clock size={16} strokeWidth={2} /> Horaires de diffusion :
+      </div>
+      <div className="form-row">
+        <div className="form-label"></div>
+        <div className="form-input checkbox-group">
+          <label className="checkbox-label">
+            <input type="checkbox" name="horairesJusqua12" checked={mediaData.horairesJusqua12} onChange={handleMediaChange} />
+            Jusqu'à 12 heures
+          </label>
+          <label className="checkbox-label">
+            <input type="checkbox" name="horaires13a24" checked={mediaData.horaires13a24} onChange={handleMediaChange} />
+            13 à 24 heures
+          </label>
+        </div>
+      </div>
 
-      <div className="form-section-subtitle">🗺️ Présence par région :</div>
-      <div className="form-row"><div className="form-label"></div><div className="form-input">
-        <label><input type="checkbox" checked={hasRegions} onChange={handleMediaHasRegionsChange} /> Activer les régions</label>
-      </div></div>
+      <div className="form-section-subtitle">
+        <Layers size={16} strokeWidth={2} /> Présence par région :
+      </div>
+      <div className="form-row">
+        <div className="form-label"></div>
+        <div className="form-input">
+          <label className="checkbox-label">
+            <input type="checkbox" checked={hasRegions} onChange={handleMediaHasRegionsChange} />
+            Activer les régions
+          </label>
+        </div>
+      </div>
 
       {hasRegions && (
         <>
-          <div className="form-row"><div className="form-label"><h2>🔢 Nombre de régions :</h2></div><div className="form-input">
-            <input type="number" onChange={(e) => handleMediaNombreRegionsChange(e.target.value)} className="input-style" min="1" placeholder="Nombre" />
-          </div></div>
+          <div className="form-row">
+            <div className="form-label"><h2><Hash size={18} strokeWidth={2} /> Nombre de régions :</h2></div>
+            <div className="form-input">
+              <input type="number" onChange={(e) => handleMediaNombreRegionsChange(e.target.value)} className="input-style" min="1" placeholder="Nombre de régions" />
+            </div>
+          </div>
           {regionsInputs.map((region, i) => (
-            <div key={i} className="region-card" style={{ border: '1px solid #ddd', padding: '15px', margin: '10px 0', borderRadius: '8px' }}>
-              <h4>Région {i+1}</h4>
-              <div className="form-row"><div className="form-label"><h2>📌 Nom :</h2></div><div className="form-input">
-                <input type="text" placeholder="Nom" value={region.nom} onChange={(e) => handleMediaRegionChange(i, 'nom', e.target.value)} className="input-style" />
-              </div></div>
-              <div className="form-row"><div className="form-label"><h2>📻 Fréquence :</h2></div><div className="form-input">
-                <input type="text" placeholder="Fréquence" value={region.frequence} onChange={(e) => handleMediaRegionChange(i, 'frequence', e.target.value)} className="input-style" />
-              </div></div>
-              <div className="form-row"><div className="form-label"><h2>👥 Audience :</h2></div><div className="form-input">
-                <input type="text" placeholder="Audience" value={region.audience} onChange={(e) => handleMediaRegionChange(i, 'audience', e.target.value)} className="input-style" />
-              </div></div>
+            <div key={i} className="region-card">
+              <h4><MapPin size={16} strokeWidth={2} /> Région {i+1}</h4>
+              <div className="form-row">
+                <div className="form-label"><h2>📌 Nom :</h2></div>
+                <div className="form-input">
+                  <input type="text" placeholder="Nom de la région" value={region.nom} onChange={(e) => handleMediaRegionChange(i, 'nom', e.target.value)} className="input-style" />
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-label"><h2><Radio size={16} strokeWidth={2} /> Fréquence :</h2></div>
+                <div className="form-input">
+                  <input type="text" placeholder="Fréquence" value={region.frequence} onChange={(e) => handleMediaRegionChange(i, 'frequence', e.target.value)} className="input-style" />
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-label"><h2><Users size={16} strokeWidth={2} /> Audience :</h2></div>
+                <div className="form-input">
+                  <input type="text" placeholder="Audience estimée" value={region.audience} onChange={(e) => handleMediaRegionChange(i, 'audience', e.target.value)} className="input-style" />
+                </div>
+              </div>
             </div>
           ))}
         </>
       )}
 
-      <div className="form-row"><div className="form-label"><h2>💰 Taux :</h2></div><div className="form-input">
-        <input type="text" value={getDisplayValue(mediaData.taux)} onChange={(e) => {
-          const rawValue = e.target.value.replace(/\s/g, '');
-          if (rawValue === '' || /^\d+$/.test(rawValue)) {
-            setMediaData(prev => ({ ...prev, taux: rawValue }));
-            e.target.value = formatNumber(rawValue);
-          }
-        }} className="input-style" required placeholder="Montant en Ar" />
-      </div></div>
-
-      <div className="form-row"><div className="form-label"><h2>💰 Frais de dossier :</h2></div><div className="form-input">
-        <input type="text" value={getDisplayValue(fraisDossier)} onChange={handleFraisDossierChange} className="input-style" placeholder="Frais de dossier en Ar" />
-      </div></div>
+      <div className="form-section-subtitle"> Calculs :</div>
+      
+      <div className="form-row">
+        <div className="form-label"><h2><DollarSign size={18} strokeWidth={2} /> Taux :</h2></div>
+        <div className="form-input">
+          <input type="text" value={getDisplayValue(mediaData.taux)} onChange={(e) => {
+            const rawValue = e.target.value.replace(/\s/g, '');
+            if (rawValue === '' || /^\d+$/.test(rawValue)) {
+              setMediaData(prev => ({ ...prev, taux: rawValue }));
+              e.target.value = formatNumber(rawValue);
+            }
+          }} className="input-style" required placeholder="Montant en Ar" />
+        </div>
+      </div>
 
       <div className="form-row">
-        <div className="form-label"><h2>🔢 Uniter :</h2></div>
+        <div className="form-label"><h2><FileText size={18} strokeWidth={2} /> Frais de dossier :</h2></div>
         <div className="form-input">
-          <input type="number" min="1" max="9" value={uniter} onChange={(e) => setUniter(Math.min(9, Math.max(1, parseInt(e.target.value) || 1)))} className="input-style" style={{ width: '80px' }} />
+          <input type="text" value={getDisplayValue(fraisDossier)} onChange={handleFraisDossierChange} className="input-style" placeholder="Frais de dossier en Ar" />
+        </div>
+      </div>
+
+      <div className="form-row">
+        <div className="form-label"><h2><Hash size={18} strokeWidth={2} /> Uniter :</h2></div>
+        <div className="form-input">
+          <input type="number" min="1" max="9" value={uniter} onChange={(e) => setUniter(Math.min(9, Math.max(1, parseInt(e.target.value) || 1)))} className="input-style" style={{ width: '80px' }} placeholder="1" />
           <span style={{ marginLeft: '10px', fontSize: '14px', color: '#6c757d' }}>(1 à 9 unités)</span>
         </div>
       </div>
 
-      <div className="form-row"><div className="form-label"><h2>💰 Soit Total :</h2></div><div className="form-input">
-        <input type="text" value={getSoitTotalDisplay()} readOnly className="input-style total-field" style={{ fontWeight: 'bold', color: '#28a745' }} />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><DollarSign size={18} strokeWidth={2} /> Soit Total :</h2></div>
+        <div className="form-input">
+          <input type="text" value={getSoitTotalDisplay()} readOnly className="input-style total-field" />
+        </div>
+      </div>
 
-      <div className="form-section-subtitle">✍️ Signature :</div>
-      <div className="form-row"><div className="form-label"><h2>Je soussigné(e) Mr/Mme :</h2></div><div className="form-input">
-        <input type="text" name="confirmationNom" value={mediaData.confirmationNom} onChange={handleMediaChange} className="input-style" />
-      </div></div>
+      <div className="form-section-subtitle">
+        <Edit size={16} strokeWidth={2} /> Signature :
+      </div>
+      <div className="form-row">
+        <div className="form-label"><h2><User size={18} strokeWidth={2} /> Je soussigné(e) Mr/Mme :</h2></div>
+        <div className="form-input">
+          <input type="text" name="confirmationNom" value={mediaData.confirmationNom} onChange={handleMediaChange} className="input-style" placeholder="Nom du signataire" />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>📆 Le :</h2></div><div className="form-input">
-        <input type="date" name="dateSignature" value={mediaData.dateSignature} onChange={handleMediaChange} className="input-style" />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><Calendar size={18} strokeWidth={2} /> Le :</h2></div>
+        <div className="form-input">
+          <input type="date" name="dateSignature" value={mediaData.dateSignature} onChange={handleMediaChange} className="input-style" />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>📍 A :</h2></div><div className="form-input">
-        <input type="text" name="lieuSignature" value={mediaData.lieuSignature} onChange={handleMediaChange} className="input-style" />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><MapPin size={18} strokeWidth={2} /> A :</h2></div>
+        <div className="form-input">
+          <input type="text" name="lieuSignature" value={mediaData.lieuSignature} onChange={handleMediaChange} className="input-style" placeholder="Lieu de signature" />
+        </div>
+      </div>
     </>
   );
 
@@ -488,31 +630,40 @@ const MediaAjout = ({ onCancel }) => {
 
     return (
       <div className="recap-container">
-        <h3>📋 RÉCAPITULATIF - RADIO / TÉLÉVISION</h3>
-        <div className="user-info-recap" style={{ background: '#e8f4f8', padding: '10px', borderRadius: '8px', marginBottom: '15px' }}>
-          <p><strong>👤 Utilisateur:</strong> {userInfo.nom} ({userInfo.prefix})</p>
-          <p><strong>📄 Prochain numéro de dossier:</strong> {userDossierDisplay}</p>
+        <h3><CheckCircle size={20} strokeWidth={2} /> RÉCAPITULATIF - RADIO / TÉLÉVISION</h3>
+        <div className="user-info-recap">
+          <p><Users size={16} strokeWidth={2} /> Utilisateur: <strong>{userInfo.nom}</strong> ({userInfo.prefix})</p>
+          <p><FileText size={16} strokeWidth={2} /> Prochain dossier: <strong>{userDossierDisplay}</strong></p>
         </div>
-        <div className="recap-section"><h4>1) PROPRIÉTAIRE</h4><table className="recap-table"><tbody>
-          <tr><td style={{ fontWeight: 'bold' }}>👤 Nom</td><td>{mediaData.proprietaireNom || '-'}</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>🆔 CIN</td><td>{mediaData.proprietaireCin || '-'}</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>📍 Région</td><td>{mediaData.region || '-'}</td></tr>
-        </tbody></table></div>
-        <div className="recap-section"><h4>2) REPRÉSENTANT LÉGAL</h4><table className="recap-table"><tbody>
-          <tr><td style={{ fontWeight: 'bold' }}>👤 Nom</td><td>{mediaData.representantNom || '-'}</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>🆔 CIN</td><td>{mediaData.representantCin || '-'}</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>💼 Fonction</td><td>{mediaData.representantFonction || '-'}</td></tr>
-        </tbody></table></div>
-        <div className="recap-section"><h4>3) STATION</h4><table className="recap-table"><tbody>
-          <tr><td style={{ fontWeight: 'bold' }}>🏢 Dénomination</td><td>{mediaData.denomination || '-'}</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>📻 Fréquence</td><td>{mediaData.frequence || '-'}</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>📍 Siège</td><td>{mediaData.siege || '-'}</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>📍 Région</td><td>{mediaData.region || '-'}</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>💰 Taux</td><td>{formatNumber(mediaData.taux || 0)} Ar</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>💰 Frais de dossier</td><td>{formatNumber(fraisDossier || 0)} Ar</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>🔢 Uniter</td><td>{uniter}</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>💰 Soit Total</td><td><strong style={{ color: '#28a745' }}>{getSoitTotalDisplay()}</strong></td></tr>
-        </tbody></table></div>
+        <div className="recap-section">
+          <h4><UserPlus size={16} strokeWidth={2} /> 1) PROPRIÉTAIRE</h4>
+          <table className="recap-table"><tbody>
+            <tr><td><User size={16} strokeWidth={2} /> Nom</td><td>{mediaData.proprietaireNom || '-'}</td></tr>
+            <tr><td><CreditCard size={16} strokeWidth={2} /> CIN</td><td>{mediaData.proprietaireCin || '-'}</td></tr>
+            <tr><td><MapPin size={16} strokeWidth={2} /> Région</td><td>{mediaData.region || '-'}</td></tr>
+          </tbody></table>
+        </div>
+        <div className="recap-section">
+          <h4><UserPlus size={16} strokeWidth={2} /> 2) REPRÉSENTANT LÉGAL</h4>
+          <table className="recap-table"><tbody>
+            <tr><td><User size={16} strokeWidth={2} /> Nom</td><td>{mediaData.representantNom || '-'}</td></tr>
+            <tr><td><CreditCard size={16} strokeWidth={2} /> CIN</td><td>{mediaData.representantCin || '-'}</td></tr>
+            <tr><td><Briefcase size={16} strokeWidth={2} /> Fonction</td><td>{mediaData.representantFonction || '-'}</td></tr>
+          </tbody></table>
+        </div>
+        <div className="recap-section">
+          <h4><Monitor size={16} strokeWidth={2} /> 3) STATION</h4>
+          <table className="recap-table"><tbody>
+            <tr><td><Building2 size={16} strokeWidth={2} /> Dénomination</td><td>{mediaData.denomination || '-'}</td></tr>
+            <tr><td><Radio size={16} strokeWidth={2} /> Fréquence</td><td>{mediaData.frequence || '-'}</td></tr>
+            <tr><td><MapPin size={16} strokeWidth={2} /> Siège</td><td>{mediaData.siege || '-'}</td></tr>
+            <tr><td><MapPin size={16} strokeWidth={2} /> Région</td><td>{mediaData.region || '-'}</td></tr>
+            <tr><td><DollarSign size={16} strokeWidth={2} /> Taux</td><td>{formatNumber(mediaData.taux || 0)} Ar</td></tr>
+            <tr><td><FileText size={16} strokeWidth={2} /> Frais de dossier</td><td>{formatNumber(fraisDossier || 0)} Ar</td></tr>
+            <tr><td><Hash size={16} strokeWidth={2} /> Uniter</td><td>{uniter}</td></tr>
+            <tr><td><DollarSign size={16} strokeWidth={2} /> Soit Total</td><td><strong style={{ color: '#28a745' }}>{getSoitTotalDisplay()}</strong></td></tr>
+          </tbody></table>
+        </div>
       </div>
     );
   };
@@ -528,26 +679,35 @@ const MediaAjout = ({ onCancel }) => {
   };
 
   const getStepTitle = () => {
-    const titles = { 1: '📝 Étape 1 - Propriétaire', 2: '📝 Étape 2 - Représentant légal', 3: '📝 Étape 3 - Station et calcul', 4: '📋 Récapitulatif' };
-    return titles[currentStep] || `📝 Étape ${currentStep}`;
+    const titles = {
+      1: 'Étape 1 - Propriétaire',
+      2: 'Étape 2 - Représentant légal',
+      3: 'Étape 3 - Station et calcul',
+      4: 'Récapitulatif'
+    };
+    return titles[currentStep] || `Étape ${currentStep}`;
   };
 
   return (
     <form onSubmit={handleNextStep}>
       <fieldset><legend>{getStepTitle()}</legend>
         {renderCurrentStep()}
-        <div className="button-group" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '30px', gap: '10px' }}>
-          <button type="button" className="btn-cancel" onClick={onCancel} style={{ background: '#dc3545', color: 'white', padding: '10px 25px', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '14px' }}>
-            ❌ Annuler
+        <div className="button-group">
+          <button type="button" className="btn-cancel" onClick={onCancel}>
+            <X size={18} strokeWidth={2} /> Annuler
           </button>
           <div style={{ display: 'flex', gap: '10px' }}>
             {currentStep > 1 && (
-              <button type="button" className="btn-secondary" onClick={handlePrevStep} style={{ background: '#6c757d', color: 'white', padding: '10px 25px', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '14px' }}>
-                ◀ Précédent
+              <button type="button" className="btn-secondary" onClick={handlePrevStep}>
+                <ArrowLeft size={18} strokeWidth={2} /> Précédent
               </button>
             )}
-            <button type="submit" className="btn-primary" disabled={isSubmitting} style={{ background: '#007bff', color: 'white', padding: '10px 25px', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '14px' }}>
-              {isLastStep() ? (isSubmitting ? '⏳ Envoi...' : '✅ Valider') : '▶ Suivant'}
+            <button type="submit" className="btn-primary" disabled={isSubmitting}>
+              {isLastStep() ? (
+                isSubmitting ? <><Clock size={18} strokeWidth={2} /> Envoi...</> : <><Save size={18} strokeWidth={2} /> Valider</>
+              ) : (
+                <><ArrowRight size={18} strokeWidth={2} /> Suivant</>
+              )}
             </button>
           </div>
         </div>

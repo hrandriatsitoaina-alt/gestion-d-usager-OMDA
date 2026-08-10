@@ -3,7 +3,63 @@ const router = express.Router();
 const pool = require('../database');
 const config = require('../config');
 
-// POST /api/auth/login
+// ============================================================
+// ROUTE PUBLIQUE D'INSCRIPTION (POST /auth/register)
+// ============================================================
+router.post('/auth/register', async (req, res) => {
+  const { nom, email, mot_de_passe } = req.body;
+
+  // Validation
+  if (!nom || !email || !mot_de_passe) {
+    return res.status(400).json({ success: false, message: 'Tous les champs sont requis.' });
+  }
+  if (mot_de_passe.length < 4) {
+    return res.status(400).json({ success: false, message: 'Le mot de passe doit contenir au moins 4 caractères.' });
+  }
+
+  try {
+    // Vérifier si l'email existe déjà
+    const existing = await pool.query('SELECT id FROM utilisateurs WHERE email = $1', [email]);
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ success: false, message: 'Cet email est déjà utilisé.' });
+    }
+
+    // Insérer le nouvel utilisateur (role='user', statut='inactif')
+    const result = await pool.query(
+      `INSERT INTO utilisateurs (nom, email, mot_de_passe, role, statut)
+       VALUES ($1, $2, $3, 'user', 'inactif')
+       RETURNING id, nom, email, role, statut`,
+      [nom, email, mot_de_passe]
+    );
+
+    const newUser = result.rows[0];
+
+    // Optionnel : initialiser les compteurs pour les types d'usager (si la table existe)
+    const currentYear = new Date().getFullYear();
+    const typesUsager = ['Hôtel', 'Grand Surface', 'Télé/Radio', 'OCC', 'Bus', 'Night club'];
+    for (const type of typesUsager) {
+      await pool.query(
+        `INSERT INTO compteurs_dossiers_utilisateurs (utilisateur_id, annee, compteur, type_usager)
+         VALUES ($1, $2, 0, $3)
+         ON CONFLICT (utilisateur_id, annee, type_usager) DO NOTHING`,
+        [newUser.id, currentYear, type]
+      );
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Compte créé avec succès.',
+      user: newUser
+    });
+  } catch (error) {
+    console.error('Erreur inscription:', error);
+    res.status(500).json({ success: false, message: 'Erreur interne du serveur.' });
+  }
+});
+
+// ============================================================
+// TES ROUTES EXISTANTES (inchangées)
+// ============================================================
 router.post('/auth/login', async (req, res) => {
   const { username, password } = req.body;
   console.log(`🔐 Tentative: ${username}`);
@@ -47,7 +103,6 @@ router.post('/auth/login', async (req, res) => {
   }
 });
 
-// POST /api/admin/verify
 router.post('/admin/verify', async (req, res) => {
   const { password } = req.body;
   try {
@@ -87,7 +142,6 @@ router.post('/admin/verify', async (req, res) => {
   }
 });
 
-// GET /api/auth/users - Liste des utilisateurs (pour compatibilité)
 router.get('/auth/users', async (req, res) => {
   try {
     const result = await pool.query(
@@ -99,7 +153,6 @@ router.get('/auth/users', async (req, res) => {
   }
 });
 
-// GET /api/auth/current-user
 router.get('/auth/current-user', async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
@@ -134,7 +187,6 @@ router.get('/auth/current-user', async (req, res) => {
   }
 });
 
-// GET /api/users/stats
 router.get('/users/stats', async (req, res) => {
   try {
     const result = await pool.query(`

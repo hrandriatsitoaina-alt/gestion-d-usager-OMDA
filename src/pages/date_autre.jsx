@@ -1,6 +1,9 @@
-// src/pages/date_autre.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  Calendar, ShoppingBag, Bus, Music, Tv, Hotel,
+  ArrowLeft, Users
+} from 'lucide-react';
 import '../styles/date_autre.css';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
@@ -24,7 +27,6 @@ const Dateautre = () => {
 
   const fetchCounts = async () => {
     try {
-      // Récupérer les compteurs pour chaque type d'usager
       const [hotelRes, grandSurfaceRes, busRes, nightclubRes, mediaRes, occRes] = await Promise.all([
         fetch('http://localhost:3001/api/usagers/paiements/hotel'),
         fetch('http://localhost:3001/api/usagers/paiements/grand-surface'),
@@ -41,14 +43,9 @@ const Dateautre = () => {
       const mediaData = await mediaRes.json();
       const occData = await occRes.json();
 
-      console.log('📡 Réponse media:', mediaData);
-
-      // Compter le nombre total de médias
       let mediaCount = 0;
-      
       if (mediaData.success && mediaData.usagers) {
         mediaCount = mediaData.usagers.length;
-        console.log(`📺 Total médias: ${mediaCount}`);
       }
 
       setCounts({
@@ -64,110 +61,100 @@ const Dateautre = () => {
     }
   };
 
+  const cards = [
+    {
+      id: 'occ',
+      icon: Calendar,
+      title: 'Occasionnelle',
+      count: counts.occ,
+      desc: 'Ajout d\'un événement',
+      path: '/date_occ'
+    },
+    {
+      id: 'grandSurface',
+      icon: ShoppingBag,
+      title: 'Grande Surface',
+      count: counts.grandSurface,
+      desc: 'Ajout d\'un lieu',
+      path: '/date-grandsurface'
+    },
+    {
+      id: 'bus',
+      icon: Bus,
+      title: 'Bus',
+      count: counts.bus,
+      desc: 'Ajout d\'une ligne',
+      path: '/date-bus'
+    },
+    {
+      id: 'nightclub',
+      icon: Music,
+      title: 'Night Club',
+      count: counts.nightclub,
+      desc: 'Boîte de nuit',
+      path: '/night-club'
+    },
+    {
+      id: 'media',
+      icon: Tv,
+      title: 'Média',
+      count: counts.media,
+      desc: 'Télé / Radio',
+      path: '/tele-radio'
+    },
+    {
+      id: 'hotel',
+      icon: Hotel,
+      title: 'Hôtel',
+      count: counts.hotel,
+      desc: 'Détail des hôtels',
+      path: '/Hotel_occ'
+    }
+  ];
+
   return (
     <>
       <Header />
       <Sidebar />
       <MiniSidebar />
       <main className="contenu">
-        <fieldset>
-          <legend>Traitement d'ajout des usager</legend>
-          <div className="form-container">
-            <div className="selectUsager">
-              <div className="graph-header">
-                <h3>📊 liste des usager</h3>
-              </div>
+        <fieldset className="compact-fieldset">
+          <legend>
+            <Users size={20} strokeWidth={2} />
+            Traitement d'ajout des usagers
+          </legend>
 
-              <div className="choices-row">
-                <div className="choice-card" align="center">
-                  <div className="card-icon">🎪</div>
-                  <div className="card-title">Occasionnelle <span>{counts.occ} inscrit</span></div>
-                  <div className="card-desc">Ajout d'un événement</div>
-                  <button 
-                    className="card-btn" 
-                    onClick={() => navigate('/date_occ')}
-                  >
-                    Plus d'information
-                  </button>
+          <div className="compact-grid">
+            {cards.map((card) => (
+              <div className="compact-card" key={card.id}>
+                <div className="compact-card-icon">
+                  <card.icon size={34} strokeWidth={1.8} />
                 </div>
-
-                <div className="choice-card" align="center">
-                  <div className="card-icon">🏪</div>
-                  <div className="card-title">Grande Surface <span>{counts.grandSurface} inscrit</span></div>
-                  <div className="card-desc">Ajout d'un lieu</div>
+                <div className="compact-card-content">
+                  <div className="compact-card-title">
+                    {card.title}
+                    <span className="compact-card-count">{card.count} inscrit</span>
+                  </div>
+                  <div className="compact-card-desc">{card.desc}</div>
                   <button 
-                    className="card-btn" 
-                    onClick={() => navigate('/date-grandsurface')}
+                    className="compact-card-btn"
+                    onClick={() => navigate(card.path)}
                   >
-                    Plus d'information
+                    Plus d'information →
                   </button>
                 </div>
               </div>
+            ))}
+          </div>
 
-              <div className="choices-row">
-                <div className="choice-card" align="center">
-                  <div className="card-icon">🚌</div>
-                  <div className="card-title">Bus <span>{counts.bus} inscrit</span></div>
-                  <div className="card-desc">Ajout d'une ligne de bus</div>
-                  <button 
-                    className="card-btn" 
-                    onClick={() => navigate('/date-bus')}
-                  >
-                    Plus d'information
-                  </button>
-                </div>
-
-                <div className="choice-card" align="center">
-                  <div className="card-icon">🎭</div>
-                  <div className="card-title">Night Club <span>{counts.nightclub} inscrit</span></div>
-                  <div className="card-desc">Boîte de nuit</div>
-                  <button 
-                    className="card-btn" 
-                    onClick={() => navigate('/night-club')}
-                  >
-                    Plus d'information
-                  </button>
-                </div>
-              </div>
-
-              <div className="choices-row">
-                <div className="choice-card" align="center">
-                  <div className="card-icon">📺</div>
-                  <div className="card-title">Média <span>{counts.media} inscrit</span></div>
-                  <div className="card-desc">Consulter le statut des médias (Télé/Radio)</div>
-                  <button 
-                    className="card-btn" 
-                    onClick={() => navigate('/tele-radio')}
-                  >
-                    Plus d'information
-                  </button>
-                </div>
-
-                <div className="choice-card" align="center">
-                  <div className="card-icon">🏨</div>
-                  <div className="card-title">Hotel <span>{counts.hotel} inscrit</span></div>
-                  <div className="card-desc">Detail des hôtel</div>
-                  <button 
-                    className="card-btn" 
-                    onClick={() => navigate('/Hotel_occ')}
-                  >
-                    Plus d'information
-                  </button>
-                </div>
-              </div>
-
-              <div className="mive">
-                <div><h3>Retour au page d'accueil</h3></div>
-                <div>
-                  <button 
-                    className="btn-modern outline" 
-                    onClick={() => navigate('/dashboard')}
-                  >
-                    ← Retour
-                  </button>
-                </div>
-              </div>
-            </div>
+          <div className="compact-footer">
+            <button 
+              className="compact-back-btn"
+              onClick={() => navigate('/dashboard')}
+            >
+              <ArrowLeft size={18} strokeWidth={2} />
+              Retour à l'accueil
+            </button>
           </div>
         </fieldset>
       </main>

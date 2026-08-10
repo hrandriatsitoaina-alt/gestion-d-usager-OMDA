@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  HelpCircle, BookOpen, Phone, Keyboard, Bell, Settings,
+  Copyright
+} from 'lucide-react';
 import '../styles/aide.css';
 
 const MiniSidebar = () => {
@@ -161,9 +165,6 @@ const MiniSidebar = () => {
         setShowRaccourcisPopup(true);
         break;
       case 'notif':
-        // ============================================
-        // REDIRECTION VERS LA PAGE DES NOTIFICATIONS
-        // ============================================
         navigate('/notification_admin');
         break;
       case 'params':
@@ -194,39 +195,36 @@ const MiniSidebar = () => {
           <div className="sidebar-content">
             <div className="sidebar-icon-group">
               <div className="sidebar-icon" title="Aide" onClick={() => handleIconClick('aide')}>
-                <span>❓</span>
+                <HelpCircle size={22} strokeWidth={2} color="white" />
               </div>
               <div className="sidebar-icon" title="Documentation" onClick={() => handleIconClick('doc')}>
-                <span>📚</span>
+                <BookOpen size={22} strokeWidth={2} color="white" />
               </div>
               <div className="sidebar-icon" title="Support" onClick={() => handleIconClick('support')}>
-                <span>📞</span>
+                <Phone size={22} strokeWidth={2} color="white" />
               </div>
             </div>
             <div className="sidebar-divider"></div>
             <div className="sidebar-vertical-text">
-              <span>O</span><span>M</span><span>D</span><span>A</span>
+              <Copyright size={32} strokeWidth={2} color="white" />
             </div>
             <div className="sidebar-divider"></div>
             <div className="sidebar-icon-group">
               <div className="sidebar-icon" title="Raccourcis" onClick={() => handleIconClick('raccourcis')}>
-                <span>⌨️</span>
+                <Keyboard size={22} strokeWidth={2} color="white" />
               </div>
-              {/* ============================================ */}
-              {/* NOTIFICATION AVEC BADGE - REDIRECTION VERS /notification_admin */}
-              {/* ============================================ */}
               <div 
                 className="sidebar-icon" 
                 title="Notifications" 
                 onClick={() => handleIconClick('notif')}
               >
-                <span>🔔</span>
+                <Bell size={22} strokeWidth={2} color="white" />
                 {unreadCount > 0 && (
                   <span className="notification-badge">{unreadCount}</span>
                 )}
               </div>
               <div className="sidebar-icon" title="Parametres" onClick={() => handleIconClick('params')}>
-                <span>⚙️</span>
+                <Settings size={22} strokeWidth={2} color="white" />
               </div>
             </div>
           </div>

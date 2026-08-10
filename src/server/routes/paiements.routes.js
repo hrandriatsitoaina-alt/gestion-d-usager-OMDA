@@ -72,9 +72,20 @@ router.get('/paiements/stats', async (req, res) => {
 // POST - Enregistrer un paiement (AVEC RENOUVELLEMENT COMPLET)
 // ============================================================
 router.post('/paiements/enregistrer', verifyAnyUser, async (req, res) => {
-  const { usagerId, usagerType, montant, datePaiement, nombreMois, anneeDebut } = req.body;
+  const { 
+    usagerId, 
+    usagerType, 
+    montant, 
+    datePaiement, 
+    nombreMois, 
+    anneeDebut,
+    fraisDossier,
+    montantRetard,
+    estRetard,
+    reference
+  } = req.body;
   
-  console.log('📝 Données reçues:', { usagerId, usagerType, montant, datePaiement, nombreMois, anneeDebut });
+  console.log('📝 Données reçues:', { usagerId, usagerType, montant, datePaiement, nombreMois, anneeDebut, fraisDossier, montantRetard, estRetard, reference });
   console.log('🔑 Token reçu:', req.headers.adminToken || req.headers['admintoken']);
   
   if (!usagerId || !usagerType || !montant) {
@@ -100,19 +111,50 @@ router.post('/paiements/enregistrer', verifyAnyUser, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Type d\'usager invalide' });
     }
     
-    const existing = await pool.query(
-      `SELECT id, denomination FROM ${tableName} WHERE id = $1`,
-      [usagerId]
-    );
-    
-    if (existing.rows.length === 0) {
-      return res.status(404).json({ success: false, message: 'Usager non trouvé' });
+    // ============================================================
+    // RÉCUPÉRATION DE L'USAGER (avec gestion spéciale pour OCC)
+    // ============================================================
+    let existing;
+    let usagerFraisDossier = 0;
+    let denomination = 'Inconnu';
+
+    if (usagerType === 'occ') {
+      // La table OCC n'a pas de colonne frais_dossier
+      const result = await pool.query(
+        `SELECT id, denomination FROM ${tableName} WHERE id = $1`,
+        [usagerId]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ success: false, message: 'Usager OCC non trouvé' });
+      }
+      existing = result.rows[0];
+      denomination = existing.denomination;
+      // Pour OCC, on utilise la valeur passée dans le body, sinon 0
+      usagerFraisDossier = 0; // pas de valeur en base
+    } else {
+      // Autres types : on peut lire frais_dossier depuis la table
+      const result = await pool.query(
+        `SELECT id, denomination, frais_dossier FROM ${tableName} WHERE id = $1`,
+        [usagerId]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ success: false, message: 'Usager non trouvé' });
+      }
+      existing = result.rows[0];
+      denomination = existing.denomination;
+      usagerFraisDossier = parseFloat(existing.frais_dossier) || 0;
     }
     
-    console.log(`✅ Usager trouvé: ${existing.rows[0].denomination}`);
+    // Déterminer la valeur finale du frais de dossier
+    const fraisDossierValue = (fraisDossier !== undefined && fraisDossier !== null) 
+      ? parseFloat(fraisDossier) 
+      : usagerFraisDossier;
+    
+    console.log(`✅ Usager trouvé: ${denomination}`);
+    console.log(`📄 Frais de dossier: ${fraisDossierValue}`);
     
     // ============================================================
-    // CAS OCC - Paiement unique (UNE SEULE FOIS)
+    // CAS OCC - Paiement unique
     // ============================================================
     if (usagerType === 'occ') {
       const occCheck = await pool.query(
@@ -125,12 +167,23 @@ router.post('/paiements/enregistrer', verifyAnyUser, async (req, res) => {
       }
       
       await pool.query(
-        `INSERT INTO paiements (usager_id, usager_type, type_paiement, montant, date_paiement, statut)
-         VALUES ($1, $2, 'unique', $3, $4, 'paye')`,
-        [usagerId, usagerType, montant, datePaiement]
+        `INSERT INTO paiements 
+         (usager_id, usager_type, type_paiement, montant, date_paiement, 
+          frais_dossier, montant_retard, est_retard, reference, statut)
+         VALUES ($1, $2, 'unique', $3, $4, $5, $6, $7, $8, 'paye')`,
+        [
+          usagerId, 
+          usagerType, 
+          parseFloat(montant) || 0, 
+          datePaiement,
+          fraisDossierValue,
+          parseFloat(montantRetard) || 0,
+          estRetard === true || estRetard === 'true' ? true : false,
+          reference || null
+        ]
       );
       
-      console.log(`✅ Paiement OCC enregistré avec succès`);
+      console.log(`✅ Paiement OCC enregistré (frais: ${fraisDossierValue}, retard: ${montantRetard})`);
       
       return res.json({ 
         success: true, 
@@ -140,7 +193,7 @@ router.post('/paiements/enregistrer', verifyAnyUser, async (req, res) => {
     }
     
     // ============================================================
-    // CAS MENSUEL - AVEC RENOUVELLEMENT COMPLET
+    // CAS MENSUEL - AVEC RENOUVELLEMENT COMPLET ET FRAIS DE DOSSIER
     // ============================================================
     
     const datePaiementObj = new Date(datePaiement);
@@ -149,7 +202,6 @@ router.post('/paiements/enregistrer', verifyAnyUser, async (req, res) => {
     const nbMois = nombreMois || 1;
     const montantParMois = montant / nbMois;
     
-    // ⭐ Récupérer TOUS les mois déjà payés (toutes années confondues)
     const paiementsExistants = await pool.query(
       `SELECT mois, annee FROM paiements 
        WHERE usager_id = $1 AND usager_type = $2 AND type_paiement = 'mensuel' AND statut = 'paye'
@@ -157,7 +209,6 @@ router.post('/paiements/enregistrer', verifyAnyUser, async (req, res) => {
       [usagerId, usagerType]
     );
     
-    // Créer un Set des mois déjà payés
     const moisPayes = new Set();
     for (const p of paiementsExistants.rows) {
       moisPayes.add(`${p.annee}-${p.mois}`);
@@ -165,17 +216,16 @@ router.post('/paiements/enregistrer', verifyAnyUser, async (req, res) => {
     
     console.log(`📅 Mois déjà payés (${moisPayes.size}):`, Array.from(moisPayes));
     
-    // ⭐ TROUVER LE PROCHAIN MOIS DISPONIBLE
-    // On commence par l'année de départ et le mois de départ
     let anneeActuelle = anneeDepart;
     let moisActuel = moisDepart;
     let moisTrouves = 0;
     let detailsMois = [];
-    let maxRecherche = 36; // Limite de sécurité pour éviter une boucle infinie
+    let maxRecherche = 36;
     
-    // ⭐ LOGIQUE DE RENOUVELLEMENT : Chercher les mois disponibles
+    // Flag pour savoir si c'est le premier mois inséré (pour ajouter les frais)
+    let isFirstInsert = true;
+    
     while (moisTrouves < nbMois && maxRecherche > 0) {
-      // Si on dépasse décembre, passer à l'année suivante
       if (moisActuel > 12) {
         moisActuel = 1;
         anneeActuelle++;
@@ -183,31 +233,54 @@ router.post('/paiements/enregistrer', verifyAnyUser, async (req, res) => {
       
       const key = `${anneeActuelle}-${moisActuel}`;
       
-      // Vérifier si le mois est disponible (non payé)
       if (!moisPayes.has(key)) {
-        // Enregistrer le paiement
+        // Déterminer les valeurs à insérer
+        const currentFrais = isFirstInsert ? fraisDossierValue : 0;
+        const currentMontantRetard = isFirstInsert ? (parseFloat(montantRetard) || 0) : 0;
+        const currentEstRetard = isFirstInsert ? (estRetard === true || estRetard === 'true' ? true : false) : false;
+        const currentReference = isFirstInsert ? (reference || null) : null;
+        
         await pool.query(
-          `INSERT INTO paiements (usager_id, usager_type, type_paiement, annee, mois, montant, date_paiement, statut)
-           VALUES ($1, $2, 'mensuel', $3, $4, $5, $6, 'paye')`,
-          [usagerId, usagerType, anneeActuelle, moisActuel, montantParMois, datePaiement]
+          `INSERT INTO paiements 
+           (usager_id, usager_type, type_paiement, annee, mois, montant, date_paiement, statut,
+            frais_dossier, montant_retard, est_retard, reference)
+           VALUES ($1, $2, 'mensuel', $3, $4, $5, $6, 'paye', $7, $8, $9, $10)`,
+          [
+            usagerId, 
+            usagerType, 
+            anneeActuelle, 
+            moisActuel, 
+            montantParMois, 
+            datePaiement,
+            currentFrais,
+            currentMontantRetard,
+            currentEstRetard,
+            currentReference
+          ]
         );
         
         moisTrouves++;
-        detailsMois.push({ mois: moisActuel, annee: anneeActuelle, montant: montantParMois });
-        console.log(`✅ Mois ${moisActuel}/${anneeActuelle} enregistré`);
-        
-        // Ajouter au Set pour éviter les doublons dans la même session
+        detailsMois.push({ 
+          mois: moisActuel, 
+          annee: anneeActuelle, 
+          montant: montantParMois,
+          frais: currentFrais,
+          retard: currentMontantRetard,
+          estRetard: currentEstRetard
+        });
+        console.log(`✅ Mois ${moisActuel}/${anneeActuelle} enregistré (frais: ${currentFrais}, retard: ${currentMontantRetard})`);
         moisPayes.add(key);
+        
+        // Après le premier insert, on met le flag à false
+        isFirstInsert = false;
       } else {
         console.log(`⚠️ Mois ${moisActuel}/${anneeActuelle} déjà payé - ignoré`);
       }
       
-      // Passer au mois suivant
       moisActuel++;
       maxRecherche--;
     }
     
-    // Si aucun mois n'a été enregistré
     if (moisTrouves === 0) {
       return res.status(400).json({ 
         success: false, 
@@ -216,7 +289,6 @@ router.post('/paiements/enregistrer', verifyAnyUser, async (req, res) => {
     }
     
     console.log(`✅ ${moisTrouves} mois enregistrés sur ${nbMois} demandés`);
-    console.log(`📊 Total mois payés maintenant: ${moisPayes.size}`);
     
     res.json({ 
       success: true, 
@@ -235,7 +307,7 @@ router.post('/paiements/enregistrer', verifyAnyUser, async (req, res) => {
 });
 
 // ============================================================
-// GET - Historique des paiements
+// GET - Historique des paiements (avec noms et régions)
 // ============================================================
 router.get('/paiements/historique', async (req, res) => {
   try {
@@ -252,6 +324,10 @@ router.get('/paiements/historique', async (req, res) => {
         p.annee,
         p.montant,
         p.date_paiement,
+        p.frais_dossier,
+        p.montant_retard,
+        p.est_retard,
+        p.reference,
         p.statut,
         p.created_at
       FROM paiements p
@@ -300,6 +376,10 @@ router.get('/paiements/historique', async (req, res) => {
         type: typeLabels[row.usager_type] || row.usager_type,
         typePaiement: row.type_paiement === 'unique' ? 'Unique (OCC)' : 'Mensuel',
         montant: parseFloat(row.montant) || 0,
+        frais_dossier: parseFloat(row.frais_dossier) || 0,
+        montant_retard: parseFloat(row.montant_retard) || 0,
+        est_retard: row.est_retard || false,
+        reference: row.reference || '-',
         date: row.date_paiement || row.created_at,
         mois: row.mois,
         moisLabel: row.mois ? moisLabels[row.mois - 1] : '-',
@@ -365,6 +445,8 @@ router.get('/paiements/tous', async (req, res) => {
         p.montant,
         p.date_paiement,
         p.frais_dossier,
+        p.montant_retard,
+        p.est_retard,
         p.reference,
         p.statut,
         p.created_at,
@@ -424,6 +506,8 @@ router.get('/paiements/historique-complet', async (req, res) => {
         p.montant,
         p.date_paiement,
         p.frais_dossier,
+        p.montant_retard,
+        p.est_retard,
         p.reference,
         p.statut,
         p.created_at,

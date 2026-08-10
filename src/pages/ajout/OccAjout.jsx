@@ -1,6 +1,13 @@
 // src/pages/ajout/OccAjout.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  Users, User, Calendar, MapPin, CreditCard, DollarSign,
+  Clock, FileText, CheckCircle, AlertCircle, PlusCircle,
+  UserPlus, Music, Film, Star, Heart, Camera, BookOpen,
+  ArrowLeft, ArrowRight, Save, X, Eye, Edit, Trash2,
+  Hash, Home, Phone, BarChart, Info
+} from 'lucide-react';
 
 const OccAjout = ({ onCancel }) => {
   const navigate = useNavigate();
@@ -16,11 +23,15 @@ const OccAjout = ({ onCancel }) => {
   const [uniter, setUniter] = useState(1);
   const [soitTotal, setSoitTotal] = useState(0);
   const [globalDossierNumber, setGlobalDossierNumber] = useState('');
+  const [globalTotalCount, setGlobalTotalCount] = useState(0);
   const [regionsList, setRegionsList] = useState([]);
   const [newRegion, setNewRegion] = useState('');
   const [showAddRegion, setShowAddRegion] = useState(false);
   const [hasOtherArtists, setHasOtherArtists] = useState(false);
   const [otherArtistsInputs, setOtherArtistsInputs] = useState([]);
+
+  const [isRetard, setIsRetard] = useState(false);
+  const [montantRetard, setMontantRetard] = useState('');
 
   const [occData, setOccData] = useState({
     organisateurs: '',
@@ -81,6 +92,14 @@ const OccAjout = ({ onCancel }) => {
     }
   };
 
+  const handleMontantRetardChange = (e) => {
+    const rawValue = e.target.value.replace(/\s/g, '');
+    if (rawValue === '' || /^\d+$/.test(rawValue)) {
+      setMontantRetard(rawValue);
+      e.target.value = formatNumber(rawValue);
+    }
+  };
+
   const loadRegions = async () => {
     try {
       const response = await fetch('http://localhost:3001/api/regions');
@@ -108,43 +127,39 @@ const OccAjout = ({ onCancel }) => {
     }
   };
 
-  // ============================================================
-  // CALCUL DU SOIT TOTAL POUR OCC
-  // ============================================================
   useEffect(() => {
     const fraisVal = parseFloat(fraisDossier) || 0;
     const montantVal = parseFloat(montant) || 0;
-    const totalCalcule = fraisVal + montantVal;
-    const finalTotal = totalCalcule * uniter;
-    setSoitTotal(finalTotal);
-  }, [fraisDossier, montant, uniter]);
+    const retardVal = parseFloat(montantRetard) || 0;
+    const base = (fraisVal + montantVal) * uniter;
+    const total = isRetard ? base + retardVal : base;
+    setSoitTotal(total);
+  }, [fraisDossier, montant, uniter, isRetard, montantRetard]);
 
-  // ============================================================
-  // CHARGEMENT DES INFOS UTILISATEUR ET MISE À JOUR DU COMPTEUR
-  // ============================================================
   useEffect(() => {
     const loadUserData = async () => {
       const currentUser = getCurrentUser();
       if (currentUser) {
-        // Récupérer les données à jour depuis le serveur
         try {
           const response = await fetch('http://localhost:3001/api/auth/current-user', {
-            headers: {
-              'Authorization': `Bearer ${currentUser.id}`
-            }
+            headers: { 'Authorization': `Bearer ${currentUser.id}` }
           });
           const data = await response.json();
           if (data.success && data.user) {
+            const countersResponse = await fetch(`http://localhost:3001/api/users/counters/${data.user.id}?year=${new Date().getFullYear()}`);
+            let compteurs = { 'OCC': 0 };
+            if (countersResponse.ok) {
+              const countersData = await countersResponse.json();
+              if (countersData.success) compteurs = countersData.compteurs || { 'OCC': 0 };
+            }
             setUserInfo({
               id: data.user.id,
               nom: data.user.nom,
               prefix: data.user.prefix || '',
-              compteurs: data.user.compteurs || { 'OCC': 0 },
-              anneeEnCours: data.user.anneeEnCours || new Date().getFullYear()
+              compteurs: compteurs,
+              anneeEnCours: new Date().getFullYear()
             });
-            console.log('✅ Compteur OCC:', data.user.compteurs?.['OCC'] || 0);
           } else {
-            // Fallback sur localStorage
             setUserInfo({
               id: currentUser.id,
               nom: currentUser.nom,
@@ -155,7 +170,6 @@ const OccAjout = ({ onCancel }) => {
           }
         } catch (error) {
           console.error('Erreur chargement user:', error);
-          // Fallback sur localStorage
           setUserInfo({
             id: currentUser.id,
             nom: currentUser.nom,
@@ -167,14 +181,16 @@ const OccAjout = ({ onCancel }) => {
       }
       loadRegions();
     };
-    
     loadUserData();
 
     const fetchDossierNumber = async () => {
       try {
         const response = await fetch('http://localhost:3001/api/occ/dossier-number');
         const data = await response.json();
-        if (data.success) setGlobalDossierNumber(data.dossierNumber);
+        if (data.success) {
+          setGlobalDossierNumber(data.dossierNumber);
+          setGlobalTotalCount(data.totalCount || 0);
+        }
       } catch (error) { console.error(error); }
     };
     fetchDossierNumber();
@@ -260,9 +276,6 @@ const OccAjout = ({ onCancel }) => {
     }
   };
 
-  // ============================================================
-  // SOUMISSION FINALE AVEC MISE À JOUR DU COMPTEUR
-  // ============================================================
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
     const currentUser = getCurrentUser();
@@ -273,37 +286,40 @@ const OccAjout = ({ onCancel }) => {
     }
 
     try {
-      const globalParts = globalDossierNumber.split('/');
-      const globalCount = globalParts[0] || '0';
+      const totalResponse = await fetch('http://localhost:3001/api/occ/total-count');
+      let totalGlobal = 0;
+      if (totalResponse.ok) {
+        const totalData = await totalResponse.json();
+        if (totalData.success) totalGlobal = totalData.total;
+      }
+      
       const globalDay = String(new Date().getDate()).padStart(2, '0');
       const globalMonth = String(new Date().getMonth() + 1).padStart(2, '0');
       const globalYear = new Date().getFullYear();
+      const nouveauTotalGlobal = totalGlobal + 1;
+      const numeroDossierGlobal = `${nouveauTotalGlobal}/${globalDay}/${globalMonth}/${globalYear}`;
       
-      // ⭐ COMPTEUR : Incrémenter le compteur OCC
-      const nouveauCompteur = (userInfo.compteurs?.['OCC'] || 0) + 1;
+      const prefix = userInfo.prefix || currentUser.nom?.substring(0, 3).toUpperCase() || '';
+      const compteurActuel = userInfo.compteurs?.['OCC'] || 0;
+      const nouveauCompteur = compteurActuel + 1;
       const currentMonth = new Date().getMonth() + 1;
       const currentTrimestre = getTrimestreFromMonth(currentMonth);
-      const numeroDossierUtilisateur = `${userInfo.prefix || ''} ${nouveauCompteur}/${currentTrimestre}/${userInfo.anneeEnCours || new Date().getFullYear()}`;
-      const numeroDossierGlobal = `${globalCount}/${globalDay}/${globalMonth}/${globalYear}`;
+      const numeroDossierUtilisateur = `${prefix} ${nouveauCompteur}/${currentTrimestre}/${userInfo.anneeEnCours || new Date().getFullYear()}`;
 
       const finalData = {
         type: 'OCC',
         userId: currentUser.id,
+        prefix: prefix,
         ...occData,
         otherArtistsDetail: otherArtistsInputs,
         hasOtherArtists,
-        fraisDossier: parseFloat(fraisDossier) || 0,
-        montantTotal: parseFloat(montant) || 0,
         dateAjout: new Date().toISOString().split('T')[0],
         demandeur: occData.organisateurs || '',
         representantNom: occData.organisateurs || '',
         numeroDossierGlobal: numeroDossierGlobal,
         numeroDossierUtilisateur: numeroDossierUtilisateur,
         region: occData.region || '',
-        soitTotal: soitTotal,
         uniter: uniter,
-        // ⭐ Envoyer le nouveau compteur au serveur
-        nouveauCompteur: nouveauCompteur,
         typeKey: 'OCC'
       };
 
@@ -314,7 +330,6 @@ const OccAjout = ({ onCancel }) => {
       });
       const result = await response.json();
       if (result.success) {
-        // ⭐ Mettre à jour le compteur dans le localStorage
         const updatedUser = getCurrentUser();
         if (updatedUser) {
           updatedUser.compteurs = updatedUser.compteurs || {};
@@ -323,8 +338,6 @@ const OccAjout = ({ onCancel }) => {
         }
         
         alert('✅ Occasionnelle ajoutée avec succès !');
-        
-        // Redirection vers la page de confirmation
         navigate('/confirme-paiement', { 
           state: { 
             usager: { 
@@ -333,18 +346,21 @@ const OccAjout = ({ onCancel }) => {
               demandeur: occData.organisateurs,
               telephone: occData.telephone,
               region: occData.region,
-              montant_mensuel: 0,
-              frais_dossier: parseFloat(fraisDossier) || 0,
-              montant_total: parseFloat(montant) || 0,
-              soit_total: soitTotal,
-              uniter: uniter || 1,
               adresse: occData.adresse,
               genre_manifestation: occData.genreManifestation,
               date_evenement: occData.dateEvenement,
               lieu_evenement: occData.lieuEvenement,
               organisateurs: occData.organisateurs,
               artistes: occData.artistes,
-              representant_par: occData.representantPar
+              representant_par: occData.representantPar,
+              numero_dossier_utilisateur: numeroDossierUtilisateur,
+              numero_dossier_global: numeroDossierGlobal,
+              frais_dossier: parseFloat(fraisDossier) || 0,
+              montant_total: parseFloat(montant) || 0,
+              montant_retard: isRetard ? parseFloat(montantRetard) || 0 : 0,
+              is_retard: isRetard,
+              soit_total: soitTotal,
+              uniter: uniter || 1
             }, 
             type: 'occ'
           } 
@@ -360,98 +376,135 @@ const OccAjout = ({ onCancel }) => {
     }
   };
 
+  // ======================= RENDER STEPS =======================
+
   const renderStep1 = () => {
     const globalParts = globalDossierNumber.split('/');
     const globalCount = globalParts[0] || '0';
     const globalDay = String(new Date().getDate()).padStart(2, '0');
     const globalMonth = String(new Date().getMonth() + 1).padStart(2, '0');
     const globalYear = new Date().getFullYear();
-    
-    // ⭐ Afficher le prochain numéro de dossier avec le compteur incrémenté
+    const prefix = userInfo.prefix || '';
     const nextCompteur = (userInfo.compteurs?.['OCC'] || 0) + 1;
     const currentMonth = new Date().getMonth() + 1;
     const currentTrimestre = getTrimestreFromMonth(currentMonth);
-    const userDossierDisplay = `${userInfo.prefix || ''} ${nextCompteur}/${currentTrimestre}/${userInfo.anneeEnCours || new Date().getFullYear()}`;
+    const userDossierDisplay = `${prefix} ${nextCompteur}/${currentTrimestre}/${userInfo.anneeEnCours || new Date().getFullYear()}`;
 
     return (
       <>
-        <div className="user-info-header" style={{ background: '#e8f4f8', padding: '15px', borderRadius: '10px', marginBottom: '25px', borderLeft: '4px solid #007bff' }}>
-          <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#2c3e50' }}>
-            👤 Utilisateur: <span style={{ color: '#007bff' }}>{userInfo.nom}</span> ({userInfo.prefix})
+        <div className="user-info-header">
+          <div className="user-info-row">
+            <Users size={18} strokeWidth={2} />
+            <span>Utilisateur: <strong>{userInfo.nom}</strong> ({prefix})</span>
           </div>
-          <div className="dossier-number" style={{ fontSize: '18px', fontWeight: 'bold', color: '#2c3e50', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', marginTop: '10px' }}>
-            <span>📄 Dossier Global : {globalDay}/{globalMonth}/{globalYear}</span>
+          <div className="user-info-row">
+            <FileText size={18} strokeWidth={2} />
+            <span>Dossier Global: <strong>{globalCount}/{globalDay}/{globalMonth}/{globalYear}</strong></span>
             <span style={{ marginLeft: '20px', color: '#007bff' }}>{userDossierDisplay}</span>
           </div>
-          <div style={{ fontSize: '12px', color: '#6c757d', marginTop: '8px' }}>
-            📊 Nombre de dossiers OCC déjà créés cette année: <strong>{userInfo.compteurs?.['OCC'] || 0}</strong>
+          <div className="user-info-row" style={{ fontSize: '12px', color: '#6c757d' }}>
+            <span><BarChart size={14} strokeWidth={2} /> Total dossiers OCC: <strong>{globalTotalCount || globalCount}</strong></span>
+            <span style={{ marginLeft: '15px' }}><BarChart size={14} strokeWidth={2} /> Vos dossiers cette année: <strong>{userInfo.compteurs?.['OCC'] || 0}</strong></span>
           </div>
         </div>
 
-        <div className="form-row"><div className="form-label"><h2>2️⃣ Organisateurs :</h2></div><div className="form-input">
-          <input type="text" name="organisateurs" value={occData.organisateurs} onChange={handleOccChange} className="input-style" required />
-        </div></div>
+        <div className="form-row">
+          <div className="form-label"><h2><Users size={18} strokeWidth={2} /> Organisateurs :</h2></div>
+          <div className="form-input">
+            <input type="text" name="organisateurs" value={occData.organisateurs} onChange={handleOccChange} className="input-style" placeholder="Nom des organisateurs" required />
+          </div>
+        </div>
 
-        <div className="form-row"><div className="form-label"><h2>3️⃣ Représenter par :</h2></div><div className="form-input">
-          <input type="text" name="representantPar" value={occData.representantPar} onChange={handleOccChange} className="input-style" />
-        </div></div>
+        <div className="form-row">
+          <div className="form-label"><h2><User size={18} strokeWidth={2} /> Représenter par :</h2></div>
+          <div className="form-input">
+            <input type="text" name="representantPar" value={occData.representantPar} onChange={handleOccChange} className="input-style" placeholder="Nom du représentant" />
+          </div>
+        </div>
 
-        <hr style={{ margin: '20px 0', border: 'none', borderTop: '1px solid #dee2e6' }} />
+        <hr className="step-divider" />
 
-        <div className="form-row"><div className="form-label"><h2>4️⃣ Genre de manifestation :</h2></div><div className="form-input">
-          <input type="text" name="genreManifestation" value={occData.genreManifestation} onChange={handleOccChange} className="input-style" required />
-        </div></div>
+        <div className="form-row">
+          <div className="form-label"><h2><Music size={18} strokeWidth={2} /> Genre manifestation :</h2></div>
+          <div className="form-input">
+            <input type="text" name="genreManifestation" value={occData.genreManifestation} onChange={handleOccChange} className="input-style" placeholder="Ex: Concert, Spectacle, Festival" required />
+          </div>
+        </div>
 
-        <div className="form-row"><div className="form-label"><h2>5️⃣ Artiste :</h2></div><div className="form-input">
-          <input type="text" name="artistes" value={occData.artistes} onChange={handleOccChange} className="input-style" />
-        </div></div>
+        <div className="form-row">
+          <div className="form-label"><h2><Star size={18} strokeWidth={2} /> Artiste :</h2></div>
+          <div className="form-input">
+            <input type="text" name="artistes" value={occData.artistes} onChange={handleOccChange} className="input-style" placeholder="Nom de l'artiste principal" />
+          </div>
+        </div>
 
-        <div className="form-row"><div className="form-label"><h2>6️⃣ Autre artiste :</h2></div><div className="form-input">
-          <label><input type="checkbox" checked={hasOtherArtists} onChange={handleOtherArtistsChange} /> Ajouter d'autres artistes</label>
-        </div></div>
+        <div className="form-row">
+          <div className="form-label"><h2><PlusCircle size={18} strokeWidth={2} /> Autre artiste :</h2></div>
+          <div className="form-input">
+            <label className="checkbox-label">
+              <input type="checkbox" checked={hasOtherArtists} onChange={handleOtherArtistsChange} />
+              Ajouter d'autres artistes
+            </label>
+          </div>
+        </div>
 
         {hasOtherArtists && (
-          <div className="form-row"><div className="form-label"><h2>🔢 Nombre d'artistes :</h2></div><div className="form-input">
-            <input type="number" onChange={(e) => handleOtherArtistsCountChange(e.target.value)} className="input-style" min="1" />
-          </div></div>
+          <div className="form-row">
+            <div className="form-label"><h2><Users size={18} strokeWidth={2} /> Nombre d'artistes :</h2></div>
+            <div className="form-input">
+              <input type="number" onChange={(e) => handleOtherArtistsCountChange(e.target.value)} className="input-style" placeholder="Nombre d'artistes supplémentaires" min="1" />
+            </div>
+          </div>
         )}
 
         {hasOtherArtists && otherArtistsInputs.map((artist, idx) => (
-          <div key={idx} className="region-card" style={{ border: '1px solid #ddd', padding: '15px', margin: '10px 0', borderRadius: '8px', background: '#f9f9f9' }}>
-            <h4>🎤 Artiste {idx + 1}</h4>
-            <div className="form-row"><div className="form-label"><h2>Nom :</h2></div><div className="form-input">
-              <input type="text" placeholder="Nom d'artiste" value={artist.nom} onChange={(e) => handleOtherArtistChange(idx, 'nom', e.target.value)} className="input-style" />
-            </div></div>
-            <div className="form-row"><div className="form-label"><h2>Rôle :</h2></div><div className="form-input">
-              <input type="text" placeholder="Chanteur, Musicien, DJ" value={artist.role} onChange={(e) => handleOtherArtistChange(idx, 'role', e.target.value)} className="input-style" />
-            </div></div>
+          <div key={idx} className="artist-card">
+            <h4><Music size={16} strokeWidth={2} /> Artiste {idx + 1}</h4>
+            <div className="form-row">
+              <div className="form-label"><h2>Nom :</h2></div>
+              <div className="form-input">
+                <input type="text" placeholder="Nom d'artiste" value={artist.nom} onChange={(e) => handleOtherArtistChange(idx, 'nom', e.target.value)} className="input-style" />
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="form-label"><h2>Rôle :</h2></div>
+              <div className="form-input">
+                <input type="text" placeholder="Chanteur, Musicien, DJ" value={artist.role} onChange={(e) => handleOtherArtistChange(idx, 'role', e.target.value)} className="input-style" />
+              </div>
+            </div>
           </div>
         ))}
 
-        <div className="form-row"><div className="form-label"><h2>7️⃣ Date :</h2></div><div className="form-input">
-          <input type="date" name="dateEvenement" value={occData.dateEvenement} onChange={handleOccChange} className="input-style" required />
-        </div></div>
-
-        <div className="form-row"><div className="form-label"><h2>8️⃣ Lieu :</h2></div><div className="form-input">
-          <input type="text" name="lieuEvenement" value={occData.lieuEvenement} onChange={handleOccChange} className="input-style" required />
-        </div></div>
+        <div className="form-row">
+          <div className="form-label"><h2><Calendar size={18} strokeWidth={2} /> Date :</h2></div>
+          <div className="form-input">
+            <input type="date" name="dateEvenement" value={occData.dateEvenement} onChange={handleOccChange} className="input-style" required />
+          </div>
+        </div>
 
         <div className="form-row">
-          <div className="form-label"><h2>📍 Région :</h2></div>
+          <div className="form-label"><h2><MapPin size={18} strokeWidth={2} /> Lieu :</h2></div>
+          <div className="form-input">
+            <input type="text" name="lieuEvenement" value={occData.lieuEvenement} onChange={handleOccChange} className="input-style" placeholder="Lieu de l'événement" required />
+          </div>
+        </div>
+
+        <div className="form-row">
+          <div className="form-label"><h2><MapPin size={18} strokeWidth={2} /> Région :</h2></div>
           <div className="form-input" style={{ display: 'flex', gap: '10px' }}>
             <select name="region" value={occData.region || ''} onChange={handleOccChange} className="input-style" style={{ flex: 1 }}>
               <option value="">Sélectionner une région</option>
               {regionsList.map((region, idx) => (<option key={idx} value={region}>{region}</option>))}
             </select>
-            <button type="button" onClick={() => setShowAddRegion(!showAddRegion)} style={{ padding: '8px 15px', background: '#28a745', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '18px', fontWeight: 'bold' }}>+</button>
+            <button type="button" onClick={() => setShowAddRegion(!showAddRegion)} className="btn-add-region">+</button>
           </div>
         </div>
         {showAddRegion && (
           <div className="form-row">
-            <div className="form-label"><h2>➕ Nouvelle région :</h2></div>
+            <div className="form-label"><h2><PlusCircle size={18} strokeWidth={2} /> Nouvelle région :</h2></div>
             <div className="form-input" style={{ display: 'flex', gap: '10px' }}>
               <input type="text" value={newRegion} onChange={(e) => setNewRegion(e.target.value)} placeholder="Nom de la nouvelle région" className="input-style" style={{ flex: 1 }} />
-              <button type="button" onClick={handleAddRegion} style={{ padding: '8px 20px', background: '#007bff', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Ajouter</button>
+              <button type="button" onClick={handleAddRegion} className="btn-add-region-confirm">Ajouter</button>
             </div>
           </div>
         )}
@@ -461,71 +514,129 @@ const OccAjout = ({ onCancel }) => {
 
   const renderStep2 = () => (
     <>
-      <div className="info-display" style={{ background: '#f0f7ff', padding: '12px', borderRadius: '8px', marginBottom: '20px', textAlign: 'center' }}>
-        <p style={{ margin: 0, fontSize: '16px', color: '#2c3e50' }}>
-          <strong>📋 Organisateur :</strong> {occData.organisateurs || 'Non renseigné'}
-        </p>
+      <div className="info-banner">
+        <Info size={18} strokeWidth={2} />
+        <span>Organisateur : <strong>{occData.organisateurs || 'Non renseigné'}</strong></span>
       </div>
 
-      <div className="form-row"><div className="form-label"><h2>🆔 CIN du représentant :</h2></div><div className="form-input">
-        <input type="text" name="representantCin" value={occData.representantCin} onChange={handleOccChange} className="input-style" required />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><CreditCard size={18} strokeWidth={2} /> CIN du représentant :</h2></div>
+        <div className="form-input">
+          <input type="text" name="representantCin" value={occData.representantCin} onChange={handleOccChange} className="input-style" placeholder="Numéro de la carte CIN" required />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>📅 Délivré le :</h2></div><div className="form-input">
-        <input type="date" name="representantCinDelivree" value={occData.representantCinDelivree} onChange={handleOccChange} className="input-style" />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><Calendar size={18} strokeWidth={2} /> Délivré le :</h2></div>
+        <div className="form-input">
+          <input type="date" name="representantCinDelivree" value={occData.representantCinDelivree} onChange={handleOccChange} className="input-style" />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>📍 à :</h2></div><div className="form-input">
-        <input type="text" name="representantCinLieu" value={occData.representantCinLieu} onChange={handleOccChange} className="input-style" />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><MapPin size={18} strokeWidth={2} /> à :</h2></div>
+        <div className="form-input">
+          <input type="text" name="representantCinLieu" value={occData.representantCinLieu} onChange={handleOccChange} className="input-style" placeholder="Lieu de délivrance" />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>🏠 Adresse :</h2></div><div className="form-input">
-        <input type="text" name="adresse" value={occData.adresse} onChange={handleOccChange} className="input-style" />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><Home size={18} strokeWidth={2} /> Adresse :</h2></div>
+        <div className="form-input">
+          <input type="text" name="adresse" value={occData.adresse} onChange={handleOccChange} className="input-style" placeholder="Adresse complète" />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>📞 Contact :</h2></div><div className="form-input">
-        <input type="tel" name="telephone" value={occData.telephone} onChange={handleOccChange} className="input-style" />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><Phone size={18} strokeWidth={2} /> Contact :</h2></div>
+        <div className="form-input">
+          <input type="tel" name="telephone" value={occData.telephone} onChange={handleOccChange} className="input-style" placeholder="Numéro de téléphone" />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>🏡 Domicile :</h2></div><div className="form-input">
-        <input type="text" name="domicile" value={occData.domicile} onChange={handleOccChange} className="input-style" />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><Home size={18} strokeWidth={2} /> Domicile :</h2></div>
+        <div className="form-input">
+          <input type="text" name="domicile" value={occData.domicile} onChange={handleOccChange} className="input-style" placeholder="Domicile (quartier, ville)" />
+        </div>
+      </div>
     </>
   );
 
   const renderStep3 = () => (
     <>
-      <div className="form-row"><div className="form-label"><h2>💰 Frais de dossier :</h2></div><div className="form-input">
-        <input type="text" value={getDisplayValue(fraisDossier)} onChange={handleFraisDossierChange} className="input-style" placeholder="Frais de dossier en Ar" />
-      </div></div>
-
-      <div className="form-row"><div className="form-label"><h2>💵 Montant à payer :</h2></div><div className="form-input">
-        <input type="text" value={getDisplayValue(montant)} onChange={handleMontantChange} className="input-style" placeholder="Montant total en Ar" />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><FileText size={18} strokeWidth={2} /> Frais de dossier :</h2></div>
+        <div className="form-input">
+          <input type="text" value={getDisplayValue(fraisDossier)} onChange={handleFraisDossierChange} className="input-style" placeholder="Frais de dossier en Ar" />
+        </div>
+      </div>
 
       <div className="form-row">
-        <div className="form-label"><h2>🔢 Uniter :</h2></div>
+        <div className="form-label"><h2><DollarSign size={18} strokeWidth={2} /> Montant à payer :</h2></div>
         <div className="form-input">
-          <input type="number" min="1" max="9" value={uniter} onChange={(e) => setUniter(Math.min(9, Math.max(1, parseInt(e.target.value) || 1)))} className="input-style" style={{ width: '80px' }} />
+          <input type="text" value={getDisplayValue(montant)} onChange={handleMontantChange} className="input-style" placeholder="Montant total en Ar" />
+        </div>
+      </div>
+
+      <div className="form-row">
+        <div className="form-label"><h2><Clock size={18} strokeWidth={2} /> Cas de retard :</h2></div>
+        <div className="form-input" style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
+          <label className="checkbox-label">
+            <input type="checkbox" checked={isRetard} onChange={(e) => setIsRetard(e.target.checked)} />
+            Appliquer une pénalité de retard
+          </label>
+          {isRetard && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '14px', fontWeight: '500' }}>Pénalité :</span>
+              <input
+                type="text"
+                value={getDisplayValue(montantRetard)}
+                onChange={handleMontantRetardChange}
+                className="input-style"
+                placeholder="Montant de la pénalité (Ar)"
+                style={{ width: '180px' }}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="form-row">
+        <div className="form-label"><h2><Hash size={18} strokeWidth={2} /> Uniter :</h2></div>
+        <div className="form-input">
+          <input type="number" min="1" max="9" value={uniter} onChange={(e) => setUniter(Math.min(9, Math.max(1, parseInt(e.target.value) || 1)))} className="input-style" style={{ width: '80px' }} placeholder="1" />
           <span style={{ marginLeft: '10px', fontSize: '14px', color: '#6c757d' }}>(1 à 9 unités)</span>
         </div>
       </div>
 
-      <div className="form-row"><div className="form-label"><h2>💰 Soit Total :</h2></div><div className="form-input">
-        <input type="text" value={getSoitTotalDisplay()} readOnly className="input-style total-field" style={{ fontWeight: 'bold', color: '#28a745' }} />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><DollarSign size={18} strokeWidth={2} /> Soit Total :</h2></div>
+        <div className="form-input">
+          <input type="text" value={getSoitTotalDisplay()} readOnly className="input-style total-field" />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>✍️ Je soussigné(e) Mr/Mme :</h2></div><div className="form-input">
-        <input type="text" name="confirmationNom" value={occData.confirmationNom} onChange={handleOccChange} className="input-style" />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><Edit size={18} strokeWidth={2} /> Je soussigné(e) Mr/Mme :</h2></div>
+        <div className="form-input">
+          <input type="text" name="confirmationNom" value={occData.confirmationNom} onChange={handleOccChange} className="input-style" placeholder="Nom du signataire" />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>📆 Date :</h2></div><div className="form-input">
-        <input type="date" name="dateSignature" value={occData.dateSignature} onChange={handleOccChange} className="input-style" />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><Calendar size={18} strokeWidth={2} /> Date :</h2></div>
+        <div className="form-input">
+          <input type="date" name="dateSignature" value={occData.dateSignature} onChange={handleOccChange} className="input-style" />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>📍 Lieu et date :</h2></div><div className="form-input">
-        <input type="text" name="lieuAjout" value={occData.lieuAjout} onChange={handleOccChange} className="input-style" />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><MapPin size={18} strokeWidth={2} /> Lieu et date :</h2></div>
+        <div className="form-input">
+          <input type="text" name="lieuAjout" value={occData.lieuAjout} onChange={handleOccChange} className="input-style" placeholder="Lieu et date de signature" />
+        </div>
+      </div>
     </>
   );
 
@@ -535,33 +646,37 @@ const OccAjout = ({ onCancel }) => {
     const globalDay = String(new Date().getDate()).padStart(2, '0');
     const globalMonth = String(new Date().getMonth() + 1).padStart(2, '0');
     const globalYear = new Date().getFullYear();
+    const prefix = userInfo.prefix || '';
     const nextCompteur = (userInfo.compteurs?.['OCC'] || 0) + 1;
     const currentMonth = new Date().getMonth() + 1;
     const currentTrimestre = getTrimestreFromMonth(currentMonth);
-    const userDossierDisplay = `${userInfo.prefix || ''} ${nextCompteur}/${currentTrimestre}/${userInfo.anneeEnCours || new Date().getFullYear()}`;
+    const userDossierDisplay = `${prefix} ${nextCompteur}/${currentTrimestre}/${userInfo.anneeEnCours || new Date().getFullYear()}`;
 
     return (
       <div className="recap-container">
-        <h3>📋 RÉCAPITULATIF - OCCASIONNELLE</h3>
-        <div className="user-info-recap" style={{ background: '#e8f4f8', padding: '10px', borderRadius: '8px', marginBottom: '15px' }}>
-          <p><strong>👤 Utilisateur:</strong> {userInfo.nom} ({userInfo.prefix})</p>
-          <p><strong>📊 Dossiers déjà créés cette année:</strong> {userInfo.compteurs?.['OCC'] || 0}</p>
+        <h3><CheckCircle size={20} strokeWidth={2} /> RÉCAPITULATIF - OCCASIONNELLE</h3>
+        <div className="user-info-recap">
+          <p><Users size={16} strokeWidth={2} /> Utilisateur: <strong>{userInfo.nom}</strong> ({prefix})</p>
+          <p><FileText size={16} strokeWidth={2} /> Dossiers déjà créés cette année: <strong>{userInfo.compteurs?.['OCC'] || 0}</strong></p>
+          <p><BarChart size={16} strokeWidth={2} /> Total Global OCC: <strong>{globalTotalCount || globalCount}</strong></p>
+          <p><Clock size={16} strokeWidth={2} /> Cas de retard: <strong>{isRetard ? 'Oui' : 'Non'}</strong> {isRetard && `(Pénalité: ${formatNumber(montantRetard)} Ar)`}</p>
         </div>
         <table className="recap-table"><tbody>
-          <tr><td style={{ fontWeight: 'bold' }}>📄 Dossier Global N° {globalCount}/{globalDay}/{globalMonth}/{globalYear}</td><td style={{ fontWeight: 'bold' }}>{userDossierDisplay}</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>2️⃣ Organisateurs</td><td>{occData.organisateurs || '-'}</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>3️⃣ Representé par</td><td>{occData.representantPar || '-'}</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>4️⃣ Genre manifestation</td><td>{occData.genreManifestation || '-'}</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>5️⃣ Artiste principal</td><td>{occData.artistes || '-'}</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>7️⃣ Date</td><td>{occData.dateEvenement || '-'}</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>8️⃣ Lieu</td><td>{occData.lieuEvenement || '-'}</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>🆔 CIN</td><td>{occData.representantCin || '-'}</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>📍 Région</td><td>{occData.region || '-'}</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>💰 Frais de dossier</td><td>{formatNumber(fraisDossier || 0)} Ar</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>💵 Montant à payer</td><td>{formatNumber(montant || 0)} Ar</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>🔢 Uniter</td><td>{uniter}</td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>💰 Soit Total</td><td><strong style={{ color: '#28a745' }}>{getSoitTotalDisplay()}</strong></td></tr>
-          <tr><td style={{ fontWeight: 'bold' }}>✍️ Signataire</td><td>{occData.confirmationNom || '-'}</td></tr>
+          <tr><td><FileText size={16} strokeWidth={2} /> Dossier Global N° {globalCount}/{globalDay}/{globalMonth}/{globalYear}</td><td><strong>{userDossierDisplay}</strong></td></tr>
+          <tr><td><Users size={16} strokeWidth={2} /> Organisateurs</td><td>{occData.organisateurs || '-'}</td></tr>
+          <tr><td><User size={16} strokeWidth={2} /> Representé par</td><td>{occData.representantPar || '-'}</td></tr>
+          <tr><td><Music size={16} strokeWidth={2} /> Genre manifestation</td><td>{occData.genreManifestation || '-'}</td></tr>
+          <tr><td><Star size={16} strokeWidth={2} /> Artiste principal</td><td>{occData.artistes || '-'}</td></tr>
+          <tr><td><Calendar size={16} strokeWidth={2} /> Date</td><td>{occData.dateEvenement || '-'}</td></tr>
+          <tr><td><MapPin size={16} strokeWidth={2} /> Lieu</td><td>{occData.lieuEvenement || '-'}</td></tr>
+          <tr><td><CreditCard size={16} strokeWidth={2} /> CIN</td><td>{occData.representantCin || '-'}</td></tr>
+          <tr><td><MapPin size={16} strokeWidth={2} /> Région</td><td>{occData.region || '-'}</td></tr>
+          <tr><td><FileText size={16} strokeWidth={2} /> Frais de dossier</td><td>{formatNumber(fraisDossier || 0)} Ar</td></tr>
+          <tr><td><DollarSign size={16} strokeWidth={2} /> Montant à payer</td><td>{formatNumber(montant || 0)} Ar</td></tr>
+          <tr><td><Hash size={16} strokeWidth={2} /> Uniter</td><td>{uniter}</td></tr>
+          <tr><td><Clock size={16} strokeWidth={2} /> Pénalité retard</td><td>{isRetard ? formatNumber(montantRetard) + ' Ar' : '-'}</td></tr>
+          <tr><td><DollarSign size={16} strokeWidth={2} /> Soit Total</td><td><strong style={{ color: '#28a745' }}>{getSoitTotalDisplay()}</strong></td></tr>
+          <tr><td><Edit size={16} strokeWidth={2} /> Signataire</td><td>{occData.confirmationNom || '-'}</td></tr>
         </tbody></table>
       </div>
     );
@@ -569,7 +684,7 @@ const OccAjout = ({ onCancel }) => {
 
   const renderStep5 = () => (
     <div className="recap-container">
-      <h3>🎸 ARTISTES SUPPLÉMENTAIRES</h3>
+      <h3><Music size={20} strokeWidth={2} /> ARTISTES SUPPLÉMENTAIRES</h3>
       <table className="recap-table"><thead><tr><th>#</th><th>Nom</th><th>Rôle</th></tr></thead><tbody>
         {otherArtistsInputs.map((a, i) => (<tr key={i}><td>{i + 1}</td><td>{a.nom || '-'}</td><td>{a.role || '-'}</td></tr>))}
       </tbody></table>
@@ -591,26 +706,36 @@ const OccAjout = ({ onCancel }) => {
   };
 
   const getStepTitle = () => {
-    const titles = { 1: '📝 Étape 1 - Informations générales', 2: '📝 Étape 2 - Représentant', 3: '📝 Étape 3 - Calcul', 4: '📋 Récapitulatif', 5: '🎸 Artistes supplémentaires' };
-    return titles[currentStep] || `📝 Étape ${currentStep}`;
+    const titles = {
+      1: 'Étape 1 - Informations générales',
+      2: 'Étape 2 - Représentant',
+      3: 'Étape 3 - Calcul',
+      4: 'Récapitulatif',
+      5: 'Artistes supplémentaires'
+    };
+    return titles[currentStep] || `Étape ${currentStep}`;
   };
 
   return (
     <form onSubmit={handleNextStep}>
       <fieldset><legend>{getStepTitle()}</legend>
         {renderCurrentStep()}
-        <div className="button-group" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '30px', gap: '10px' }}>
-          <button type="button" className="btn-cancel" onClick={onCancel} style={{ background: '#dc3545', color: 'white', padding: '10px 25px', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '14px' }}>
-            ❌ Annuler
+        <div className="button-group">
+          <button type="button" className="btn-cancel" onClick={onCancel}>
+            <X size={18} strokeWidth={2} /> Annuler
           </button>
           <div style={{ display: 'flex', gap: '10px' }}>
             {currentStep > 1 && (
-              <button type="button" className="btn-secondary" onClick={handlePrevStep} style={{ background: '#6c757d', color: 'white', padding: '10px 25px', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '14px' }}>
-                ◀ Précédent
+              <button type="button" className="btn-secondary" onClick={handlePrevStep}>
+                <ArrowLeft size={18} strokeWidth={2} /> Précédent
               </button>
             )}
-            <button type="submit" className="btn-primary" disabled={isSubmitting} style={{ background: '#007bff', color: 'white', padding: '10px 25px', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '14px' }}>
-              {isLastStep() ? (isSubmitting ? '⏳ Envoi...' : '✅ Valider') : '▶ Suivant'}
+            <button type="submit" className="btn-primary" disabled={isSubmitting}>
+              {isLastStep() ? (
+                isSubmitting ? <><Clock size={18} strokeWidth={2} /> Envoi...</> : <><Save size={18} strokeWidth={2} /> Valider</>
+              ) : (
+                <><ArrowRight size={18} strokeWidth={2} /> Suivant</>
+              )}
             </button>
           </div>
         </div>

@@ -5,6 +5,7 @@ import './styles/App.css';
 
 // Importer la page d'authentification comme page d'accueil
 import Authentification from './pages/Authentification';
+import Register from './pages/Register'; // ⭐ NOUVEAU
 import Dashboard from './pages/Dashboard';
 import AjoutUsager from './pages/AjoutUsager';
 import VerificationUsager from './pages/VerificationUsager';
@@ -25,13 +26,14 @@ import Gestiondossier from './pages/gestion_dossier';
 import Gestusagercrud from './pages/gestion_crud';
 import NotificationAdmin from './pages/notification_admin';
 import ConfirmePaiement from './pages/ConfirmePaiement';
-import ConfirmationDossier from './pages/ConfirmationDossier'; // ⭐ NOUVEAU
+import ConfirmationDossier from './pages/ConfirmationDossier';
 
 function App() {
   return (
     <Routes>
       {/* Page d'accueil = Authentification */}
       <Route path="/" element={<Authentification />} />
+      <Route path="/register" element={<Register />} /> {/* ⭐ NOUVEAU */}
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/ajout-usager" element={<AjoutUsager />} />
       <Route path="/verification-usager" element={<VerificationUsager />} />
@@ -52,7 +54,7 @@ function App() {
       <Route path="/gestion_crud" element={<Gestusagercrud />} />
       <Route path="/notification_admin" element={<NotificationAdmin />} />
       <Route path="/confirme-paiement" element={<ConfirmePaiement />} />
-      <Route path="/confirmation-dossier" element={<ConfirmationDossier />} /> {/* ⭐ NOUVEAU */}
+      <Route path="/confirmation-dossier" element={<ConfirmationDossier />} />
     </Routes>
   );
 }

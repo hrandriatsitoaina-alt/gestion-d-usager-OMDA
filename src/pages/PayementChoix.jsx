@@ -2,6 +2,31 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import {
+  BarChart3,
+  FileText,
+  Lock,
+  ArrowLeft,
+  MapPin,
+  Building2,
+  Users,
+  Coins,
+  CreditCard,
+  TrendingUp,
+  DollarSign,
+  X,
+  Calendar,
+  CalendarDays,
+  Hotel,
+  Store,
+  Tv,
+  Bus,
+  Music,
+  Clock,
+  User,
+  Clipboard,
+  Target
+} from 'lucide-react';
 import '../styles/gestionPaiement.css';
 import MiniSidebar from '../components/MiniSidebar';
 
@@ -40,7 +65,7 @@ const PaiementChoix = () => {
   const [selectedMonth, setSelectedMonth] = useState('tous');
   const [selectedYear, setSelectedYear] = useState('tous');
 
-  // 6 types d'usagers
+  // 6 types d'usagers avec icônes Lucide (mais on garde des émojis pour les options <select>)
   const usagerTypes = [
     { id: 'hotel', label: 'Hôtel', icon: '🏨' },
     { id: 'grand-surface', label: 'Grand Surface', icon: '🏪' },
@@ -219,9 +244,6 @@ const PaiementChoix = () => {
     }
   };
 
-  // ============================================================
-  // FETCH CHART DATA - Diagramme en barres
-  // ============================================================
   const fetchChartData = async () => {
     try {
       const response = await axios.get(`${API_URL}/paiements/tous`);
@@ -229,10 +251,8 @@ const PaiementChoix = () => {
       if (response.data.success) {
         const paiements = response.data.paiements || [];
         
-        // Filtrer les paiements payés
         let paiementsFiltres = paiements.filter(p => p.statut === 'paye');
         
-        // Appliquer les filtres
         if (selectedRegion !== 'tous') {
           paiementsFiltres = paiementsFiltres.filter(p => p.region === selectedRegion);
         }
@@ -241,17 +261,12 @@ const PaiementChoix = () => {
           paiementsFiltres = paiementsFiltres.filter(p => p.usager_type === selectedUsagerType);
         }
         
-        // Grouper par mois pour l'année sélectionnée ou toutes les années
         const yearToUse = selectedYear !== 'tous' ? parseInt(selectedYear) : new Date().getFullYear();
         const moisData = {};
-        
-        // Initialiser les 12 mois
         for (let i = 1; i <= 12; i++) {
           moisData[i] = 0;
         }
         
-        // Si un mois spécifique est sélectionné, on affiche tous les mois de l'année
-        // mais on met en évidence le mois sélectionné
         for (const p of paiementsFiltres) {
           if (p.annee === yearToUse) {
             const mois = p.mois || 1;
@@ -261,7 +276,6 @@ const PaiementChoix = () => {
           }
         }
         
-        // Si un mois spécifique est sélectionné, on filtre aussi
         if (selectedMonth !== 'tous') {
           const moisSelectionne = parseInt(selectedMonth);
           for (let i = 1; i <= 12; i++) {
@@ -271,7 +285,6 @@ const PaiementChoix = () => {
           }
         }
         
-        // Convertir en tableau pour le rendu
         const chartDataArray = [];
         let maxValue = 0;
         
@@ -293,7 +306,6 @@ const PaiementChoix = () => {
       }
     } catch (err) {
       console.error('❌ Erreur chargement données diagramme:', err);
-      // Données par défaut
       const defaultData = [];
       for (let i = 1; i <= 12; i++) {
         defaultData.push({
@@ -308,9 +320,6 @@ const PaiementChoix = () => {
     }
   };
 
-  // ============================================================
-  // FETCH FINANCE DATA
-  // ============================================================
   const fetchFinanceData = async () => {
     try {
       setLoadingFinance(true);
@@ -581,23 +590,23 @@ const PaiementChoix = () => {
         <div className="payment-header">
           <div className="header-left">
             <h1>
-              <span className="header-icon">📊</span>
+              <BarChart3 className="header-icon" size={28} style={{ marginRight: '8px' }} />
               Tableau de Bord Financier
             </h1>
             <p className="header-subtitle">Suivi des paiements et statistiques des usagers</p>
           </div>
           <div className="header-actions">
             <button onClick={handlePrintPDF} className="btn-pdf">
-              📄 Aperçu PDF
+              <FileText size={18} style={{ marginRight: '6px' }} /> Aperçu PDF
             </button>
             <button 
               onClick={() => setShowAdminModal(true)} 
               className="btn-gestion"
             >
-              🔒 Gestion des paiements
+              <Lock size={18} style={{ marginRight: '6px' }} /> Gestion des paiements
             </button>
             <button className="btn-retour" onClick={handleRetour}>
-              ← Retour
+              <ArrowLeft size={18} style={{ marginRight: '6px' }} /> Retour
             </button>
           </div>
         </div>
@@ -606,7 +615,7 @@ const PaiementChoix = () => {
         <div className="filters-section">
           <div className="filters-left">
             <div className="filter-group">
-              <label>📍 Région</label>
+              <label><MapPin size={16} style={{ marginRight: '4px' }} /> Région</label>
               <select 
                 value={selectedRegion} 
                 onChange={(e) => setSelectedRegion(e.target.value)}
@@ -619,7 +628,7 @@ const PaiementChoix = () => {
               </select>
             </div>
             <div className="filter-group">
-              <label>🏢 Type d'usager</label>
+              <label><Building2 size={16} style={{ marginRight: '4px' }} /> Type d'usager</label>
               <select 
                 value={selectedUsagerType} 
                 onChange={(e) => setSelectedUsagerType(e.target.value)}
@@ -634,7 +643,7 @@ const PaiementChoix = () => {
           </div>
           <div className="filters-right">
             <div className="filter-group">
-              <label>📅 Mois</label>
+              <label><Calendar size={16} style={{ marginRight: '4px' }} /> Mois</label>
               <select 
                 value={selectedMonth} 
                 onChange={(e) => setSelectedMonth(e.target.value)}
@@ -647,7 +656,7 @@ const PaiementChoix = () => {
               </select>
             </div>
             <div className="filter-group">
-              <label>📆 Année</label>
+              <label><CalendarDays size={16} style={{ marginRight: '4px' }} /> Année</label>
               <select 
                 value={selectedYear} 
                 onChange={(e) => setSelectedYear(e.target.value)}
@@ -660,14 +669,13 @@ const PaiementChoix = () => {
               </select>
             </div>
           </div>
-          {loadingFinance && <span className="loading-spinner">⏳</span>}
+          {loadingFinance && <span className="loading-spinner"><Clock size={20} /></span>}
         </div>
 
-        {/* ⭐⭐⭐ CARTES DE SYNTHÈSE AVEC DIAGRAMME ⭐⭐⭐ */}
+        {/* Cartes de synthèse */}
         <div className="summary-cards">
-          {/* Carte 1: Total Usagers */}
           <div className="summary-card total-usagers">
-            <div className="card-icon">👥</div>
+            <div className="card-icon"><Users size={24} /></div>
             <div className="card-content">
               <span className="card-label">Total Usagers</span>
               <span className="card-value">{totalUsagersFiltres}</span>
@@ -678,9 +686,8 @@ const PaiementChoix = () => {
             </div>
           </div>
 
-          {/* Carte 2: Total Payés */}
           <div className="summary-card total-payes">
-            <div className="card-icon">💰</div>
+            <div className="card-icon"><Coins size={24} /></div>
             <div className="card-content">
               <span className="card-label">Total Payés</span>
               <span className="card-value">{totalPayes}</span>
@@ -688,9 +695,8 @@ const PaiementChoix = () => {
             </div>
           </div>
 
-          {/* Carte 3: Non Payés */}
           <div className="summary-card total-non-payes">
-            <div className="card-icon">💳</div>
+            <div className="card-icon"><CreditCard size={24} /></div>
             <div className="card-content">
               <span className="card-label">Non Payés</span>
               <span className="card-value">{totalNonPayes}</span>
@@ -701,9 +707,8 @@ const PaiementChoix = () => {
             </div>
           </div>
 
-          {/* Carte 4: Taux de Paiement */}
           <div className="summary-card taux-paiement">
-            <div className="card-icon">📈</div>
+            <div className="card-icon"><TrendingUp size={24} /></div>
             <div className="card-content">
               <span className="card-label">Taux de Paiement</span>
               <span className="card-value">{tauxPaiement}%</span>
@@ -713,9 +718,8 @@ const PaiementChoix = () => {
             </div>
           </div>
 
-          {/* Carte 5: Montant Reçu */}
           <div className="summary-card montant-recu">
-            <div className="card-icon">💵</div>
+            <div className="card-icon"><DollarSign size={24} /></div>
             <div className="card-content">
               <span className="card-label">Montant Reçu</span>
               <span className="card-value montant-recu-value">
@@ -724,7 +728,6 @@ const PaiementChoix = () => {
               <span className="card-sub-label">{filterContext}</span>
             </div>
           </div>
-
         </div>
 
         {/* 6 usagers sur une ligne */}
@@ -749,10 +752,18 @@ const PaiementChoix = () => {
             const montant = financeType.montantTotalPaye || typeStats.montantTotal || 0;
             const taux = total > 0 ? Math.round((payes / total) * 100) : 0;
 
+            // Choix de l'icône selon le type
+            let TypeIcon = Hotel;
+            if (type.id === 'grand-surface') TypeIcon = Store;
+            else if (type.id === 'media') TypeIcon = Tv;
+            else if (type.id === 'occ') TypeIcon = Calendar;
+            else if (type.id === 'bus') TypeIcon = Bus;
+            else if (type.id === 'nightclub') TypeIcon = Music;
+
             return (
               <div key={type.id} className="usager-stat-card">
                 <div className="usager-stat-header">
-                  <span className="usager-icon">{type.icon}</span>
+                  <span className="usager-icon"><TypeIcon size={20} /></span>
                   <span className="usager-label">{type.label}</span>
                 </div>
                 <div className="usager-stat-body">
@@ -792,7 +803,7 @@ const PaiementChoix = () => {
         {/* Régions */}
         <div className="regions-section">
           <h2 className="section-title">
-            <span className="section-icon">📈</span>
+            <TrendingUp size={20} className="section-icon" style={{ marginRight: '8px' }} />
             Aperçu par Région
             {selectedRegion !== 'tous' && (
               <span className="filter-badge">Filtré: {selectedRegion}</span>
@@ -859,7 +870,7 @@ const PaiementChoix = () => {
         {/* Historique des paiements */}
         <div className="history-section">
           <h2 className="section-title">
-            <span className="section-icon">📄</span>
+            <FileText size={20} className="section-icon" style={{ marginRight: '8px' }} />
             Historique des paiements
             {selectedRegion !== 'tous' && (
               <span className="filter-badge">Région: {selectedRegion}</span>
@@ -934,10 +945,10 @@ const PaiementChoix = () => {
                 setAdminError('');
               }}
             >
-              ✕
+              <X size={20} />
             </button>
             <div className="modal-header">
-              <span className="modal-icon">🔒</span>
+              <span className="modal-icon"><Lock size={24} /></span>
               <h2>Accès Gestion des Paiements</h2>
               <p>Veuillez entrer votre code d'authentification (DAF)</p>
             </div>
@@ -954,7 +965,7 @@ const PaiementChoix = () => {
               />
               {adminError && <p className="error-message">{adminError}</p>}
               <button type="submit" className="btn-admin-login">
-                🔓 Vérifier l'accès
+                <Lock size={18} style={{ marginRight: '6px' }} /> Vérifier l'accès
               </button>
             </form>
           </div>

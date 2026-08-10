@@ -1,9 +1,9 @@
+// src/pages/GestionCrud.jsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import '../styles/gestion_crud.css';
+import { Edit, Trash2, ArrowLeft, Search, X, FolderOpen } from 'lucide-react';
 
-const GestionCrud = () => {
-  const navigate = useNavigate();
+const GestionCrud = ({ onBack }) => {
   const [usagers, setUsagers] = useState([]);
   const [filteredUsagers, setFilteredUsagers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,24 +19,13 @@ const GestionCrud = () => {
   const [token, setToken] = useState(null);
   const [editingData, setEditingData] = useState({});
   const [stats, setStats] = useState({});
-  const [deleteHistory, setDeleteHistory] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [regions, setRegions] = useState([]);
 
-  const usagerTypes = [
-    'OCC',
-    'Grand Surface', 
-    'Bus',
-    'Night club',
-    'Télé/Radio',
-    'Hôtel'
-  ];
+  const usagerTypes = ['OCC', 'Grand Surface', 'Bus', 'Night club', 'Télé/Radio', 'Hôtel'];
 
   useEffect(() => {
     let storedToken = localStorage.getItem('adminToken');
-    
-    console.log('🔑 Token récupéré:', storedToken ? 'Présent' : 'Absent');
-    
     if (!storedToken) {
       const user = localStorage.getItem('user');
       if (user) {
@@ -44,40 +33,28 @@ const GestionCrud = () => {
           const userData = JSON.parse(user);
           storedToken = 'user_' + userData.id + '_' + Date.now();
           localStorage.setItem('adminToken', storedToken);
-          console.log('✅ Token utilisateur créé:', storedToken);
-        } catch (e) {
-          console.error('❌ Erreur création token:', e);
-        }
+        } catch (e) {}
       } else {
         storedToken = 'temp_' + Date.now();
         localStorage.setItem('adminToken', storedToken);
-        console.log('⚠️ Token temporaire créé:', storedToken);
       }
     }
-    
     setToken(storedToken);
     fetchCurrentUser(storedToken);
     fetchUsagers(storedToken);
-    fetchDeleteHistory(storedToken);
     fetchRegions();
   }, []);
 
   const fetchCurrentUser = async (currentToken) => {
     try {
       const response = await fetch('http://localhost:3001/api/auth/current-user', {
-        method: 'GET',
-        headers: { 
-          'Authorization': `Bearer ${currentToken}`,
-          'adminToken': currentToken
-        }
+        headers: { 'Authorization': `Bearer ${currentToken}`, 'adminToken': currentToken }
       });
       const data = await response.json();
       if (data.success && data.user) {
         setCurrentUserId(data.user.id);
         setCurrentUserRole(data.user.role || 'user');
-        console.log('✅ Utilisateur connecté:', data.user.nom, 'Rôle:', data.user.role);
       } else {
-        console.error('❌ Erreur current-user:', data);
         setCurrentUserId(1);
         setCurrentUserRole('user');
       }
@@ -92,48 +69,17 @@ const GestionCrud = () => {
     setLoading(true);
     setError(null);
     try {
-      const headers = {};
-      if (currentToken) {
-        headers['adminToken'] = currentToken;
-      }
-      
-      console.log('📡 Envoi requête /api/usagers avec token:', currentToken);
-      
-      const response = await fetch('http://localhost:3001/api/usagers', {
-        headers: headers
-      });
-      
-      console.log('📡 Statut réponse:', response.status);
-      
-      if (response.status === 500) {
-        throw new Error('Erreur serveur (500) - Vérifiez la base de données');
-      }
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
+      const headers = currentToken ? { 'adminToken': currentToken } : {};
+      const response = await fetch('http://localhost:3001/api/usagers', { headers });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
-      console.log('📋 Données reçues:', data);
-      
       let usagersData = [];
-      if (Array.isArray(data)) {
-        usagersData = data;
-      } else if (data && typeof data === 'object') {
-        if (Array.isArray(data.usagers)) {
-          usagersData = data.usagers;
-        } else if (Array.isArray(data.data)) {
-          usagersData = data.data;
-        } else if (data.success === false) {
-          throw new Error(data.error || data.message || 'Erreur serveur');
-        } else {
-          usagersData = Object.values(data).filter(item => typeof item === 'object' && item !== null && item.id);
-        }
+      if (Array.isArray(data)) usagersData = data;
+      else if (data && typeof data === 'object') {
+        if (Array.isArray(data.usagers)) usagersData = data.usagers;
+        else if (Array.isArray(data.data)) usagersData = data.data;
+        else usagersData = Object.values(data).filter(item => typeof item === 'object' && item !== null && item.id);
       }
-      
-      console.log('✅ Usagers chargés:', usagersData.length);
-      
-      // Normaliser les types
       usagersData = usagersData.map(u => {
         if (u.type_usager === 'Media' || u.type_usager === 'Télé/Radio' || u.type_usager === 'tele-radio') {
           u.type_usager = 'Télé/Radio';
@@ -141,23 +87,14 @@ const GestionCrud = () => {
         u._uniqueKey = `${u.id}_${u.type_usager}`;
         return u;
       });
-      
-      // Supprimer les doublons
       const uniqueMap = new Map();
-      for (const u of usagersData) {
-        if (!uniqueMap.has(u._uniqueKey)) {
-          uniqueMap.set(u._uniqueKey, u);
-        }
-      }
+      for (const u of usagersData) if (!uniqueMap.has(u._uniqueKey)) uniqueMap.set(u._uniqueKey, u);
       usagersData = Array.from(uniqueMap.values());
-      console.log('✅ Après dédoublonnage:', usagersData.length);
-      
       setUsagers(usagersData);
       updateStats(usagersData);
-      setFilteredUsagers(usagersData);
-      
+      filterByType(selectedType, usagersData, searchTerm);
     } catch (error) {
-      console.error('❌ Erreur fetchUsagers:', error);
+      console.error('Erreur fetchUsagers:', error);
       setError(error.message || 'Impossible de charger les usagers');
       setUsagers([]);
       setFilteredUsagers([]);
@@ -166,96 +103,50 @@ const GestionCrud = () => {
     }
   };
 
-  const fetchDeleteHistory = async (currentToken) => {
-    try {
-      const response = await fetch('http://localhost:3001/api/usagers/delete-history', {
-        headers: { 'adminToken': currentToken }
-      });
-      const data = await response.json();
-      if (data.success) {
-        setDeleteHistory(data.history || []);
-      }
-    } catch (error) {
-      console.error('Erreur fetch delete history:', error);
-    }
-  };
-
-  // ============================================
-  // RÉCUPÉRER LES RÉGIONS
-  // ============================================
   const fetchRegions = async () => {
     try {
       const response = await fetch('http://localhost:3001/api/regions');
       const data = await response.json();
-      if (data.success) {
-        setRegions(data.regions || []);
-        console.log('✅ Régions chargées:', data.regions.length);
-      }
+      if (data.success) setRegions(data.regions || []);
     } catch (error) {
-      console.error('❌ Erreur fetch regions:', error);
+      console.error('Erreur fetchRegions:', error);
     }
   };
 
   const updateStats = (data) => {
     const newStats = {};
-    usagerTypes.forEach(type => {
-      newStats[type] = data.filter(u => u.type_usager === type).length;
-    });
+    usagerTypes.forEach(type => { newStats[type] = data.filter(u => u.type_usager === type).length; });
     newStats.total = data.length;
     setStats(newStats);
   };
 
-  // ============================================
-  // FONCTION DE FILTRAGE
-  // ============================================
-  const filterByType = (type) => {
-    console.log('🔍 Filtrage par type:', type);
-    console.log('📊 Nombre total d\'usagers:', usagers.length);
-    
+  const filterByType = (type, data = usagers, search = searchTerm) => {
     setSelectedType(type);
-    
-    let filtered = [...usagers];
-    
-    if (type && type !== 'tous') {
-      filtered = filtered.filter(u => u.type_usager === type);
-      console.log(`📊 Usagers de type ${type}:`, filtered.length);
-    } else {
-      console.log('📊 Tous les usagers:', filtered.length);
-    }
-    
-    if (searchTerm.trim() !== '') {
-      const searchLower = searchTerm.toLowerCase().trim();
-      filtered = filtered.filter(u => 
-        (u.denomination && u.denomination.toLowerCase().includes(searchLower)) ||
-        (u.demandeur && u.demandeur.toLowerCase().includes(searchLower)) ||
-        (u.telephone && u.telephone && u.telephone.includes(searchTerm.trim())) ||
-        (u.email && u.email.toLowerCase().includes(searchLower)) ||
-        (u.region && u.region.toLowerCase().includes(searchLower))
+    let filtered = [...data];
+    if (type && type !== 'tous') filtered = filtered.filter(u => u.type_usager === type);
+    if (search.trim() !== '') {
+      const s = search.toLowerCase().trim();
+      filtered = filtered.filter(u =>
+        (u.denomination && u.denomination.toLowerCase().includes(s)) ||
+        (u.demandeur && u.demandeur.toLowerCase().includes(s)) ||
+        (u.telephone && u.telephone.includes(search.trim())) ||
+        (u.email && u.email.toLowerCase().includes(s)) ||
+        (u.region && u.region.toLowerCase().includes(s))
       );
-      console.log('📊 Après recherche:', filtered.length);
     }
-    
     setFilteredUsagers(filtered);
   };
 
-  const handleTypeSelect = (type) => {
-    filterByType(type);
-  };
-
+  const handleTypeSelect = (type) => filterByType(type);
   const handleSearch = (e) => {
-    const value = e.target.value;
-    setSearchTerm(value);
+    setSearchTerm(e.target.value);
     filterByType(selectedType);
   };
-
   const clearSearch = () => {
     setSearchTerm('');
     filterByType(selectedType);
   };
 
-  // ============================================
-  // MODIFICATION
-  // ============================================
   const handleEdit = (usager) => {
     setSelectedUsager(usager);
     setEditingData({
@@ -281,27 +172,14 @@ const GestionCrud = () => {
   const handleUpdate = async (e) => {
     e.preventDefault();
     if (!selectedUsager) return;
-
-    const updateData = {
-      ...editingData,
-      type_usager: editingData.type_usager || selectedUsager.type_usager
-    };
-
+    const updateData = { ...editingData, type_usager: editingData.type_usager || selectedUsager.type_usager };
     try {
-      console.log('📤 Envoi mise à jour:', updateData);
-      
       const response = await fetch(`http://localhost:3001/api/usagers/${selectedUsager.id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'adminToken': token
-        },
+        headers: { 'Content-Type': 'application/json', 'adminToken': token },
         body: JSON.stringify(updateData)
       });
-
       const data = await response.json();
-      console.log('📥 Réponse mise à jour:', data);
-      
       if (data.success) {
         setSuccessMsg('✅ Usager modifié avec succès');
         setShowEditModal(false);
@@ -312,14 +190,11 @@ const GestionCrud = () => {
         alert('❌ Erreur: ' + (data.message || 'Erreur inconnue'));
       }
     } catch (error) {
-      console.error('Erreur:', error);
-      alert('❌ Erreur lors de la modification: ' + error.message);
+      console.error('Erreur handleUpdate:', error);
+      alert('❌ Erreur lors de la modification');
     }
   };
 
-  // ============================================
-  // SUPPRESSION
-  // ============================================
   const initiateDelete = (usager) => {
     if (currentUserRole !== 'super_admin') {
       alert('⚠️ Seul le Super Admin peut supprimer des usagers.');
@@ -331,44 +206,26 @@ const GestionCrud = () => {
 
   const confirmDelete = async () => {
     if (!usagerToDelete) return;
-
     try {
       const response = await fetch(`http://localhost:3001/api/usagers/${usagerToDelete.id}`, {
         method: 'DELETE',
-        headers: { 
-          'adminToken': token,
-          'Content-Type': 'application/json'
-        }
+        headers: { 'adminToken': token, 'Content-Type': 'application/json' }
       });
-      
       const data = await response.json();
-
       if (data.success) {
-        setSuccessMsg(`✅ Usager "${usagerToDelete.denomination}" supprimé avec succès par Super Admin`);
+        setSuccessMsg(`✅ Usager "${usagerToDelete.denomination}" et ses paiements supprimés`);
         setShowDeleteModal(false);
         setUsagerToDelete(null);
         fetchUsagers(token);
-        fetchDeleteHistory(token);
         setTimeout(() => setSuccessMsg(null), 3000);
       } else {
         alert('❌ Erreur: ' + (data.message || 'Erreur inconnue'));
       }
     } catch (error) {
-      console.error('Erreur:', error);
+      console.error('Erreur confirmDelete:', error);
       alert('❌ Erreur lors de la suppression');
     }
   };
-
-  // ============================================
-  // RETOUR VERS LE DASHBOARD
-  // ============================================
-  const handleGoBack = () => {
-    navigate('/');
-  };
-
-  // ============================================
-  // RENDU
-  // ============================================
 
   if (loading) {
     return (
@@ -383,36 +240,7 @@ const GestionCrud = () => {
     return (
       <div className="gestion-crud-error">
         <p>❌ {error}</p>
-        <div style={{ display: 'flex', gap: '10px', marginTop: '15px', flexWrap: 'wrap', justifyContent: 'center' }}>
-          <button 
-            onClick={() => {
-              const newToken = 'temp_' + Date.now();
-              localStorage.setItem('adminToken', newToken);
-              setToken(newToken);
-              fetchUsagers(newToken);
-            }} 
-            className="retry-btn"
-          >
-            🔄 Réessayer
-          </button>
-          <button 
-            onClick={() => navigate('/dashboard')} 
-            className="retry-btn" 
-            style={{ background: '#6c757d' }}
-          >
-            📊 Dashboard
-          </button>
-          <button 
-            onClick={() => {
-              localStorage.clear();
-              navigate('/');
-            }} 
-            className="retry-btn" 
-            style={{ background: '#dc3545' }}
-          >
-            🔓 Se reconnecter
-          </button>
-        </div>
+        <button onClick={() => fetchUsagers(token)} className="retry-btn">🔄 Réessayer</button>
       </div>
     );
   }
@@ -427,32 +255,35 @@ const GestionCrud = () => {
         </div>
       )}
 
+      {/* En-tête avec bouton retour */}
       <div className="gestion-header">
         <div className="gestion-header-left">
-          <h2>📂 Gestion des Usagers</h2>
+          <h2><FolderOpen size={24} /> Gestion des Usagers</h2>
           <p className="gestion-subtitle">
-            {isSuperAdmin 
+            {isSuperAdmin
               ? '👑 Super Admin - Vous pouvez modifier et supprimer tous les usagers'
-              : `👤 Vous pouvez modifier les usagers mais seule le Super Admin peut supprimer`}
+              : '👤 Vous pouvez modifier les usagers mais seul le Super Admin peut supprimer'}
           </p>
         </div>
         <div className="gestion-header-right">
-          <button className="btn-back-dashboard" onClick={handleGoBack}>
-            ← Retour au connexion 
-          </button>
+          {onBack && (
+            <button className="btn-back-admin" onClick={onBack}>
+              <ArrowLeft size={18} /> Retour à l'administration
+            </button>
+          )}
         </div>
       </div>
 
-      {/* STATISTIQUES */}
+      {/* Statistiques */}
       <div className="stats-cards">
         <div className="stat-card-total">
           <span className="stat-number">{stats.total || 0}</span>
           <span className="stat-label">Total Usagers</span>
         </div>
         {usagerTypes.map(type => (
-          <div 
-            key={type} 
-            className={`stat-card-type ${selectedType === type ? 'active' : ''}`} 
+          <div
+            key={type}
+            className={`stat-card-type ${selectedType === type ? 'active' : ''}`}
             onClick={() => handleTypeSelect(type)}
           >
             <span className="stat-number">{stats[type] || 0}</span>
@@ -461,32 +292,35 @@ const GestionCrud = () => {
         ))}
       </div>
 
-      {/* BARRE DE RECHERCHE */}
+      {/* Barre de recherche */}
       <div className="search-filter-container">
         <div className="search-bar-wrapper">
-          <input 
-            type="text" 
-            className="search-input-crud" 
-            placeholder="🔍 Rechercher par nom, demandeur, téléphone, email, région..." 
-            value={searchTerm} 
-            onChange={handleSearch} 
+          <Search size={18} className="search-icon" />
+          <input
+            type="text"
+            className="search-input-crud"
+            placeholder="🔍 Rechercher par nom, demandeur, téléphone, email, région..."
+            value={searchTerm}
+            onChange={handleSearch}
           />
           {searchTerm && (
-            <button className="clear-search" onClick={clearSearch}>✕</button>
+            <button className="clear-search" onClick={clearSearch}>
+              <X size={16} />
+            </button>
           )}
         </div>
       </div>
 
-      {/* FILTRES */}
+      {/* Filtres rapides */}
       <div className="filter-bar">
-        <button 
+        <button
           className={`filter-btn ${selectedType === 'tous' ? 'active' : ''}`}
           onClick={() => handleTypeSelect('tous')}
         >
           📊 Tous
         </button>
         {usagerTypes.map(type => (
-          <button 
+          <button
             key={type}
             className={`filter-btn ${selectedType === type ? 'active' : ''}`}
             onClick={() => handleTypeSelect(type)}
@@ -496,7 +330,7 @@ const GestionCrud = () => {
         ))}
       </div>
 
-      {/* TABLEAU */}
+      {/* Tableau */}
       <div className="table-wrapper">
         <table className="usager-table">
           <thead>
@@ -522,28 +356,18 @@ const GestionCrud = () => {
               filteredUsagers.map(usager => (
                 <tr key={usager._uniqueKey || usager.id}>
                   <td>{usager.id}</td>
-                  <td>
-                    <span className="type-badge">{usager.type_usager || '-'}</span>
-                  </td>
+                  <td><span className="type-badge">{usager.type_usager || '-'}</span></td>
                   <td><strong>{usager.denomination || 'N/A'}</strong></td>
                   <td>{usager.demandeur || 'N/A'}</td>
                   <td>{usager.region || '-'}</td>
                   <td>{usager.telephone || '-'}</td>
                   <td className="actions-cell">
-                    <button 
-                      className="btn-edit"
-                      onClick={() => handleEdit(usager)}
-                      title="Modifier"
-                    >
-                      ✏️ Modifier
+                    <button className="btn-edit" onClick={() => handleEdit(usager)} title="Modifier">
+                      <Edit size={16} /> Modifier
                     </button>
                     {isSuperAdmin && (
-                      <button 
-                        className="btn-delete"
-                        onClick={() => initiateDelete(usager)}
-                        title="Supprimer"
-                      >
-                        🗑️ Supprimer
+                      <button className="btn-delete" onClick={() => initiateDelete(usager)} title="Supprimer">
+                        <Trash2 size={16} /> Supprimer
                       </button>
                     )}
                   </td>
@@ -554,146 +378,53 @@ const GestionCrud = () => {
         </table>
       </div>
 
-      {/* MODAL MODIFICATION */}
+      {/* Modal Modification */}
       {showEditModal && selectedUsager && (
         <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>✏️ Modifier {selectedUsager.denomination}</h3>
+              <h3><Edit size={20} /> Modifier {selectedUsager.denomination}</h3>
               <button className="modal-close" onClick={() => setShowEditModal(false)}>✕</button>
             </div>
             <form onSubmit={handleUpdate}>
               <div className="form-row">
                 <div className="form-group">
                   <label>Dénomination *</label>
-                  <input 
-                    type="text" 
-                    value={editingData.denomination} 
-                    onChange={(e) => setEditingData({...editingData, denomination: e.target.value})} 
-                    required 
-                  />
+                  <input type="text" value={editingData.denomination} onChange={(e) => setEditingData({...editingData, denomination: e.target.value})} required />
                 </div>
                 <div className="form-group">
                   <label>Demandeur *</label>
-                  <input 
-                    type="text" 
-                    value={editingData.demandeur} 
-                    onChange={(e) => setEditingData({...editingData, demandeur: e.target.value})} 
-                    required 
-                  />
+                  <input type="text" value={editingData.demandeur} onChange={(e) => setEditingData({...editingData, demandeur: e.target.value})} required />
                 </div>
               </div>
               <div className="form-row">
                 <div className="form-group">
                   <label>Téléphone</label>
-                  <input 
-                    type="text" 
-                    value={editingData.telephone} 
-                    onChange={(e) => setEditingData({...editingData, telephone: e.target.value})} 
-                  />
+                  <input type="text" value={editingData.telephone} onChange={(e) => setEditingData({...editingData, telephone: e.target.value})} />
                 </div>
                 <div className="form-group">
                   <label>Email</label>
-                  <input 
-                    type="email" 
-                    value={editingData.email} 
-                    onChange={(e) => setEditingData({...editingData, email: e.target.value})} 
-                  />
+                  <input type="email" value={editingData.email} onChange={(e) => setEditingData({...editingData, email: e.target.value})} />
                 </div>
               </div>
               <div className="form-row">
                 <div className="form-group">
                   <label>Région</label>
-                  <select 
-                    value={editingData.region || ''} 
-                    onChange={(e) => setEditingData({...editingData, region: e.target.value})}
-                  >
-                    <option value="">-- Sélectionner une région --</option>
-                    {regions.map(region => (
-                      <option key={region.id} value={region.nom}>
-                        {region.nom}
-                      </option>
-                    ))}
+                  <select value={editingData.region || ''} onChange={(e) => setEditingData({...editingData, region: e.target.value})}>
+                    <option value="">-- Sélectionner --</option>
+                    {regions.map(r => <option key={r.id} value={r.nom}>{r.nom}</option>)}
                   </select>
                 </div>
                 <div className="form-group">
                   <label>Adresse</label>
-                  <input 
-                    type="text" 
-                    value={editingData.adresse || ''} 
-                    onChange={(e) => setEditingData({...editingData, adresse: e.target.value})} 
-                  />
-                </div>
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Domicile</label>
-                  <input 
-                    type="text" 
-                    value={editingData.domicile || ''} 
-                    onChange={(e) => setEditingData({...editingData, domicile: e.target.value})} 
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Confirmation Nom</label>
-                  <input 
-                    type="text" 
-                    value={editingData.confirmation_nom || ''} 
-                    onChange={(e) => setEditingData({...editingData, confirmation_nom: e.target.value})} 
-                  />
-                </div>
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Représentant CIN</label>
-                  <input 
-                    type="text" 
-                    value={editingData.representant_cin || ''} 
-                    onChange={(e) => setEditingData({...editingData, representant_cin: e.target.value})} 
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Représentant Par</label>
-                  <input 
-                    type="text" 
-                    value={editingData.representant_par || ''} 
-                    onChange={(e) => setEditingData({...editingData, representant_par: e.target.value})} 
-                  />
-                </div>
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Frais Dossier</label>
-                  <input 
-                    type="number" 
-                    step="0.01"
-                    value={editingData.frais_dossier || 0} 
-                    onChange={(e) => setEditingData({...editingData, frais_dossier: parseFloat(e.target.value) || 0})} 
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Montant Mensuel</label>
-                  <input 
-                    type="number" 
-                    step="0.01"
-                    value={editingData.montant_mensuel || 0} 
-                    onChange={(e) => setEditingData({...editingData, montant_mensuel: parseFloat(e.target.value) || 0})} 
-                  />
+                  <input type="text" value={editingData.adresse || ''} onChange={(e) => setEditingData({...editingData, adresse: e.target.value})} />
                 </div>
               </div>
               <div className="form-group">
                 <label>Type d'usager</label>
-                <select 
-                  value={editingData.type_usager || selectedUsager.type_usager} 
-                  onChange={(e) => setEditingData({...editingData, type_usager: e.target.value})}
-                >
-                  {usagerTypes.map(type => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
+                <select value={editingData.type_usager || selectedUsager.type_usager} onChange={(e) => setEditingData({...editingData, type_usager: e.target.value})}>
+                  {usagerTypes.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
-              </div>
-              <div className="modal-footer-info">
-                <p className="info-note">ℹ️ Le montant n'est pas modifiable dans cette interface.</p>
               </div>
               <div className="modal-buttons">
                 <button type="submit" className="btn-save">💾 Enregistrer</button>
@@ -704,7 +435,7 @@ const GestionCrud = () => {
         </div>
       )}
 
-      {/* MODAL SUPPRESSION */}
+      {/* Modal Suppression */}
       {showDeleteModal && usagerToDelete && (
         <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
           <div className="modal-content delete-modal" onClick={(e) => e.stopPropagation()}>
@@ -718,29 +449,13 @@ const GestionCrud = () => {
                 <p><strong>Usager :</strong> {usagerToDelete.denomination}</p>
                 <p><strong>Type :</strong> {usagerToDelete.type_usager}</p>
                 <p><strong>Demandeur :</strong> {usagerToDelete.demandeur}</p>
-                <p><strong>Région :</strong> {usagerToDelete.region || 'Non spécifiée'}</p>
-                <p><strong>Téléphone :</strong> {usagerToDelete.telephone || 'Non spécifié'}</p>
               </div>
               <div className="delete-confirmation-info">
-                <div className="super-admin-confirm">
-                  <p>👑 Vous êtes Super Admin - Suppression immédiate</p>
-                  <p className="delete-warning">⚠️ Cette action est irréversible !</p>
-                  <p className="delete-warning">🗑️ Tous les éléments liés seront supprimés</p>
-                </div>
+                <p className="delete-warning">⚠️ Cette action est irréversible !</p>
               </div>
               <div className="delete-actions">
-                <button 
-                  className="btn-confirm-delete"
-                  onClick={confirmDelete}
-                >
-                  🗑️ Confirmer la suppression
-                </button>
-                <button 
-                  className="btn-cancel"
-                  onClick={() => setShowDeleteModal(false)}
-                >
-                  ❌ Annuler
-                </button>
+                <button className="btn-confirm-delete" onClick={confirmDelete}>🗑️ Confirmer</button>
+                <button className="btn-cancel" onClick={() => setShowDeleteModal(false)}>❌ Annuler</button>
               </div>
             </div>
           </div>

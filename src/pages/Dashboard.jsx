@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Home, Users, DollarSign, BarChart, User } from 'lucide-react';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import MiniSidebar from '../components/MiniSidebar';
@@ -15,7 +16,6 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Récupérer les informations de l'utilisateur connecté
     const userData = localStorage.getItem('user');
     const isLoggedIn = localStorage.getItem('isLoggedIn');
     
@@ -36,7 +36,6 @@ function Dashboard() {
     }
   }, [navigate]);
 
-  // Déterminer le libellé du rôle
   const getRoleLabel = () => {
     if (userRole === 'super_admin') return 'Super Administrateur';
     if (userRole === 'admin') return 'Administrateur';
@@ -65,6 +64,7 @@ function Dashboard() {
       <MiniSidebar />
       
       <main className="contenu">
+        {/* En-tête compact */}
         <section>
           <div className="OM15">
             <div className="OM15A"></div>
@@ -74,35 +74,38 @@ function Dashboard() {
             </div>
             <div className="OM15C"></div>
           </div>
-        </section>
-        
-        <section>
           <div className="OM15T"></div>
         </section>
         
         <section>
-          <fieldset>
-            <legend>Perception OMDA : {userName} </legend>
+          <fieldset className="dashboard-fieldset">
+            <legend>
+              <User size={18} strokeWidth={2} />
+              Perception OMDA : {userName}
+            </legend>
             
-            <div className="omd16">
+            <div className="dashboard-content">
               {/* 1. PARAMÈTRES DU DROIT PUBLIC */}
               <ParamCards />
               
               {/* 2. SECTION AJOUT ET VÉRIFICATION */}
-              <h2 className="section-title">
-                <span>✏️</span> Ajout et vérification
+              <h2 className="section-title-compact">
+                <Users size={18} strokeWidth={2} />
+                Ajout et vérification
               </h2>
               <MainCards />
               
               {/* 3. SECTION GESTION DES PAIEMENTS */}
-              <h2 className="section-title">
-                <span>💰</span> Gestion des paiements
+              <h2 className="section-title-compact">
+                <DollarSign size={18} strokeWidth={2} />
+                Gestion des paiements
               </h2>
               <PaymentSection />
               
               {/* 4. SECTION BILAN ET DIAGNOSTIC */}
-              <h2 className="section-title">
-                <span>📊</span> Bilan et diagnostic
+              <h2 className="section-title-compact">
+                <BarChart size={18} strokeWidth={2} />
+                Bilan et diagnostic
               </h2>
               <BilanCards />
             </div>

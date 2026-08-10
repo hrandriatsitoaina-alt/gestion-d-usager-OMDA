@@ -400,9 +400,9 @@ const GenerateQRCode = ({
                   </div>
                 </div>
               </div>
-              <div className="qr-omda-footer">
+              {/* <div className="qr-omda-footer">
                 OFFICE MALAGASY DU DROIT D'AUTEUR
-              </div>
+              </div> */}
             </div>
             
             <div className="qr-text-container">

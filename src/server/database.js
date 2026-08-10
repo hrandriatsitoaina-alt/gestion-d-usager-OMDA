@@ -182,25 +182,27 @@ async function initDB() {
     // TABLE PAIEMENTS (UNIQUE - REMPLACE TOUTES LES ANCIENNES)
     // ============================================================
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS paiements (
-        id SERIAL PRIMARY KEY,
-        usager_id INTEGER NOT NULL,
-        usager_type VARCHAR(50) NOT NULL,
-        type_paiement VARCHAR(20) NOT NULL,
-        annee INTEGER,
-        mois INTEGER CHECK (mois BETWEEN 1 AND 12),
-        montant DECIMAL(15,2) NOT NULL,
-        date_paiement DATE NOT NULL,
-        frais_dossier DECIMAL(15,2) DEFAULT 0,
-        reference VARCHAR(100),
-        statut VARCHAR(20) DEFAULT 'paye',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT check_paiement CHECK (
-          (type_paiement = 'mensuel' AND annee IS NOT NULL AND mois IS NOT NULL) OR
-          (type_paiement = 'unique' AND annee IS NULL AND mois IS NULL)
-        )
+    CREATE TABLE IF NOT EXISTS paiements (
+      id SERIAL PRIMARY KEY,
+      usager_id INTEGER NOT NULL,
+      usager_type VARCHAR(50) NOT NULL,
+      type_paiement VARCHAR(20) NOT NULL,
+      annee INTEGER,
+      mois INTEGER CHECK (mois BETWEEN 1 AND 12),
+      montant DECIMAL(15,2) NOT NULL,
+      date_paiement DATE NOT NULL,
+      frais_dossier DECIMAL(15,2) DEFAULT 0,
+      montant_retard DECIMAL(15,2) DEFAULT 0,
+      est_retard BOOLEAN DEFAULT FALSE,
+      reference VARCHAR(100),
+      statut VARCHAR(20) DEFAULT 'paye',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT check_paiement CHECK (
+        (type_paiement = 'mensuel' AND annee IS NOT NULL AND mois IS NOT NULL) OR
+        (type_paiement = 'unique' AND annee IS NULL AND mois IS NULL)
       )
-    `);
+    )
+  `);
     console.log('✅ Table paiements créée');
 
     // INDEX POUR PAIEMENTS
@@ -231,7 +233,7 @@ async function initDB() {
     console.log('✅ Table backup_annuel prête');
 
     // ============================================================
-    // TABLE USAGERS_HOTEL (SANS soit_total)
+    // TABLE USAGERS_HOTEL (AJOUT numero_dossier_utilisateur)
     // ============================================================
     await pool.query(`
       CREATE TABLE IF NOT EXISTS usagers_hotel (
@@ -264,13 +266,14 @@ async function initDB() {
         frais_dossier DECIMAL(15,2) DEFAULT 0,
         region VARCHAR(100),
         uniter INTEGER DEFAULT 1,
+        numero_dossier_utilisateur VARCHAR(50),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
     console.log('✅ Table usagers_hotel prête');
 
     // ============================================================
-    // TABLE USAGERS_MAGASIN (SANS soit_total)
+    // TABLE USAGERS_MAGASIN (AJOUT numero_dossier_utilisateur)
     // ============================================================
     await pool.query(`
       CREATE TABLE IF NOT EXISTS usagers_magasin (
@@ -301,13 +304,14 @@ async function initDB() {
         frais_dossier DECIMAL(15,2) DEFAULT 0,
         region VARCHAR(100),
         uniter INTEGER DEFAULT 1,
+        numero_dossier_utilisateur VARCHAR(50),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
     console.log('✅ Table usagers_magasin prête');
 
     // ============================================================
-    // TABLE USAGERS_MEDIA (SANS soit_total)
+    // TABLE USAGERS_MEDIA (AJOUT numero_dossier_utilisateur)
     // ============================================================
     await pool.query(`
       CREATE TABLE IF NOT EXISTS usagers_media (
@@ -352,13 +356,14 @@ async function initDB() {
         date_signature DATE,
         lieu_signature VARCHAR(255),
         uniter INTEGER DEFAULT 1,
+        numero_dossier_utilisateur VARCHAR(50),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
     console.log('✅ Table usagers_media prête');
 
     // ============================================================
-    // TABLE USAGERS_BUS (SANS soit_total)
+    // TABLE USAGERS_BUS (AJOUT numero_dossier_utilisateur)
     // ============================================================
     await pool.query(`
       CREATE TABLE IF NOT EXISTS usagers_bus (
@@ -390,13 +395,14 @@ async function initDB() {
         date_signature DATE,
         lieu_signature VARCHAR(255),
         uniter INTEGER DEFAULT 1,
+        numero_dossier_utilisateur VARCHAR(50),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
     console.log('✅ Table usagers_bus prête');
 
     // ============================================================
-    // TABLE USAGERS_NIGHTCLUB (SANS soit_total)
+    // TABLE USAGERS_NIGHTCLUB (AJOUT numero_dossier_utilisateur)
     // ============================================================
     await pool.query(`
       CREATE TABLE IF NOT EXISTS usagers_nightclub (
@@ -428,13 +434,14 @@ async function initDB() {
         date_signature DATE,
         lieu_signature VARCHAR(255),
         uniter INTEGER DEFAULT 1,
+        numero_dossier_utilisateur VARCHAR(50),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
     console.log('✅ Table usagers_nightclub prête');
 
     // ============================================================
-    // TABLE USAGERS_OCCASIONNEL (SANS soit_total, montant_total, statut_paiement)
+    // TABLE USAGERS_OCCASIONNEL (déjà avec numero_dossier_utilisateur)
     // ============================================================
     await pool.query(`
       CREATE TABLE IF NOT EXISTS usagers_occasionnel (

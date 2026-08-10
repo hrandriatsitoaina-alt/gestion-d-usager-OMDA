@@ -1,6 +1,12 @@
 // src/pages/ajout/HotelAjout.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  Users, User, Building2, MapPin, FileText, Phone, Mail,
+  Star, CheckCircle, CreditCard, Calendar, Clock, DollarSign,
+  ArrowLeft, ArrowRight, Save, X, Edit, Hash, Radio, Tv,
+  Headphones, MoreHorizontal, Briefcase, Home, PlusCircle
+} from 'lucide-react';
 
 const HotelAjout = ({ onCancel }) => {
   const navigate = useNavigate();
@@ -102,7 +108,6 @@ const HotelAjout = ({ onCancel }) => {
     }
   };
 
-  // CALCUL DU SOIT TOTAL
   useEffect(() => {
     let totalMoyens = 0;
     if (hotelData.moyensCommunication.radio.actif) {
@@ -226,8 +231,6 @@ const HotelAjout = ({ onCancel }) => {
       const result = await response.json();
       if (result.success) {
         alert('✅ Hôtel ajouté avec succès !');
-        
-        // ⭐ Rediriger vers la page de confirmation de paiement AVEC soit_total
         navigate('/confirme-paiement', { 
           state: { 
             usager: { 
@@ -239,7 +242,6 @@ const HotelAjout = ({ onCancel }) => {
               montant_mensuel: parseFloat(montant) || 0,
               frais_dossier: parseFloat(fraisDossier) || 0,
               montant_total: parseFloat(montant) || 0,
-              // ⭐ AJOUT : Passer le soitTotal calculé
               soit_total: soitTotal,
               adresse: hotelData.adresseSiege,
               etoiles: hotelData.etoiles,
@@ -276,44 +278,64 @@ const HotelAjout = ({ onCancel }) => {
 
     return (
       <>
-        <div className="user-info-header" style={{ background: '#e8f4f8', padding: '15px', borderRadius: '10px', marginBottom: '25px', borderLeft: '4px solid #007bff' }}>
-          <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#2c3e50' }}>
-            👤 Utilisateur: <span style={{ color: '#007bff' }}>{userInfo.nom}</span> ({userInfo.prefix})
+        <div className="user-info-header">
+          <div className="user-info-row">
+            <Users size={18} strokeWidth={2} />
+            <span>Utilisateur: <strong>{userInfo.nom}</strong> ({userInfo.prefix})</span>
           </div>
-          <div className="dossier-number" style={{ fontSize: '18px', fontWeight: 'bold', color: '#2c3e50', marginTop: '10px' }}>
-            📄 Prochain dossier: {userDossierDisplay}
+          <div className="user-info-row">
+            <FileText size={18} strokeWidth={2} />
+            <span>Prochain dossier: <strong>{userDossierDisplay}</strong></span>
           </div>
         </div>
 
-        <div className="form-row"><div className="form-label"><h2>👤 Demandeur :</h2></div><div className="form-input">
-          <input type="text" name="demandeur" value={hotelData.demandeur} onChange={handleHotelChange} className="input-style" required />
-        </div></div>
-
-        <div className="form-row"><div className="form-label"><h2>🏢 Dénomination :</h2></div><div className="form-input">
-          <input type="text" name="denomination" value={hotelData.denomination} onChange={handleHotelChange} className="input-style" required />
-        </div></div>
-
-        <div className="form-row"><div className="form-label"><h2>📍 Adresse du Siège :</h2></div><div className="form-input">
-          <input type="text" name="adresseSiege" value={hotelData.adresseSiege} onChange={handleHotelChange} className="input-style" />
-        </div></div>
-
-        <div className="form-row"><div className="form-label"><h2>📄 NIF / N° STAT :</h2></div><div className="form-input">
-          <input type="text" name="nifStat" value={hotelData.nifStat} onChange={handleHotelChange} className="input-style" />
-        </div></div>
-
-        <div className="form-row"><div className="form-label"><h2>📞 Tél. :</h2></div><div className="form-input">
-          <input type="tel" name="telephone" value={hotelData.telephone} onChange={handleHotelChange} className="input-style" />
-        </div></div>
-
-        <div className="form-row"><div className="form-label"><h2>✉️ E-mail :</h2></div><div className="form-input">
-          <input type="email" name="email" value={hotelData.email} onChange={handleHotelChange} className="input-style" />
-        </div></div>
+        <div className="form-row">
+          <div className="form-label"><h2><Users size={18} strokeWidth={2} /> Demandeur :</h2></div>
+          <div className="form-input">
+            <input type="text" name="demandeur" value={hotelData.demandeur} onChange={handleHotelChange} className="input-style" placeholder="Nom et prénoms du demandeur" required />
+          </div>
+        </div>
 
         <div className="form-row">
-          <div className="form-label"><h2>⭐ Catégorie :</h2></div>
+          <div className="form-label"><h2><Building2 size={18} strokeWidth={2} /> Dénomination :</h2></div>
+          <div className="form-input">
+            <input type="text" name="denomination" value={hotelData.denomination} onChange={handleHotelChange} className="input-style" placeholder="Nom de l'établissement" required />
+          </div>
+        </div>
+
+        <div className="form-row">
+          <div className="form-label"><h2><MapPin size={18} strokeWidth={2} /> Adresse du Siège :</h2></div>
+          <div className="form-input">
+            <input type="text" name="adresseSiege" value={hotelData.adresseSiege} onChange={handleHotelChange} className="input-style" placeholder="Adresse complète du siège" />
+          </div>
+        </div>
+
+        <div className="form-row">
+          <div className="form-label"><h2><FileText size={18} strokeWidth={2} /> NIF / N° STAT :</h2></div>
+          <div className="form-input">
+            <input type="text" name="nifStat" value={hotelData.nifStat} onChange={handleHotelChange} className="input-style" placeholder="Numéro NIF ou STAT" />
+          </div>
+        </div>
+
+        <div className="form-row">
+          <div className="form-label"><h2><Phone size={18} strokeWidth={2} /> Tél. :</h2></div>
+          <div className="form-input">
+            <input type="tel" name="telephone" value={hotelData.telephone} onChange={handleHotelChange} className="input-style" placeholder="Numéro de téléphone" />
+          </div>
+        </div>
+
+        <div className="form-row">
+          <div className="form-label"><h2><Mail size={18} strokeWidth={2} /> E-mail :</h2></div>
+          <div className="form-input">
+            <input type="email" name="email" value={hotelData.email} onChange={handleHotelChange} className="input-style" placeholder="Adresse e-mail" />
+          </div>
+        </div>
+
+        <div className="form-row">
+          <div className="form-label"><h2><Star size={18} strokeWidth={2} /> Catégorie :</h2></div>
           <div className="form-input-horizontal">
             <div className="inline-field">
-              <span>Etoiles :</span>
+              <span>Étoiles :</span>
               <select name="etoiles" value={hotelData.etoiles} onChange={handleHotelChange} className="input-small">
                 <option value="">-</option><option value="1">⭐</option><option value="2">⭐⭐</option>
                 <option value="3">⭐⭐⭐</option><option value="4">⭐⭐⭐⭐</option><option value="5">⭐⭐⭐⭐⭐</option>
@@ -327,21 +349,21 @@ const HotelAjout = ({ onCancel }) => {
         </div>
 
         <div className="form-row">
-          <div className="form-label"><h2>📍 Région :</h2></div>
+          <div className="form-label"><h2><MapPin size={18} strokeWidth={2} /> Région :</h2></div>
           <div className="form-input" style={{ display: 'flex', gap: '10px' }}>
             <select name="region" value={hotelData.region || ''} onChange={handleHotelChange} className="input-style" style={{ flex: 1 }} required>
               <option value="">Sélectionner une région</option>
               {regionsList.map((region, idx) => (<option key={idx} value={region}>{region}</option>))}
             </select>
-            <button type="button" onClick={() => setShowAddRegion(!showAddRegion)} style={{ padding: '8px 15px', background: '#28a745', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '18px', fontWeight: 'bold' }}>+</button>
+            <button type="button" onClick={() => setShowAddRegion(!showAddRegion)} className="btn-add-region">+</button>
           </div>
         </div>
         {showAddRegion && (
           <div className="form-row">
-            <div className="form-label"><h2>➕ Nouvelle région :</h2></div>
+            <div className="form-label"><h2><PlusCircle size={18} strokeWidth={2} /> Nouvelle région :</h2></div>
             <div className="form-input" style={{ display: 'flex', gap: '10px' }}>
               <input type="text" value={newRegion} onChange={(e) => setNewRegion(e.target.value)} placeholder="Nom de la nouvelle région" className="input-style" style={{ flex: 1 }} />
-              <button type="button" onClick={handleAddRegion} style={{ padding: '8px 20px', background: '#007bff', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Ajouter</button>
+              <button type="button" onClick={handleAddRegion} className="btn-add-region-confirm">Ajouter</button>
             </div>
           </div>
         )}
@@ -351,86 +373,166 @@ const HotelAjout = ({ onCancel }) => {
 
   const renderStep2 = () => (
     <>
-      <div className="form-row"><div className="form-label"><h2>👤 Nom et prénoms :</h2></div><div className="form-input">
-        <input type="text" name="representantNom" value={hotelData.representantNom} onChange={handleHotelChange} className="input-style" required />
-      </div></div>
-      <div className="form-row"><div className="form-label"><h2>🏠 Adresse :</h2></div><div className="form-input">
-        <input type="text" name="representantAdresse" value={hotelData.representantAdresse} onChange={handleHotelChange} className="input-style" />
-      </div></div>
-      <div className="form-row"><div className="form-label"><h2>📞 Téléphone :</h2></div><div className="form-input">
-        <input type="tel" name="representantTel" value={hotelData.representantTel} onChange={handleHotelChange} className="input-style" />
-      </div></div>
-      <div className="form-row"><div className="form-label"><h2>🆔 N° CIN :</h2></div><div className="form-input">
-        <input type="text" name="representantCin" value={hotelData.representantCin} onChange={handleHotelChange} className="input-style" required />
-      </div></div>
-      <div className="form-row"><div className="form-label"><h2>📅 Délivrée le / Lieu :</h2></div><div className="form-input-horizontal">
-        <input type="date" name="representantCinDelivree" value={hotelData.representantCinDelivree} onChange={handleHotelChange} className="input-date" />
-        <input type="text" name="representantCinLieu" value={hotelData.representantCinLieu} onChange={handleHotelChange} placeholder="Lieu" className="input-lieu" />
-      </div></div>
-      <div className="form-row"><div className="form-label"><h2>💼 Fonction :</h2></div><div className="form-input">
-        <input type="text" name="representantFonction" value={hotelData.representantFonction} onChange={handleHotelChange} className="input-style" />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><User size={18} strokeWidth={2} /> Nom et prénoms :</h2></div>
+        <div className="form-input">
+          <input type="text" name="representantNom" value={hotelData.representantNom} onChange={handleHotelChange} className="input-style" placeholder="Nom complet du représentant" required />
+        </div>
+      </div>
+
+      <div className="form-row">
+        <div className="form-label"><h2><Home size={18} strokeWidth={2} /> Adresse :</h2></div>
+        <div className="form-input">
+          <input type="text" name="representantAdresse" value={hotelData.representantAdresse} onChange={handleHotelChange} className="input-style" placeholder="Adresse du représentant" />
+        </div>
+      </div>
+
+      <div className="form-row">
+        <div className="form-label"><h2><Phone size={18} strokeWidth={2} /> Téléphone :</h2></div>
+        <div className="form-input">
+          <input type="tel" name="representantTel" value={hotelData.representantTel} onChange={handleHotelChange} className="input-style" placeholder="Numéro de téléphone" />
+        </div>
+      </div>
+
+      <div className="form-row">
+        <div className="form-label"><h2><CreditCard size={18} strokeWidth={2} /> N° CIN :</h2></div>
+        <div className="form-input">
+          <input type="text" name="representantCin" value={hotelData.representantCin} onChange={handleHotelChange} className="input-style" placeholder="Numéro de la carte CIN" required />
+        </div>
+      </div>
+
+      <div className="form-row">
+        <div className="form-label"><h2><Calendar size={18} strokeWidth={2} /> Délivrée le / Lieu :</h2></div>
+        <div className="form-input-horizontal">
+          <input type="date" name="representantCinDelivree" value={hotelData.representantCinDelivree} onChange={handleHotelChange} className="input-date" />
+          <input type="text" name="representantCinLieu" value={hotelData.representantCinLieu} onChange={handleHotelChange} placeholder="Lieu de délivrance" className="input-lieu" />
+        </div>
+      </div>
+
+      <div className="form-row">
+        <div className="form-label"><h2><Briefcase size={18} strokeWidth={2} /> Fonction :</h2></div>
+        <div className="form-input">
+          <input type="text" name="representantFonction" value={hotelData.representantFonction} onChange={handleHotelChange} className="input-style" placeholder="Fonction du représentant" />
+        </div>
+      </div>
     </>
   );
 
   const renderStep3 = () => (
     <>
-      <div className="form-row"><div className="form-label"><h2>🎯 Activité :</h2></div><div className="form-input radio-group">
-        <label><input type="radio" name="activite" value="hotellerie" checked={hotelData.activite === 'hotellerie'} onChange={handleHotelChange} /> Hôtellerie</label>
-        <label><input type="radio" name="activite" value="restauration" checked={hotelData.activite === 'restauration'} onChange={handleHotelChange} /> Restauration</label>
-        <label><input type="radio" name="activite" value="hotellerie_restauration" checked={hotelData.activite === 'hotellerie_restauration'} onChange={handleHotelChange} /> Hôtellerie et restauration</label>
-      </div></div>
-
-      <div className="form-row"><div className="form-label"><h2>📻 Moyen de communication :</h2></div><div className="form-input moyens-comm">
-        <div className="moyen-row">
-          <label><input type="checkbox" checked={hotelData.moyensCommunication.radio.actif} onChange={(e) => handleHotelMoyenCommChange('radio', 'actif', e.target.checked)} /> Radio - Poste TSF</label>
-          <div className="taux-input"><span>Taux :</span><input type="number" value={hotelData.moyensCommunication.radio.taux} onChange={(e) => handleHotelMoyenCommChange('radio', 'taux', e.target.value)} placeholder="Ar/an" className="input-taux" disabled={!hotelData.moyensCommunication.radio.actif} /></div>
+      <div className="form-row">
+        <div className="form-label"><h2><Briefcase size={18} strokeWidth={2} /> Activité :</h2></div>
+        <div className="form-input radio-group">
+          <label className="radio-label">
+            <input type="radio" name="activite" value="hotellerie" checked={hotelData.activite === 'hotellerie'} onChange={handleHotelChange} />
+            Hôtellerie
+          </label>
+          <label className="radio-label">
+            <input type="radio" name="activite" value="restauration" checked={hotelData.activite === 'restauration'} onChange={handleHotelChange} />
+            Restauration
+          </label>
+          <label className="radio-label">
+            <input type="radio" name="activite" value="hotellerie_restauration" checked={hotelData.activite === 'hotellerie_restauration'} onChange={handleHotelChange} />
+            Hôtellerie et restauration
+          </label>
         </div>
-        <div className="moyen-row">
-          <label><input type="checkbox" checked={hotelData.moyensCommunication.lecteur.actif} onChange={(e) => handleHotelMoyenCommChange('lecteur', 'actif', e.target.checked)} /> Lecteur</label>
-          <div className="taux-input"><span>Taux :</span><input type="number" value={hotelData.moyensCommunication.lecteur.taux} onChange={(e) => handleHotelMoyenCommChange('lecteur', 'taux', e.target.value)} placeholder="Ar/an" className="input-taux" disabled={!hotelData.moyensCommunication.lecteur.actif} /></div>
-        </div>
-        <div className="moyen-row">
-          <label><input type="checkbox" checked={hotelData.moyensCommunication.tv.actif} onChange={(e) => handleHotelMoyenCommChange('tv', 'actif', e.target.checked)} /> TV</label>
-          <div className="taux-input"><span>Taux :</span><input type="number" value={hotelData.moyensCommunication.tv.taux} onChange={(e) => handleHotelMoyenCommChange('tv', 'taux', e.target.value)} placeholder="Ar/an" className="input-taux" disabled={!hotelData.moyensCommunication.tv.actif} /></div>
-        </div>
-        <div className="moyen-row">
-          <label><input type="checkbox" checked={hotelData.moyensCommunication.autres.actif} onChange={(e) => handleHotelMoyenCommChange('autres', 'actif', e.target.checked)} /> Autres</label>
-          <div className="taux-input"><span>Taux :</span><input type="number" value={hotelData.moyensCommunication.autres.taux} onChange={(e) => handleHotelMoyenCommChange('autres', 'taux', e.target.value)} placeholder="Ar/an" className="input-taux" disabled={!hotelData.moyensCommunication.autres.actif} /></div>
-        </div>
-      </div></div>
-
-      <div className="form-row"><div className="form-label"><h2>💰 Frais de dossier :</h2></div><div className="form-input">
-        <input type="text" value={getDisplayValue(fraisDossier)} onChange={handleFraisDossierChange} className="input-style" placeholder="Montant en Ar" />
-      </div></div>
-
-      <div className="form-row"><div className="form-label"><h2>💵 Montant mensuel :</h2></div><div className="form-input">
-        <input type="text" value={getDisplayValue(montant)} onChange={handleMontantChange} className="input-style" placeholder="Montant en Ar" />
-      </div></div>
+      </div>
 
       <div className="form-row">
-        <div className="form-label"><h2>🔢 Uniter :</h2></div>
+        <div className="form-label"><h2><Radio size={18} strokeWidth={2} /> Moyen de communication :</h2></div>
+        <div className="form-input moyens-comm">
+          <div className="moyen-row">
+            <label className="checkbox-label">
+              <input type="checkbox" checked={hotelData.moyensCommunication.radio.actif} onChange={(e) => handleHotelMoyenCommChange('radio', 'actif', e.target.checked)} />
+              Radio - Poste TSF
+            </label>
+            <div className="taux-input">
+              <span>Taux :</span>
+              <input type="number" value={hotelData.moyensCommunication.radio.taux} onChange={(e) => handleHotelMoyenCommChange('radio', 'taux', e.target.value)} placeholder="Ar/an" className="input-taux" disabled={!hotelData.moyensCommunication.radio.actif} />
+            </div>
+          </div>
+          <div className="moyen-row">
+            <label className="checkbox-label">
+              <input type="checkbox" checked={hotelData.moyensCommunication.lecteur.actif} onChange={(e) => handleHotelMoyenCommChange('lecteur', 'actif', e.target.checked)} />
+              Lecteur
+            </label>
+            <div className="taux-input">
+              <span>Taux :</span>
+              <input type="number" value={hotelData.moyensCommunication.lecteur.taux} onChange={(e) => handleHotelMoyenCommChange('lecteur', 'taux', e.target.value)} placeholder="Ar/an" className="input-taux" disabled={!hotelData.moyensCommunication.lecteur.actif} />
+            </div>
+          </div>
+          <div className="moyen-row">
+            <label className="checkbox-label">
+              <input type="checkbox" checked={hotelData.moyensCommunication.tv.actif} onChange={(e) => handleHotelMoyenCommChange('tv', 'actif', e.target.checked)} />
+              TV
+            </label>
+            <div className="taux-input">
+              <span>Taux :</span>
+              <input type="number" value={hotelData.moyensCommunication.tv.taux} onChange={(e) => handleHotelMoyenCommChange('tv', 'taux', e.target.value)} placeholder="Ar/an" className="input-taux" disabled={!hotelData.moyensCommunication.tv.actif} />
+            </div>
+          </div>
+          <div className="moyen-row">
+            <label className="checkbox-label">
+              <input type="checkbox" checked={hotelData.moyensCommunication.autres.actif} onChange={(e) => handleHotelMoyenCommChange('autres', 'actif', e.target.checked)} />
+              Autres
+            </label>
+            <div className="taux-input">
+              <span>Taux :</span>
+              <input type="number" value={hotelData.moyensCommunication.autres.taux} onChange={(e) => handleHotelMoyenCommChange('autres', 'taux', e.target.value)} placeholder="Ar/an" className="input-taux" disabled={!hotelData.moyensCommunication.autres.actif} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="form-row">
+        <div className="form-label"><h2><FileText size={18} strokeWidth={2} /> Frais de dossier :</h2></div>
         <div className="form-input">
-          <input type="number" min="1" max="9" value={uniter} onChange={(e) => setUniter(Math.min(9, Math.max(1, parseInt(e.target.value) || 1)))} className="input-style" style={{ width: '80px' }} />
+          <input type="text" value={getDisplayValue(fraisDossier)} onChange={handleFraisDossierChange} className="input-style" placeholder="Frais de dossier en Ar" />
+        </div>
+      </div>
+
+      <div className="form-row">
+        <div className="form-label"><h2><DollarSign size={18} strokeWidth={2} /> Montant mensuel :</h2></div>
+        <div className="form-input">
+          <input type="text" value={getDisplayValue(montant)} onChange={handleMontantChange} className="input-style" placeholder="Montant mensuel en Ar" />
+        </div>
+      </div>
+
+      <div className="form-row">
+        <div className="form-label"><h2><Hash size={18} strokeWidth={2} /> Uniter :</h2></div>
+        <div className="form-input">
+          <input type="number" min="1" max="9" value={uniter} onChange={(e) => setUniter(Math.min(9, Math.max(1, parseInt(e.target.value) || 1)))} className="input-style" style={{ width: '80px' }} placeholder="1" />
           <span style={{ marginLeft: '10px', fontSize: '14px', color: '#6c757d' }}>(1 à 9 unités)</span>
         </div>
       </div>
 
-      <div className="form-row"><div className="form-label"><h2>💰 Soit au Total :</h2></div><div className="form-input">
-        <input type="text" value={getSoitTotalDisplay()} readOnly className="input-style total-field" style={{ fontWeight: 'bold', color: '#28a745' }} />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><DollarSign size={18} strokeWidth={2} /> Soit au Total :</h2></div>
+        <div className="form-input">
+          <input type="text" value={getSoitTotalDisplay()} readOnly className="input-style total-field" />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>✍️ Soussigné(e) :</h2></div><div className="form-input">
-        <input type="text" name="confirmationNom" value={hotelData.confirmationNom} onChange={handleHotelChange} className="input-style" />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><Edit size={18} strokeWidth={2} /> Soussigné(e) :</h2></div>
+        <div className="form-input">
+          <input type="text" name="confirmationNom" value={hotelData.confirmationNom} onChange={handleHotelChange} className="input-style" placeholder="Nom du signataire" />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>📍 Fait à :</h2></div><div className="form-input">
-        <input type="text" name="lieuSignature" value={hotelData.lieuSignature} onChange={handleHotelChange} className="input-style" />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><MapPin size={18} strokeWidth={2} /> Fait à :</h2></div>
+        <div className="form-input">
+          <input type="text" name="lieuSignature" value={hotelData.lieuSignature} onChange={handleHotelChange} className="input-style" placeholder="Lieu de signature" />
+        </div>
+      </div>
 
-      <div className="form-row"><div className="form-label"><h2>📆 le :</h2></div><div className="form-input">
-        <input type="date" name="dateSignature" value={hotelData.dateSignature} onChange={handleHotelChange} className="input-style" />
-      </div></div>
+      <div className="form-row">
+        <div className="form-label"><h2><Calendar size={18} strokeWidth={2} /> le :</h2></div>
+        <div className="form-input">
+          <input type="date" name="dateSignature" value={hotelData.dateSignature} onChange={handleHotelChange} className="input-style" />
+        </div>
+      </div>
     </>
   );
 
@@ -442,25 +544,25 @@ const HotelAjout = ({ onCancel }) => {
 
     return (
       <div className="recap-container">
-        <h3>📋 RÉCAPITULATIF - HÔTEL / RESTAURANT</h3>
-        <div className="user-info-recap" style={{ background: '#e8f4f8', padding: '10px', borderRadius: '8px', marginBottom: '15px' }}>
-          <p><strong>👤 Utilisateur:</strong> {userInfo.nom} ({userInfo.prefix})</p>
-          <p><strong>📄 Prochain numéro de dossier:</strong> {userDossierDisplay}</p>
+        <h3><CheckCircle size={20} strokeWidth={2} /> RÉCAPITULATIF - HÔTEL / RESTAURANT</h3>
+        <div className="user-info-recap">
+          <p><Users size={16} strokeWidth={2} /> Utilisateur: <strong>{userInfo.nom}</strong> ({userInfo.prefix})</p>
+          <p><FileText size={16} strokeWidth={2} /> Prochain dossier: <strong>{userDossierDisplay}</strong></p>
         </div>
         <table className="recap-table">
           <tbody>
-            <tr><td style={{ fontWeight: 'bold' }}>👤 Demandeur</td><td>{hotelData.demandeur || '-'}</td></tr>
-            <tr><td style={{ fontWeight: 'bold' }}>🏢 Dénomination</td><td>{hotelData.denomination || '-'}</td></tr>
-            <tr><td style={{ fontWeight: 'bold' }}>📍 Région</td><td>{hotelData.region || '-'}</td></tr>
-            <tr><td style={{ fontWeight: 'bold' }}>🎯 Activité</td><td>{hotelData.activite === 'hotellerie' ? 'Hôtellerie' : hotelData.activite === 'restauration' ? 'Restauration' : hotelData.activite === 'hotellerie_restauration' ? 'Hôtellerie et restauration' : '-'}</td></tr>
-            <tr><td style={{ fontWeight: 'bold' }}>💰 Frais de dossier</td><td>{formatNumber(fraisDossier || 0)} Ar</td></tr>
-            <tr><td style={{ fontWeight: 'bold' }}>💵 Montant mensuel</td><td>{formatNumber(montant || 0)} Ar/mois</td></tr>
-            <tr><td style={{ fontWeight: 'bold' }}>📻 Radio - Poste TSF</td><td>{hotelData.moyensCommunication.radio.actif ? formatNumber(hotelData.moyensCommunication.radio.taux || 0) + ' Ar/an' : 'Non actif'}</td></tr>
-            <tr><td style={{ fontWeight: 'bold' }}>📻 Lecteur</td><td>{hotelData.moyensCommunication.lecteur.actif ? formatNumber(hotelData.moyensCommunication.lecteur.taux || 0) + ' Ar/an' : 'Non actif'}</td></tr>
-            <tr><td style={{ fontWeight: 'bold' }}>📺 TV</td><td>{hotelData.moyensCommunication.tv.actif ? formatNumber(hotelData.moyensCommunication.tv.taux || 0) + ' Ar/an' : 'Non actif'}</td></tr>
-            <tr><td style={{ fontWeight: 'bold' }}>📻 Autres</td><td>{hotelData.moyensCommunication.autres.actif ? formatNumber(hotelData.moyensCommunication.autres.taux || 0) + ' Ar/an' : 'Non actif'}</td></tr>
-            <tr><td style={{ fontWeight: 'bold' }}>🔢 Uniter</td><td>{uniter}</td></tr>
-            <tr><td style={{ fontWeight: 'bold' }}>💰 Soit Total</td><td><strong style={{ color: '#28a745' }}>{getSoitTotalDisplay()}</strong></td></tr>
+            <tr><td><Users size={16} strokeWidth={2} /> Demandeur</td><td>{hotelData.demandeur || '-'}</td></tr>
+            <tr><td><Building2 size={16} strokeWidth={2} /> Dénomination</td><td>{hotelData.denomination || '-'}</td></tr>
+            <tr><td><MapPin size={16} strokeWidth={2} /> Région</td><td>{hotelData.region || '-'}</td></tr>
+            <tr><td><Briefcase size={16} strokeWidth={2} /> Activité</td><td>{hotelData.activite === 'hotellerie' ? 'Hôtellerie' : hotelData.activite === 'restauration' ? 'Restauration' : hotelData.activite === 'hotellerie_restauration' ? 'Hôtellerie et restauration' : '-'}</td></tr>
+            <tr><td><FileText size={16} strokeWidth={2} /> Frais de dossier</td><td>{formatNumber(fraisDossier || 0)} Ar</td></tr>
+            <tr><td><DollarSign size={16} strokeWidth={2} /> Montant mensuel</td><td>{formatNumber(montant || 0)} Ar/mois</td></tr>
+            <tr><td><Radio size={16} strokeWidth={2} /> Radio - Poste TSF</td><td>{hotelData.moyensCommunication.radio.actif ? formatNumber(hotelData.moyensCommunication.radio.taux || 0) + ' Ar/an' : 'Non actif'}</td></tr>
+            <tr><td><Headphones size={16} strokeWidth={2} /> Lecteur</td><td>{hotelData.moyensCommunication.lecteur.actif ? formatNumber(hotelData.moyensCommunication.lecteur.taux || 0) + ' Ar/an' : 'Non actif'}</td></tr>
+            <tr><td><Tv size={16} strokeWidth={2} /> TV</td><td>{hotelData.moyensCommunication.tv.actif ? formatNumber(hotelData.moyensCommunication.tv.taux || 0) + ' Ar/an' : 'Non actif'}</td></tr>
+            <tr><td><MoreHorizontal size={16} strokeWidth={2} /> Autres</td><td>{hotelData.moyensCommunication.autres.actif ? formatNumber(hotelData.moyensCommunication.autres.taux || 0) + ' Ar/an' : 'Non actif'}</td></tr>
+            <tr><td><Hash size={16} strokeWidth={2} /> Uniter</td><td>{uniter}</td></tr>
+            <tr><td><DollarSign size={16} strokeWidth={2} /> Soit Total</td><td><strong style={{ color: '#28a745' }}>{getSoitTotalDisplay()}</strong></td></tr>
           </tbody>
         </table>
       </div>
@@ -478,26 +580,35 @@ const HotelAjout = ({ onCancel }) => {
   };
 
   const getStepTitle = () => {
-    const titles = { 1: '📝 Étape 1 - Informations générales', 2: '📝 Étape 2 - Représentant légal', 3: '📝 Étape 3 - Activité et calcul', 4: '📋 Récapitulatif' };
-    return titles[currentStep] || `📝 Étape ${currentStep}`;
+    const titles = {
+      1: 'Étape 1 - Informations générales',
+      2: 'Étape 2 - Représentant légal',
+      3: 'Étape 3 - Activité et calcul',
+      4: 'Récapitulatif'
+    };
+    return titles[currentStep] || `Étape ${currentStep}`;
   };
 
   return (
     <form onSubmit={handleNextStep}>
       <fieldset><legend>{getStepTitle()}</legend>
         {renderCurrentStep()}
-        <div className="button-group" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '30px', gap: '10px' }}>
-          <button type="button" className="btn-cancel" onClick={onCancel} style={{ background: '#dc3545', color: 'white', padding: '10px 25px', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '14px' }}>
-            ❌ Annuler
+        <div className="button-group">
+          <button type="button" className="btn-cancel" onClick={onCancel}>
+            <X size={18} strokeWidth={2} /> Annuler
           </button>
           <div style={{ display: 'flex', gap: '10px' }}>
             {currentStep > 1 && (
-              <button type="button" className="btn-secondary" onClick={handlePrevStep} style={{ background: '#6c757d', color: 'white', padding: '10px 25px', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '14px' }}>
-                ◀ Précédent
+              <button type="button" className="btn-secondary" onClick={handlePrevStep}>
+                <ArrowLeft size={18} strokeWidth={2} /> Précédent
               </button>
             )}
-            <button type="submit" className="btn-primary" disabled={isSubmitting} style={{ background: '#007bff', color: 'white', padding: '10px 25px', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '14px' }}>
-              {isLastStep() ? (isSubmitting ? '⏳ Envoi...' : '✅ Valider') : '▶ Suivant'}
+            <button type="submit" className="btn-primary" disabled={isSubmitting}>
+              {isLastStep() ? (
+                isSubmitting ? <><Clock size={18} strokeWidth={2} /> Envoi...</> : <><Save size={18} strokeWidth={2} /> Valider</>
+              ) : (
+                <><ArrowRight size={18} strokeWidth={2} /> Suivant</>
+              )}
             </button>
           </div>
         </div>
