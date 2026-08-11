@@ -1,9 +1,10 @@
+// server/routes/regions.js
 const express = require('express');
 const router = express.Router();
 const pool = require('../database');
-const { verifyAdminToken } = require('../middleware');
+const { verifyAdminToken } = require('../middleware'); // gardé pour DELETE
 
-// GET /api/regions
+// GET /api/regions (public)
 router.get('/regions', async (req, res) => {
   try {
     const result = await pool.query('SELECT id, nom, created_at FROM regions ORDER BY nom');
@@ -14,8 +15,8 @@ router.get('/regions', async (req, res) => {
   }
 });
 
-// POST /api/regions
-router.post('/regions', verifyAdminToken, async (req, res) => {
+// POST /api/regions – plus de vérification (public)
+router.post('/regions', async (req, res) => {
   const { nom } = req.body;
   if (!nom || nom.trim() === '') {
     return res.status(400).json({ success: false, message: 'Le nom de la région est obligatoire' });
@@ -25,7 +26,10 @@ router.post('/regions', verifyAdminToken, async (req, res) => {
     if (existing.rows.length > 0) {
       return res.status(400).json({ success: false, message: 'Cette région existe déjà' });
     }
-    const result = await pool.query('INSERT INTO regions (nom) VALUES ($1) RETURNING id, nom, created_at', [nom.trim()]);
+    const result = await pool.query(
+      'INSERT INTO regions (nom) VALUES ($1) RETURNING id, nom, created_at',
+      [nom.trim()]
+    );
     res.json({ success: true, region: result.rows[0], message: 'Région ajoutée avec succès' });
   } catch (error) {
     console.error('Erreur ajout région:', error);
@@ -33,7 +37,7 @@ router.post('/regions', verifyAdminToken, async (req, res) => {
   }
 });
 
-// DELETE /api/regions/:id
+// DELETE /api/regions/:id – garde la vérification admin (si besoin)
 router.delete('/regions/:id', verifyAdminToken, async (req, res) => {
   const { id } = req.params;
   try {

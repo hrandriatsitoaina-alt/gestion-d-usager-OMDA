@@ -2,6 +2,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import {
+  ArrowLeft, X, Calendar, MapPin, DollarSign, Users,
+  RefreshCw, Music, Eye, Check, Circle, ChevronLeft,
+  ChevronRight, Sparkles, AlertCircle
+} from 'lucide-react';
 import '../styles/date_grandSurface.css';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
@@ -303,9 +308,14 @@ const DateNight = () => {
       <main className="contenu-grandsurface">
         {notification && (
           <div className={`notif ${notification.type}`}>
-            <span>{notification.type === 'success' ? '✓' : notification.type === 'info' ? '✨' : '✗'}</span>
+            <span>
+              {notification.type === 'success' ? <Check size={16} /> : 
+               notification.type === 'info' ? <Sparkles size={16} /> : <X size={16} />}
+            </span>
             <span>{notification.message}</span>
-            <button className="notif-close" onClick={() => setNotification(null)}>✕</button>
+            <button className="notif-close" onClick={() => setNotification(null)}>
+              <X size={16} />
+            </button>
           </div>
         )}
 
@@ -314,16 +324,16 @@ const DateNight = () => {
           <div className="header-filters-card">
             <div className="header-filters-left">
               <button className="btn-retour-header" onClick={handleRetour}>
-                ← Retour
+                <ArrowLeft size={18} /> Retour
               </button>
               <div className="header-filters-title">
-                <h1>🎭 Night Clubs</h1>
+                <h1><Music size={22} /> Night Clubs</h1>
                 <p>Suivi des paiements mensuels</p>
               </div>
             </div>
             <div className="header-filters-right">
               <div className="filter-group">
-                <label>📆 Année</label>
+                <label><Calendar size={14} /> Année</label>
                 <select 
                   value={anneeRecherche} 
                   onChange={(e) => handleAnneeChange(e.target.value)}
@@ -339,7 +349,7 @@ const DateNight = () => {
                 </select>
               </div>
               <div className="filter-group">
-                <label>📍 Région</label>
+                <label><MapPin size={14} /> Région</label>
                 <select 
                   value={regionFiltre} 
                   onChange={(e) => handleRegionChange(e.target.value)}
@@ -360,8 +370,12 @@ const DateNight = () => {
               <div className="filter-group filter-actions">
                 <label>&nbsp;</label>
                 <div className="filter-buttons">
-                  <button className="btn-reset" onClick={resetFilters}>🔄 Réinitialiser</button>
-                  <button className="btn-refresh" onClick={refreshData}>🔄 Rafraîchir</button>
+                  <button className="btn-reset" onClick={resetFilters}>
+                    <RefreshCw size={14} /> Réinitialiser
+                  </button>
+                  <button className="btn-refresh" onClick={refreshData}>
+                    <RefreshCw size={14} /> Rafraîchir
+                  </button>
                 </div>
               </div>
             </div>
@@ -370,18 +384,18 @@ const DateNight = () => {
           {/* ===== INDICATEUR ===== */}
           <div className="indicator-bar">
             <span className="indicator-item">
-              📆 Année : <strong>{anneeRecherche}</strong>
+              <Calendar size={14} /> Année : <strong>{anneeRecherche}</strong>
             </span>
             {regionFiltre && (
               <span className="indicator-item">
-                📍 Région : <strong>{regionFiltre}</strong>
+                <MapPin size={14} /> Région : <strong>{regionFiltre}</strong>
               </span>
             )}
             <span className="indicator-item">
-              💰 Total reçu : <strong>{montantTotalRecu.toLocaleString()} Ar</strong>
+              <DollarSign size={14} /> Total reçu : <strong>{montantTotalRecu.toLocaleString()} Ar</strong>
             </span>
             <span className="indicator-item indicator-total">
-              👥 Total usagers : <strong>{totalUsagers}</strong>
+              <Users size={14} /> Total usagers : <strong>{totalUsagers}</strong>
             </span>
           </div>
 
@@ -418,16 +432,16 @@ const DateNight = () => {
               </div>
             ) : apiError ? (
               <div className="empty error">
-                <p>❌ {apiError}</p>
+                <p><AlertCircle size={18} /> {apiError}</p>
                 <button className="btn-refresh" onClick={refreshData}>
-                  🔄 Rafraîchir
+                  <RefreshCw size={14} /> Rafraîchir
                 </button>
               </div>
             ) : currentUsagers.length === 0 ? (
               <div className="empty">
                 <p>Aucun usager nightclub trouvé pour la période sélectionnée</p>
                 <button className="btn-refresh" onClick={refreshData}>
-                  🔄 Rafraîchir
+                  <RefreshCw size={14} /> Rafraîchir
                 </button>
               </div>
             ) : (
@@ -468,7 +482,7 @@ const DateNight = () => {
                             <strong>{usager.denomination || usager.nom || '-'}</strong>
                             {usager.region && (
                               <div style={{fontSize: '0.65em', color: '#666'}}>
-                                📍 {usager.region}
+                                <MapPin size={12} /> {usager.region}
                               </div>
                             )}
                           </td>
@@ -483,7 +497,7 @@ const DateNight = () => {
                             return (
                               <td key={i} className="month-cell">
                                 <span className={`mois-badge ${isPaye ? 'paye' : 'non-paye'}`}>
-                                  {isPaye ? '✓' : '○'}
+                                  {isPaye ? <Check size={14} /> : <Circle size={14} />}
                                 </span>
                               </td>
                             );
@@ -498,7 +512,7 @@ const DateNight = () => {
                           </td>
                           <td className="action-cell">
                             <button className="view-more-btn" onClick={() => openModal(usager)}>
-                              👁️
+                              <Eye size={16} />
                             </button>
                           </td>
                         </tr>
@@ -519,7 +533,7 @@ const DateNight = () => {
                   onClick={() => goToPage(currentPage - 1)} 
                   disabled={currentPage === 1}
                 >
-                  ◀
+                  <ChevronLeft size={16} />
                 </button>
                 {[...Array(totalPages)].map((_, i) => (
                   <button 
@@ -535,7 +549,7 @@ const DateNight = () => {
                   onClick={() => goToPage(currentPage + 1)} 
                   disabled={currentPage === totalPages}
                 >
-                  ▶
+                  <ChevronRight size={16} />
                 </button>
               </div>
               <div className="pagination-info">
@@ -551,12 +565,14 @@ const DateNight = () => {
         <div className="modal-overlay" onClick={closeModal}>
           <div className="modal-container" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>🎭 {selectedUsager.denomination || selectedUsager.nom || 'Night Club'}</h3>
-              <button className="modal-close" onClick={closeModal}>✕</button>
+              <h3><Music size={18} /> {selectedUsager.denomination || selectedUsager.nom || 'Night Club'}</h3>
+              <button className="modal-close" onClick={closeModal}>
+                <X size={20} />
+              </button>
             </div>
             <div className="modal-body">
               <div className="modal-section">
-                <h4>🎤 INFORMATIONS</h4>
+                <h4><Music size={16} /> INFORMATIONS</h4>
                 <div className="modal-row">
                   <strong>ID :</strong> <span>#{String(selectedUsager.id).padStart(3, '0')}</span>
                 </div>
@@ -583,7 +599,7 @@ const DateNight = () => {
                 </div>
               </div>
               <div className="modal-section">
-                <h4>💰 PAIEMENTS - {selectedUsager.anneeCourante || anneeRecherche}</h4>
+                <h4><DollarSign size={16} /> PAIEMENTS - {selectedUsager.anneeCourante || anneeRecherche}</h4>
                 <div className="modal-row">
                   <strong>Montant mensuel :</strong> 
                   <span>{(selectedUsager.montant_mensuel || 0).toLocaleString()} Ar</span>
