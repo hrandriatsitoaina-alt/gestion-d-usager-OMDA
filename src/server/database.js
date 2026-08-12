@@ -168,17 +168,6 @@ async function initDB() {
     console.log('✅ Table artistes prête');
 
     // ============================================================
-    // TABLE EVENT_ARTISTES
-    // ============================================================
-    await pool.query(`CREATE TABLE IF NOT EXISTS event_artistes (
-      id SERIAL PRIMARY KEY, 
-      event_id INTEGER NOT NULL REFERENCES usagers_occasionnel(id) ON DELETE CASCADE, 
-      artiste_id INTEGER NOT NULL REFERENCES artistes(id) ON DELETE CASCADE, 
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, 
-      UNIQUE(event_id, artiste_id))`);
-    console.log('✅ Table event_artistes prête');
-
-    // ============================================================
     // TABLE PAIEMENTS (UNIQUE - REMPLACE TOUTES LES ANCIENNES)
     // ============================================================
     await pool.query(`
@@ -483,6 +472,19 @@ async function initDB() {
     console.log('✅ Table usagers_occasionnel prête');
 
     // ============================================================
+    // TABLE EVENT_ARTISTES
+    // (déplacée ici : elle référence artistes ET usagers_occasionnel,
+    //  qui doivent donc déjà exister)
+    // ============================================================
+    await pool.query(`CREATE TABLE IF NOT EXISTS event_artistes (
+      id SERIAL PRIMARY KEY, 
+      event_id INTEGER NOT NULL REFERENCES usagers_occasionnel(id) ON DELETE CASCADE, 
+      artiste_id INTEGER NOT NULL REFERENCES artistes(id) ON DELETE CASCADE, 
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, 
+      UNIQUE(event_id, artiste_id))`);
+    console.log('✅ Table event_artistes prête');
+
+    // ============================================================
     // CRÉATION DES UTILISATEURS PAR DÉFAUT
     // ============================================================
     const usersList = [
@@ -559,6 +561,7 @@ async function initDB() {
     console.log('✅ Base de données initialisée avec succès !');
   } catch (error) {
     console.error('❌ Erreur init DB:', error.message);
+    console.error('Détail complet:', error);
   }
 }
 

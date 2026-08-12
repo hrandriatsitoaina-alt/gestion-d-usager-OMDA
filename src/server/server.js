@@ -22,10 +22,10 @@ app.use('/api', routes);
 const PORT = config.PORT || 3001;
 app.listen(PORT, async () => {
   console.log(`\n${'='.repeat(50)}`);
-  console.log(`🚀 SERVEUR API OMDA`);
+  console.log(` SERVEUR API OMDA`);
   console.log(`${'='.repeat(50)}`);
-  console.log(`📍 URL: http://localhost:${PORT}`);
-  console.log(`❤️ Health: http://localhost:${PORT}/api/health`);
+  console.log(` URL: http://localhost:${PORT}`);
+  console.log(` Health: http://localhost:${PORT}/api/health`);
   console.log(`${'='.repeat(50)}\n`);
   await initDB();
 });
