@@ -8,7 +8,7 @@ import {
   Hotel, Store, Bus, PartyPopper, Tv2, Ticket, File, ArrowLeft,
   Clock, CreditCard, FileCheck, Loader2
 } from 'lucide-react';
-import '../styles/confirmation-dossier.css';
+// import '../styles/confirmation-dossier.css';
 import MiniSidebar from '../components/MiniSidebar';
 
 // Import des générateurs PDF (inchangés)
