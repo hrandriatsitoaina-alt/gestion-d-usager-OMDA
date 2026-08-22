@@ -1,17 +1,18 @@
 // src/pages/pdf/bus_pdf.jsx
 import jsPDF from 'jspdf';
 
+// Fonctions utilitaires exportées
 export const formatDate = (dateString) => {
   if (!dateString) return '';
   try {
     const date = new Date(dateString);
-    if (isNaN(date.getTime())) return dateString;
+    if (isNaN(date.getTime())) return '';
     const jour = date.getDate();
     const mois = date.toLocaleString('fr-FR', { month: 'long' });
     const annee = date.getFullYear();
     return `${jour} ${mois} ${annee}`;
   } catch (error) {
-    return dateString;
+    return '';
   }
 };
 
@@ -28,24 +29,129 @@ export const getCurrentDate = () => {
   return `${jour} ${mois} ${annee}`;
 };
 
-const drawUnderline = (doc, text, x, y, textWidth) => {
-  const lineY = y + 1.5;
-  doc.line(x, lineY, x + textWidth, lineY);
+// Fonction pour convertir un nombre en lettres (Ariary)
+const nombreEnLettres = (num) => {
+  if (num === 0) return 'zéro';
+  if (num < 0) return 'moins ' + nombreEnLettres(-num);
+  
+  const uniteMapping = {
+    0: 'zéro', 1: 'un', 2: 'deux', 3: 'trois', 4: 'quatre',
+    5: 'cinq', 6: 'six', 7: 'sept', 8: 'huit', 9: 'neuf',
+    10: 'dix', 11: 'onze', 12: 'douze', 13: 'treize', 14: 'quatorze',
+    15: 'quinze', 16: 'seize', 17: 'dix-sept', 18: 'dix-huit', 19: 'dix-neuf',
+    20: 'vingt', 30: 'trente', 40: 'quarante', 50: 'cinquante',
+    60: 'soixante', 70: 'soixante-dix', 80: 'quatre-vingts', 90: 'quatre-vingt-dix'
+  };
+
+  const convertHundreds = (n) => {
+    if (n === 0) return '';
+    if (n === 100) return 'cent';
+    if (n < 100) {
+      if (uniteMapping[n]) return uniteMapping[n];
+      if (n < 70) {
+        const tens = Math.floor(n / 10) * 10;
+        const units = n % 10;
+        if (units === 1 && tens !== 80) {
+          return uniteMapping[tens] + ' et un';
+        }
+        return uniteMapping[tens] + (units > 0 ? '-' + uniteMapping[units] : '');
+      }
+      if (n < 80) {
+        const units = n - 60;
+        if (units === 0) return 'soixante';
+        if (units === 1) return 'soixante et un';
+        return 'soixante-' + convertHundreds(units);
+      }
+      if (n < 90) {
+        const units = n - 80;
+        if (units === 0) return 'quatre-vingts';
+        if (units === 1) return 'quatre-vingt-un';
+        return 'quatre-vingt-' + convertHundreds(units);
+      }
+      const units = n - 90;
+      if (units === 0) return 'quatre-vingt-dix';
+      if (units === 1) return 'quatre-vingt-onze';
+      return 'quatre-vingt-' + convertHundreds(10 + units);
+    }
+    const hundreds = Math.floor(n / 100);
+    const remainder = n % 100;
+    let result = '';
+    if (hundreds === 1) {
+      result = 'cent';
+    } else {
+      result = convertHundreds(hundreds) + ' cents';
+    }
+    if (remainder > 0) {
+      if (hundreds === 1) {
+        result += ' ';
+      } else {
+        result += ' ';
+      }
+      result += convertHundreds(remainder);
+    }
+    return result;
+  };
+
+  const convertMilliers = (n) => {
+    if (n === 0) return '';
+    if (n === 1) return 'mille';
+    if (n < 1000) {
+      return convertHundreds(n);
+    }
+    const thousands = Math.floor(n / 1000);
+    const remainder = n % 1000;
+    let result = '';
+    if (thousands === 1) {
+      result = 'mille';
+    } else {
+      result = convertHundreds(thousands) + ' mille';
+    }
+    if (remainder > 0) {
+      result += ' ' + convertHundreds(remainder);
+    }
+    return result;
+  };
+
+  const convertMillions = (n) => {
+    if (n === 0) return '';
+    if (n < 1000000) return convertMilliers(n);
+    const millions = Math.floor(n / 1000000);
+    const remainder = n % 1000000;
+    let result = '';
+    if (millions === 1) {
+      result = 'un million';
+    } else {
+      result = convertHundreds(millions) + ' millions';
+    }
+    if (remainder > 0) {
+      result += ' ' + convertMilliers(remainder);
+    }
+    return result;
+  };
+
+  const roundedNum = Math.round(num);
+  if (roundedNum === 0) return 'zéro';
+  return convertMillions(roundedNum);
 };
 
 export const generateBusPDF = (usager, paymentDetails) => {
   try {
     console.log('========== GÉNÉRATION PDF BUS ==========');
     console.log('Données usager reçues:', usager);
-    console.log('Données paiement:', paymentDetails);
     
-    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const doc = new jsPDF({
+      unit: 'mm',
+      format: 'a4',
+      putOnlyUsedFonts: true
+    });
+    
     const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
     const marginX = 15;
-    const lineSpacing = 6.5;
-    let yPos = 20;
+    let yPos = 25;
+    const lineSpacing = 7.5;
     
-    // RENSEIGNEMENTS GENERAUX
+    // Récupération des données
     const demandeur = usager?.demandeur || '';
     const denomination = usager?.denomination || '';
     const adresseSiege = usager?.adresse_siege || '';
@@ -53,11 +159,12 @@ export const generateBusPDF = (usager, paymentDetails) => {
     const telephone = usager?.telephone || '';
     const email = usager?.email || '';
     
-    // REPRESENTANT LEGAL
     const representantNom = usager?.representant_nom || '';
     const representantAdresse = usager?.representant_adresse || '';
     const representantTel = usager?.representant_tel || '';
     const representantCin = usager?.representant_cin || '';
+    const representantCinLieu = usager?.representant_cin_lieu || '';
+    const representantFonction = usager?.representant_fonction || '';
     
     let cinDelivree = '';
     if (usager?.representant_cin_delivree) {
@@ -69,10 +176,6 @@ export const generateBusPDF = (usager, paymentDetails) => {
       } catch(e) {}
     }
     
-    const representantCinLieu = usager?.representant_cin_lieu || '';
-    const representantFonction = usager?.representant_fonction || '';
-    
-    // INFORMATIONS SPECIFIQUES BUS
     const nombreVehicules = usager?.nombre_vehicules || 0;
     const lignes = usager?.lignes || '';
     const typeBus = usager?.type_bus || '';
@@ -80,60 +183,53 @@ export const generateBusPDF = (usager, paymentDetails) => {
     const horaires = usager?.horaires || '';
     const zonesDesservies = usager?.zones_desservies || '';
     
-    // MONTANTS
     const montantMensuel = parseFloat(usager?.montant_mensuel) || 0;
     const fraisDossier = parseFloat(usager?.frais_dossier) || 0;
-    const totalAnnuel = montantMensuel * 12;
+    const uniter = parseInt(usager?.uniter) || 1;
     
-    // AUTRES
+    // ✅ Soit au Total = (Montant mensuel + Frais de dossier) × Uniter
+    const baseTotal = montantMensuel + fraisDossier;
+    const soitTotal = baseTotal * uniter;
+    const totalEnLettres = nombreEnLettres(Math.round(soitTotal));
+    
     const aCompterDu = usager?.a_compter_du ? formatDate(usager.a_compter_du) : '';
     const echeance = usager?.echeance ? formatDate(usager.echeance) : '';
     const confirmationNom = usager?.confirmation_nom || usager?.demandeur || '';
     const lieuSignature = usager?.lieu_signature || 'Antananarivo';
     const dateSignature = usager?.date_signature ? formatDate(usager.date_signature) : getCurrentDate();
-    const numeroDossier = usager?.numero_dossier_utilisateur || '';
+
+    // ========== PAGE 1 ==========
+    // Titre principal
+    doc.setFont('times', 'bold');
+    doc.setFontSize(16);
+    doc.text('OFFICE MALAGASY DU DROIT D\'AUTEUR', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 8;
     
-    console.log('Données extraites:', { demandeur, denomination, representantNom, nombreVehicules, lignes, trajet, montantMensuel });
-    
-    // TITRE
-    doc.setFont('helvetica', 'bold');
+    // Sous-titre
+    doc.setFont('times', 'bold');
     doc.setFontSize(14);
-    const titre1 = 'OFFICE MALAGASY DU DROIT D\'AUTEUR';
-    const titre1Width = doc.getStringUnitWidth(titre1) * 14 / doc.internal.scaleFactor;
-    doc.text(titre1, pageWidth / 2, yPos, { align: 'center' });
-    drawUnderline(doc, titre1, pageWidth / 2 - titre1Width / 2, yPos, titre1Width);
-    yPos += lineSpacing + 2;
-    
-    doc.setFontSize(13);
-    const titre2 = 'FICHE DE RENSEIGNEMENTS – BUS / TRANSPORT';
-    const titre2Width = doc.getStringUnitWidth(titre2) * 13 / doc.internal.scaleFactor;
-    doc.text(titre2, pageWidth / 2, yPos, { align: 'center' });
-    drawUnderline(doc, titre2, pageWidth / 2 - titre2Width / 2, yPos, titre2Width);
-    yPos += lineSpacing + 5;
-    
-    if (numeroDossier) {
-      doc.setFontSize(10);
-      doc.text(`N° DOSSIER : ${numeroDossier}`, pageWidth - marginX - 20, yPos - 8, { align: 'right' });
-    }
+    doc.text('FICHE DE RENSEIGNEMENTS – BUS / TRANSPORT', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 10;
     
     // SECTION 1
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    const section1 = '1) RENSEIGNEMENTS GENERAUX :';
-    doc.text(section1, marginX, yPos);
-    const section1Width = doc.getStringUnitWidth(section1) * 12 / doc.internal.scaleFactor;
-    drawUnderline(doc, section1, marginX, yPos, section1Width);
-    yPos += lineSpacing + 2;
+    doc.setFont('times', 'bold');
+    doc.setFontSize(13);
+    const section1Text = '1) RENSEIGNEMENTS GENERAUX :';
+    const section1Width = doc.getTextWidth(section1Text);
+    doc.text(section1Text, marginX, yPos);
+    doc.line(marginX, yPos + 1.5, marginX + section1Width, yPos + 1.5);
+    yPos += 8;
     
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
+    doc.setFont('times', 'normal');
+    doc.setFontSize(12);
+    
     doc.text(`Demandeur : ${demandeur || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
     doc.text(`Dénomination : ${denomination || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
-    doc.text(`Adresse du Siège / lieu d’exploitation : ${adresseSiege || '……………………………………'}`, marginX + 5, yPos);
+    doc.text(`Adresse du Siège / lieu d'exploitation : ${adresseSiege || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
     doc.text(`NIF / N° STAT : ${nifStat || '……………………………………'}`, marginX + 5, yPos);
@@ -144,16 +240,17 @@ export const generateBusPDF = (usager, paymentDetails) => {
     yPos += lineSpacing + 3;
     
     // SECTION 2
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    const section2 = '2) REPRESENTANT LEGAL :';
-    doc.text(section2, marginX, yPos);
-    const section2Width = doc.getStringUnitWidth(section2) * 12 / doc.internal.scaleFactor;
-    drawUnderline(doc, section2, marginX, yPos, section2Width);
-    yPos += lineSpacing + 2;
+    doc.setFont('times', 'bold');
+    doc.setFontSize(13);
+    const section2Text = '2) REPRESENTANT LEGAL :';
+    const section2Width = doc.getTextWidth(section2Text);
+    doc.text(section2Text, marginX, yPos);
+    doc.line(marginX, yPos + 1.5, marginX + section2Width, yPos + 1.5);
+    yPos += 8;
     
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
+    doc.setFont('times', 'normal');
+    doc.setFontSize(12);
+    
     doc.text(`Nom et prénoms : ${representantNom || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
@@ -163,7 +260,7 @@ export const generateBusPDF = (usager, paymentDetails) => {
     doc.text(`Téléphone : ${representantTel || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
-    doc.text(`N° Carte d’identité nationale : ${representantCin || '……………………………………'}`, marginX + 5, yPos);
+    doc.text(`N° Carte d'identité nationale : ${representantCin || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
     let cinText = `Délivrée le : ${cinDelivree || '……………………………………'}`;
@@ -175,74 +272,92 @@ export const generateBusPDF = (usager, paymentDetails) => {
     yPos += lineSpacing + 3;
     
     // SECTION 3
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    const section3 = '3) RENSEIGNEMENTS SUR L\'ACTIVITE :';
-    doc.text(section3, marginX, yPos);
-    const section3Width = doc.getStringUnitWidth(section3) * 12 / doc.internal.scaleFactor;
-    drawUnderline(doc, section3, marginX, yPos, section3Width);
-    yPos += lineSpacing + 2;
+    doc.setFont('times', 'bold');
+    doc.setFontSize(13);
+    const section3Text = '3) RENSEIGNEMENTS SUR L\'ACTIVITE :';
+    const section3Width = doc.getTextWidth(section3Text);
+    doc.text(section3Text, marginX, yPos);
+    doc.line(marginX, yPos + 1.5, marginX + section3Width, yPos + 1.5);
+    yPos += 8;
     
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
+    doc.setFont('times', 'normal');
+    doc.setFontSize(12);
+    
     doc.text(`Nombre de véhicules : ${nombreVehicules > 0 ? formatNumber(nombreVehicules) : '………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
     doc.text(`Lignes exploitées : ${lignes || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
-    doc.text(`Type de bus : ${typeBus || '……………………………………'}`, marginX + 5, yPos);
+    doc.text(`Type de transport : ${typeBus || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
-    doc.text(`Trajet : ${trajet || '……………………………………'}`, marginX + 5, yPos);
+    doc.text(`Parcours : ${trajet || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
     doc.text(`Horaires : ${horaires || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
-    doc.text(`Zones desservies : ${zonesDesservies || '……………………………………'}`, marginX + 5, yPos);
-    yPos += lineSpacing + 5;
+  
+    // SECTION 4 - REDEVANCES
+    doc.setFont('times', 'bold');
+    doc.setFontSize(13);
+    const section4Text = '4) REDEVANCES :';
+    const section4Width = doc.getTextWidth(section4Text);
+    doc.text(section4Text, marginX, yPos);
+    doc.line(marginX, yPos + 1.5, marginX + section4Width, yPos + 1.5);
+    yPos += 8;
     
-    // SECTION 4
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'normal');
     doc.setFontSize(12);
-    const section4 = '4) REDEVANCES :';
-    doc.text(section4, marginX, yPos);
-    const section4Width = doc.getStringUnitWidth(section4) * 12 / doc.internal.scaleFactor;
-    drawUnderline(doc, section4, marginX, yPos, section4Width);
-    yPos += lineSpacing + 2;
     
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
     doc.text(`Montant mensuel : ${formatNumber(montantMensuel)} Ariary`, marginX + 5, yPos);
     yPos += lineSpacing;
     
-    doc.text(`Soit au Total annuel : ${formatNumber(totalAnnuel)} Ariary`, marginX + 5, yPos);
+    doc.text(`Frais de dossier : ${formatNumber(fraisDossier)} Ariary`, marginX + 5, yPos);
     yPos += lineSpacing;
     
-    doc.text(`Frais de dossier : ${formatNumber(fraisDossier)} Ariary`, marginX + 5, yPos);
+    // ✅ Soit au Total = (Montant mensuel + Frais de dossier) × Uniter
+    doc.setFont('times', 'bold');
+    doc.text(`Soit au Total : ${formatNumber(soitTotal)} Ariary (${totalEnLettres})`, marginX + 5, yPos);
     yPos += lineSpacing + 2;
     
+    doc.setFont('times', 'normal');
     doc.text(`A compter du : ${aCompterDu || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     doc.text(`Echéance : ${echeance || '……………………………………'}`, marginX + 5, yPos);
-    yPos += lineSpacing + 5;
+    yPos += lineSpacing ;
     
-    // SIGNATURE
+    // Signature
     doc.text(`Je soussigné(e) Mr/Mme ${confirmationNom || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
+    doc.setFontSize(12);
     doc.text('confirme sous ma responsabilité la sincérité et l\'exactitude des renseignements ci-dessus et', marginX + 5, yPos);
     yPos += lineSpacing;
     doc.text('m\'engage à respecter les obligations prévues par le contrat général de représentation.', marginX + 5, yPos);
-    yPos += lineSpacing + 5;
+    yPos += lineSpacing ;
     
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Fait à ${lieuSignature}, le ${dateSignature}`, pageWidth - marginX, yPos, { align: 'right' });
-    yPos += lineSpacing + 5;
+    // Fait à et Signature
+    doc.setFont('times', 'normal');
+    doc.setFontSize(13);
+    doc.text(`Fait à ${lieuSignature}, le ${dateSignature}`, pageWidth - marginX - 5, yPos, { align: 'right' });
+    yPos += lineSpacing ;
     
-    doc.text('(Signature)', pageWidth - marginX - 20, yPos, { align: 'center' });
+    doc.setFont('times', 'italic');
+    doc.setFontSize(13);
+    doc.text('(Signature)', pageWidth - marginX - 5, yPos, { align: 'right' });
+    yPos += 25;
+    
+    // Vérifier l'espace en bas de page
+    const bottomMargin = 25;
+    if (yPos < pageHeight - bottomMargin) {
+      const extraSpace = (pageHeight - bottomMargin) - yPos;
+      if (extraSpace > 0) {
+        // Rien à faire, l'espace est déjà suffisant
+      }
+    }
     
     const fileName = `bus_${(denomination || 'document').replace(/\s/g, '_')}_${Date.now()}.pdf`;
     doc.save(fileName);

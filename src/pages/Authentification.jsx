@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import '../styles/Authentification.css';
 import AdminPanel from './AdminPanel';
 import omdaLogo from '../assets/imagesOMDA.png';
+import { useToast } from '../components/Toast';
 import {
   Lock, User, Eye, EyeOff, Crown, LogIn,
   Menu, X, AlertCircle
@@ -11,6 +12,7 @@ import {
 
 const Authentification = () => {
   const navigate = useNavigate();
+  const showToast = useToast();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -23,6 +25,7 @@ const Authentification = () => {
   const [showAdminPassword, setShowAdminPassword] = useState(false);
   const [adminToken, setAdminToken] = useState(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [isVerifyingAdmin, setIsVerifyingAdmin] = useState(false);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeSection, setActiveSection] = useState('home');
@@ -34,9 +37,11 @@ const Authentification = () => {
   const handleUsernameChange = (e) => setUsername(e.target.value);
   const handlePasswordChange = (e) => setPassword(e.target.value);
 
-  const handleLogin = async () => {
+  // ── LOGIN ────────────────────────────────────────────────
+  const handleLogin = async (e) => {
+    e.preventDefault();
     if (!username || !password) {
-      alert('Veuillez remplir tous les champs');
+      showToast('Veuillez remplir tous les champs', 'error');
       return;
     }
     setIsLoading(true);
@@ -47,6 +52,7 @@ const Authentification = () => {
         body: JSON.stringify({ username, password })
       });
       const data = await response.json();
+
       if (data.success) {
         localStorage.setItem('adminToken', data.adminToken || ('user_' + data.user.id + '_' + Date.now()));
         localStorage.setItem('user', JSON.stringify(data.user));
@@ -54,50 +60,72 @@ const Authentification = () => {
         localStorage.setItem('userRole', data.user.role);
         localStorage.setItem('userName', data.user.nom);
         localStorage.setItem('userId', data.user.id);
+        showToast('Connexion réussie', 'success');
         setTimeout(() => navigate('/dashboard'), 500);
       } else {
-        alert(`❌ ${data.message || 'Identifiants incorrects'}`);
+        showToast(data.message || 'Identifiants incorrects', 'error');
         setIsLoading(false);
       }
     } catch (error) {
       console.error(error);
-      alert('❌ Erreur de connexion au serveur.');
+      showToast('Erreur de connexion au serveur.', 'error');
       setIsLoading(false);
     }
   };
 
+  // ── SUPER ADMIN ──────────────────────────────────────────
   const openAdminPanel = () => {
     setShowAdminPasswordModal(true);
   };
 
-  const verifyAdminPassword = async () => {
-    if (!adminPasswordInput || adminPasswordInput.length !== 4) {
-      alert('Veuillez entrer un code à 4 chiffres');
-      return;
-    }
-    try {
-      const response = await fetch('http://localhost:3001/api/admin/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: adminPasswordInput })
-      });
-      const data = await response.json();
-      if (data.success) {
-        localStorage.setItem('adminToken', data.token);
-        setAdminToken(data.token);
-        setShowAdminPasswordModal(false);
-        setShowAdminPanel(true);
-        setAdminPasswordInput('');
-        setShowAdminPassword(false);
-      } else {
-        alert('Mot de passe incorrect');
-      }
-    } catch (error) {
-      console.error(error);
-      alert('Erreur de vérification');
-    }
-  };
+// src/pages/Authentification.jsx
+// Dans la fonction verifyAdminPassword
 
+// Dans Authentification.jsx - Fonction verifyAdminPassword
+
+const verifyAdminPassword = async () => {
+  if (!adminPasswordInput || adminPasswordInput.length !== 4) {
+    showToast('Veuillez entrer un code à 4 chiffres', 'error');
+    return;
+  }
+  
+  try {
+    // ⭐ URL CORRECTE : /api/admin/verify
+    const response = await fetch('http://localhost:3001/api/admin/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: adminPasswordInput })
+    });
+    
+    const data = await response.json();
+    console.log('📦 Réponse admin:', data);
+    
+    if (data.success) {
+      localStorage.setItem('adminToken', data.token);
+      setAdminToken(data.token);
+      
+      if (data.user) {
+        localStorage.setItem('adminUser', JSON.stringify(data.user));
+        localStorage.setItem('adminName', data.user.nom);
+        localStorage.setItem('adminEmail', data.user.email);
+        localStorage.setItem('adminRole', data.role);
+      }
+      
+      setShowAdminPasswordModal(false);
+      setAdminPasswordInput('');
+      setShowAdminPassword(false);
+      setShowAdminPanel(true);
+      
+      showToast(data.message || 'Accès autorisé ✅', 'success');
+    } else {
+      showToast(data.message || 'Mot de passe incorrect ❌', 'error');
+      setAdminPasswordInput('');
+    }
+  } catch (error) {
+    console.error('❌ Erreur:', error);
+    showToast('Erreur de connexion au serveur', 'error');
+  }
+};
   const sectionContent = {
     home: {
       title: "Bienvenue à l'OMDA",
@@ -146,7 +174,7 @@ const Authentification = () => {
             <a href="#" onClick={() => setActiveSection('contact')} className={activeSection === 'contact' ? 'active' : ''}>Contact</a>
           </nav>
           <div className="header-right">
-            <button className="mobile-menu-btn" onClick={() => setMenuOpen(!menuOpen)}>
+            <button className="mobile-menu-btn" type="button" onClick={() => setMenuOpen(!menuOpen)}>
               {menuOpen ? <X size={22} /> : <Menu size={22} />}
             </button>
           </div>
@@ -159,7 +187,7 @@ const Authentification = () => {
               <p className="hero-description">{currentContent.description}</p>
               <p className="hero-subtext">{currentContent.subtext}</p><br />
               <div className="admin-link">
-                <button className="admin-trigger" onClick={openAdminPanel}>
+                <button className="admin-trigger" type="button" onClick={openAdminPanel}>
                   <Crown size={14} /> Accès Super Admin
                 </button>
               </div>
@@ -173,12 +201,12 @@ const Authentification = () => {
                   <p className="login-subtitle">Connectez-vous à votre espace</p>
                 </div>
 
-                <form className="login-form" onSubmit={(e) => e.preventDefault()}>
+                <form className="login-form" onSubmit={handleLogin}>
                   <div className="form-group">
                     <label><User size={14} /> Identifiant</label>
                     <input
                       type="text"
-                      placeholder="Votre email "
+                      placeholder="Votre email"
                       className="input-field"
                       value={username}
                       onChange={handleUsernameChange}
@@ -208,8 +236,8 @@ const Authentification = () => {
                   </div>
 
                   <button
+                    type="submit"
                     className={`login-btn ${(!isFormValid || isLoading) ? 'disabled' : ''}`}
-                    onClick={handleLogin}
                     disabled={!isFormValid || isLoading}
                   >
                     {isLoading ? 'Connexion en cours…' : (
@@ -264,6 +292,7 @@ const Authentification = () => {
                 placeholder="• • • •"
                 className="admin-password-input"
                 autoFocus
+                disabled={isVerifyingAdmin}
               />
               <button
                 type="button"
@@ -274,12 +303,26 @@ const Authentification = () => {
               </button>
             </div>
             <div className="modal-actions">
-              <button className="btn-validate" onClick={verifyAdminPassword}>Valider</button>
-              <button className="btn-cancel" onClick={() => {
-                setShowAdminPasswordModal(false);
-                setAdminPasswordInput('');
-                setShowAdminPassword(false);
-              }}>Annuler</button>
+              <button
+                type="button"
+                className="btn-validate"
+                onClick={verifyAdminPassword}
+                disabled={isVerifyingAdmin}
+              >
+                {isVerifyingAdmin ? 'Vérification…' : 'Valider'}
+              </button>
+              <button
+                type="button"
+                className="btn-cancel"
+                onClick={() => {
+                  setShowAdminPasswordModal(false);
+                  setAdminPasswordInput('');
+                  setShowAdminPassword(false);
+                }}
+                disabled={isVerifyingAdmin}
+              >
+                Annuler
+              </button>
             </div>
           </div>
         </div>

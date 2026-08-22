@@ -231,65 +231,7 @@ body {
   width: calc(100% - 320px);
 }
 
-.OM15 {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 15px;
-  margin-bottom: 15px;
-  background: #f5fbff;
-  padding: 15px;
-  border-radius: 18px;
-  border: 1px solid rgba(109, 181, 255, 0.2);
-}
 
-.OM15A {
-  width: 90px;
-  height: 90px;
-  border-radius: 50%;
-  border: 3px solid #6db5ff;
-  background-image: url('../assets/imagesOMDA.png');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-}
-
-.OM15C {
-  width: 90px;
-  height: 90px;
-  border-radius: 50%;
-  border: 3px solid #6db5ff;
-  background-image: url('../assets/graphe6.PNG');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-}
-
-.OM15B {
-  text-align: center;
-}
-
-.OM15B h1 {
-  font-size: 42px;
-  font-weight: 700;
-  color: #5aadff;
-  line-height: 1.2;
-}
-
-.OM15B h3 {
-  font-size: 16px;
-  color: #4a6fa5;
-  background: rgba(109, 181, 255, 0.1);
-  padding: 5px 15px;
-  border-radius: 25px;
-  display: inline-block;
-}
-
-.OM15T {
-  height: 2px;
-  background: linear-gradient(90deg, transparent, #6db5ff, #5aadff, #6db5ff, transparent);
-  margin: 10px 0 15px;
-}
 
 fieldset {
   border: none;
@@ -309,6 +251,12 @@ legend {
   border: 1px solid rgba(109, 181, 255, 0.3);
   margin-left: 10px;
 }
+
+
+
+
+
+
 
 /* ===== PARAM CARD ===== */
 .param-card {
@@ -1403,7 +1351,7 @@ legend {
    ============================================================ */
 
 /* ===== RESPONSIVE HEADER ===== */
-@media (max-width: 992px) {
+@media (max-width: 1005px) {
   .header-nav {
     display: none;
   }
@@ -1468,7 +1416,6 @@ legend {
     margin-left: 20px;
     width: calc(100% - 40px);
   }
-  .OM15 { flex-direction: column; }
 }
 
 /* ===== RESPONSIVE PARAM CARD ===== */

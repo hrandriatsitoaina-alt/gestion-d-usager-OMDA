@@ -1,3 +1,4 @@
+// src/pages/ConfirmePaiement.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -25,7 +26,6 @@ const ConfirmePaiement = () => {
   const [soitTotal, setSoitTotal] = useState(0);
   const [anneesDisponibles, setAnneesDisponibles] = useState([]);
 
-  // Mapping des types
   const typeLabels = {
     hotel: 'Hôtel',
     'grand-surface': 'Grande Surface',
@@ -218,7 +218,6 @@ const ConfirmePaiement = () => {
         )}
 
         <div className="confirme-card">
-          {/* Header */}
           <div className="confirme-header">
             <div className="header-left">
               <div className="header-icon-wrapper" style={{ background: color }}>
@@ -234,7 +233,6 @@ const ConfirmePaiement = () => {
             </div>
           </div>
 
-          {/* Carte usager */}
           <div className="usager-info-card" style={{ borderColor: color, background: bgColor }}>
             <div className="usager-info-grid">
               <div className="info-item">
@@ -286,7 +284,6 @@ const ConfirmePaiement = () => {
             </div>
           </div>
 
-          {/* Formulaire paiement */}
           <div className="payment-form-card">
             <h3><CreditCard size={20} strokeWidth={1.5} /> Enregistrer le paiement</h3>
             <div className="payment-form">
@@ -358,9 +355,6 @@ const ConfirmePaiement = () => {
             </div>
 
             <div className="button-group">
-              {/* <button className="btn-skip" onClick={handleSkipToConfirmation}> */}
-                {/* <ArrowRight size={18} strokeWidth={2} /> Passer le paiement → Dossier */}
-              {/* </button> */}
               <button
                 className="btn-validate"
                 onClick={submitPayment}

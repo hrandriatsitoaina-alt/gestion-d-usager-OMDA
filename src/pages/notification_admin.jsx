@@ -1,5 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { 
+  Bell, 
+  Trash2, 
+  XCircle, 
+  Pencil, 
+  Mail, 
+  CheckCheck, 
+  RefreshCw, 
+  ArrowLeft, 
+  Inbox,
+  Sparkles,
+  Store,
+  Bus,
+  Music,
+  Tv,
+  Hotel,
+  ClipboardList,
+  User,
+  Phone,
+  Mail as MailIcon,
+  MapPin,
+  Home,
+  DollarSign,
+  BarChart3,
+  TrendingUp,
+  Eye,
+  AlertCircle
+} from 'lucide-react';
 import '../styles/notification_admin.css';
 import MiniSidebar from '../components/MiniSidebar';
 
@@ -138,13 +166,14 @@ const NotificationAdmin = () => {
     fetchNotifications(token);
   };
 
+  // === ICÔNES AVEC LUCIDE REACT ===
   const getIcon = (type) => {
     switch(type) {
-      case 'delete_request': return '🗑️';
-      case 'delete_completed': return '🗑️';
-      case 'delete_rejected': return '❌';
-      case 'update': return '✏️';
-      default: return '📨';
+      case 'delete_request': return <Trash2 size={20} />;
+      case 'delete_completed': return <Trash2 size={20} />;
+      case 'delete_rejected': return <XCircle size={20} />;
+      case 'update': return <Pencil size={20} />;
+      default: return <Mail size={20} />;
     }
   };
 
@@ -193,13 +222,13 @@ const NotificationAdmin = () => {
 
   const getTypeIcon = (type) => {
     switch(type) {
-      case 'OCC': return '🎭';
-      case 'Grand Surface': return '🏪';
-      case 'Bus': return '🚌';
-      case 'Night club': return '🎵';
-      case 'Télé/Radio': return '📺';
-      case 'Hôtel': return '🏨';
-      default: return '📋';
+      case 'OCC': return <Sparkles size={18} />;
+      case 'Grand Surface': return <Store size={18} />;
+      case 'Bus': return <Bus size={18} />;
+      case 'Night club': return <Music size={18} />;
+      case 'Télé/Radio': return <Tv size={18} />;
+      case 'Hôtel': return <Hotel size={18} />;
+      default: return <ClipboardList size={18} />;
     }
   };
 
@@ -223,12 +252,12 @@ const NotificationAdmin = () => {
       <main className="notification-admin-container">
         <div className="notification-admin-header">
           <div className="header-left">
-            <h1>🔔 Centre de Notifications</h1>
+            <h1><Bell size={24} style={{ marginRight: '10px', verticalAlign: 'middle' }} /> Centre de Notifications</h1>
             <p>Historique des modifications et suppressions</p>
           </div>
           <div className="header-right">
             <button className="btn-back-dashboard" onClick={() => navigate('/dashboard')}>
-              ← Retour au Dashboard
+              <ArrowLeft size={18} style={{ marginRight: '6px' }} /> Retour au Dashboard
             </button>
           </div>
         </div>
@@ -261,25 +290,25 @@ const NotificationAdmin = () => {
         <div className="notification-admin-actions">
           {stats.nonLues > 0 && (
             <button className="btn-mark-all" onClick={markAllAsRead}>
-              ✅ Tout marquer comme lu
+              <CheckCheck size={18} style={{ marginRight: '6px' }} /> Tout marquer comme lu
             </button>
           )}
           <button className="btn-refresh" onClick={() => fetchNotifications(token || 'super_admin_secret_2026')}>
-            🔄 Rafraîchir
+            <RefreshCw size={18} style={{ marginRight: '6px' }} /> Rafraîchir
           </button>
         </div>
 
         {/* LISTE DES NOTIFICATIONS */}
         {error ? (
           <div className="notification-admin-error">
-            <p>❌ {error}</p>
+            <p><AlertCircle size={18} style={{ marginRight: '8px' }} /> {error}</p>
             <button className="btn-retry" onClick={() => fetchNotifications(token || 'super_admin_secret_2026')}>
               Réessayer
             </button>
           </div>
         ) : notifications.length === 0 ? (
           <div className="notification-admin-empty">
-            <span className="empty-icon">📭</span>
+            <span className="empty-icon"><Inbox size={48} /></span>
             <p>Aucune notification</p>
             <small>Les modifications et suppressions apparaitront ici</small>
           </div>
@@ -301,7 +330,7 @@ const NotificationAdmin = () => {
                         {getTypeLabel(notif.type)}
                       </span>
                       <span className="notif-date">
-                        📅 {formatDate(notif.created_at)}
+                         {formatDate(notif.created_at)}
                       </span>
                     </div>
                     
@@ -315,44 +344,44 @@ const NotificationAdmin = () => {
                         </div>
                         <div className="usager-details-grid">
                           <div className="usager-detail-item">
-                            <span className="detail-label">🏢 Dénomination:</span>
+                            <span className="detail-label"><Store size={14} style={{ marginRight: '4px' }} /> Dénomination:</span>
                             <span className="detail-value">{usager.denomination || 'N/A'}</span>
                           </div>
                           <div className="usager-detail-item">
-                            <span className="detail-label">👤 Demandeur:</span>
+                            <span className="detail-label"><User size={14} style={{ marginRight: '4px' }} /> Demandeur:</span>
                             <span className="detail-value">{usager.demandeur || 'N/A'}</span>
                           </div>
                           <div className="usager-detail-item">
-                            <span className="detail-label">📞 Téléphone:</span>
+                            <span className="detail-label"><Phone size={14} style={{ marginRight: '4px' }} /> Téléphone:</span>
                             <span className="detail-value">{usager.telephone || 'N/A'}</span>
                           </div>
                           <div className="usager-detail-item">
-                            <span className="detail-label">📧 Email:</span>
+                            <span className="detail-label"><MailIcon size={14} style={{ marginRight: '4px' }} /> Email:</span>
                             <span className="detail-value">{usager.email || 'N/A'}</span>
                           </div>
                           <div className="usager-detail-item">
-                            <span className="detail-label">📍 Région:</span>
+                            <span className="detail-label"><MapPin size={14} style={{ marginRight: '4px' }} /> Région:</span>
                             <span className="detail-value">{usager.region || 'N/A'}</span>
                           </div>
                           <div className="usager-detail-item">
-                            <span className="detail-label">🏠 Adresse:</span>
+                            <span className="detail-label"><Home size={14} style={{ marginRight: '4px' }} /> Adresse:</span>
                             <span className="detail-value">{usager.adresse || usager.adresse_siege || 'N/A'}</span>
                           </div>
                           {usager.frais_dossier > 0 && (
                             <div className="usager-detail-item">
-                              <span className="detail-label">💰 Frais dossier:</span>
+                              <span className="detail-label"><DollarSign size={14} style={{ marginRight: '4px' }} /> Frais dossier:</span>
                               <span className="detail-value">{usager.frais_dossier.toLocaleString()} Ar</span>
                             </div>
                           )}
                           {usager.montant_mensuel > 0 && (
                             <div className="usager-detail-item">
-                              <span className="detail-label">📊 Montant mensuel:</span>
+                              <span className="detail-label"><BarChart3 size={14} style={{ marginRight: '4px' }} /> Montant mensuel:</span>
                               <span className="detail-value">{usager.montant_mensuel.toLocaleString()} Ar</span>
                             </div>
                           )}
                           {usager.soit_total > 0 && (
                             <div className="usager-detail-item">
-                              <span className="detail-label">📈 Soit total:</span>
+                              <span className="detail-label"><TrendingUp size={14} style={{ marginRight: '4px' }} /> Soit total:</span>
                               <span className="detail-value">{usager.soit_total.toLocaleString()} Ar</span>
                             </div>
                           )}
@@ -360,7 +389,7 @@ const NotificationAdmin = () => {
                       </div>
                     )}
                     
-                    {!notif.read && <div className="notif-unread-dot"></div>}
+                    {!notif.read && <div className="notif-unread-dot"><Eye size={12} /></div>}
                   </div>
                 </div>
               );

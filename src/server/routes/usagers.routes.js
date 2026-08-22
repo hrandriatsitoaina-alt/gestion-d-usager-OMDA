@@ -413,6 +413,7 @@ router.get('/usagers/hotel/:id', async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
 router.get('/usagers/magasin/:id', async (req, res) => {
   const { id } = req.params;
   try {
@@ -424,6 +425,7 @@ router.get('/usagers/magasin/:id', async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
 router.get('/usagers/media/:id', async (req, res) => {
   const { id } = req.params;
   try {
@@ -435,6 +437,7 @@ router.get('/usagers/media/:id', async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
 router.get('/usagers/occasionnel/:id', async (req, res) => {
   const { id } = req.params;
   try {
@@ -446,6 +449,7 @@ router.get('/usagers/occasionnel/:id', async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
 router.get('/usagers/bus/:id', async (req, res) => {
   const { id } = req.params;
   try {
@@ -457,6 +461,7 @@ router.get('/usagers/bus/:id', async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
 router.get('/usagers/nightclub/:id', async (req, res) => {
   const { id } = req.params;
   try {
@@ -526,7 +531,7 @@ router.get('/occ/dossier-number', async (req, res) => {
 });
 
 // ============================================================
-// POST - Ajouter un usager
+// POST - Ajouter un usager (AVEC INCRÉMENTATION COMPTEUR)
 // ============================================================
 router.post('/usagers', async (req, res) => {
   const { type, userId, ...data } = req.body;
@@ -544,6 +549,7 @@ router.post('/usagers', async (req, res) => {
     };
     tableName = typeMapping[type];
     if (!tableName) return res.status(400).json({ success: false, message: 'Type d\'usager inconnu' });
+    
     switch(type) {
       case 'Hôtel':
         insertData = { 
@@ -555,14 +561,14 @@ router.post('/usagers', async (req, res) => {
           representant_tel: data.representantTel || '', representant_cin: data.representantCin || '', 
           representant_cin_delivree: data.representantCinDelivree || null, 
           representant_cin_lieu: data.representantCinLieu || '', 
-          representant_fonction: data.representantFonction || '', activite: data.activite || '', 
+          representant_fonction: data.representantFonktion || '', activite: data.activite || '', 
           moyens_communication: JSON.stringify(data.moyensCommunication || {}), 
           total: data.total || '', a_compter_du: data.aCompterDu || null, 
           echeance: data.echeance || null, confirmation_nom: data.confirmationNom || '', 
           date_signature: data.dateSignature || null, lieu_signature: data.lieuSignature || '', 
           type_paiement: 'mensuel', montant_mensuel: parseFloat(data.montantMensuel) || 0, 
           frais_dossier: parseFloat(data.fraisDossier) || 0,
-          region: data.region || '', uniter: uniter
+          region: data.region || '', uniter: uniter, created_by: userId
         };
         break;
       case 'Grand Surface':
@@ -582,7 +588,7 @@ router.post('/usagers', async (req, res) => {
           date_signature: data.dateSignature || null, lieu_signature: data.lieuSignature || '', 
           type_paiement: 'mensuel', montant_mensuel: parseFloat(data.montantMensuel) || 0, 
           frais_dossier: parseFloat(data.fraisDossier) || 0,
-          region: data.region || '', uniter: uniter
+          region: data.region || '', uniter: uniter, created_by: userId
         };
         break;
       case 'Bus':
@@ -602,7 +608,7 @@ router.post('/usagers', async (req, res) => {
           frais_dossier: parseFloat(data.fraisDossier) || 0,
           region: data.region || '', confirmation_nom: data.confirmationNom || '',
           date_signature: data.dateSignature || null, lieu_signature: data.lieuSignature || '',
-          uniter: uniter
+          uniter: uniter, created_by: userId
         };
         break;
       case 'Night club':
@@ -622,7 +628,7 @@ router.post('/usagers', async (req, res) => {
           montant_mensuel: parseFloat(data.montantMensuel) || 0, frais_dossier: parseFloat(data.fraisDossier) || 0,
           region: data.region || '', confirmation_nom: data.confirmationNom || '',
           date_signature: data.dateSignature || null, lieu_signature: data.lieuSignature || '',
-          uniter: uniter
+          uniter: uniter, created_by: userId
         };
         break;
       case 'Télé/Radio':
@@ -651,7 +657,7 @@ router.post('/usagers', async (req, res) => {
           frais_dossier: parseFloat(data.fraisDossier) || 0,
           region: data.region || '', confirmation_nom: data.confirmationNom || '',
           date_signature: data.dateSignature || null, lieu_signature: data.lieuSignature || '',
-          uniter: uniter
+          uniter: uniter, created_by: userId
         };
         break;
       case 'OCC':
@@ -677,8 +683,8 @@ router.post('/usagers', async (req, res) => {
           denomination: data.genreManifestation || '', 
           numero_dossier_global: data.numeroDossierGlobal || '',
           numero_dossier_utilisateur: data.numeroDossierUtilisateur || '',
-          uniter: data.uniter || 1
-          // ⭐ AUCUN CHAMP D'ARGENT
+          uniter: data.uniter || 1,
+          created_by: userId
         };
         break;
       default: return res.status(400).json({ success: false, message: 'Type d\'usager inconnu' });
@@ -690,48 +696,112 @@ router.post('/usagers', async (req, res) => {
     const result = await pool.query(query, values);
     const newId = result.rows[0].id;
     
+    // ============================================================
+    // ✅ INCRÉMENTATION DU COMPTEUR POUR TOUS LES TYPES
+    // ============================================================
     if (userId) {
       const currentYear = new Date().getFullYear();
       const userIdInt = parseInt(userId);
+      
+      // Vérifier si le compteur existe
       let counterResult = await pool.query(
         `SELECT compteur, id FROM compteurs_dossiers_utilisateurs 
          WHERE utilisateur_id = $1 AND annee = $2 AND type_usager = $3`,
         [userIdInt, currentYear, type]
       );
+      
       let nouveauCompteur = 0;
       if (counterResult.rows.length > 0) {
+        // Incrémenter le compteur existant
         nouveauCompteur = counterResult.rows[0].compteur + 1;
-        await pool.query(`UPDATE compteurs_dossiers_utilisateurs SET compteur = $1, updated_at = NOW() WHERE id = $2`, [nouveauCompteur, counterResult.rows[0].id]);
+        await pool.query(
+          `UPDATE compteurs_dossiers_utilisateurs 
+           SET compteur = $1, updated_at = NOW() 
+           WHERE id = $2`,
+          [nouveauCompteur, counterResult.rows[0].id]
+        );
+        console.log(`✅ Compteur ${type} incrémenté à ${nouveauCompteur} pour l'utilisateur ${userId}`);
       } else {
-        await pool.query(`INSERT INTO compteurs_dossiers_utilisateurs (utilisateur_id, annee, compteur, type_usager) VALUES ($1, $2, 1, $3)`, [userIdInt, currentYear, type]);
+        // Créer un nouveau compteur
         nouveauCompteur = 1;
+        await pool.query(
+          `INSERT INTO compteurs_dossiers_utilisateurs 
+           (utilisateur_id, annee, compteur, type_usager, created_at, updated_at) 
+           VALUES ($1, $2, 1, $3, NOW(), NOW())`,
+          [userIdInt, currentYear, type]
+        );
+        console.log(`✅ Nouveau compteur ${type} créé pour l'utilisateur ${userId}`);
       }
+      
+      // Mettre à jour le numéro de dossier utilisateur
       const prefix = data.prefix || '';
-      const trimestre = Math.ceil((new Date().getMonth()+1)/4);
+      const trimestre = Math.ceil((new Date().getMonth() + 1) / 4);
       const numeroDossierUtilisateur = `${prefix} ${nouveauCompteur}/${trimestre}/${currentYear}`;
-      await pool.query(`UPDATE ${tableName} SET numero_dossier_utilisateur = $1 WHERE id = $2`, [numeroDossierUtilisateur, newId]);
+      await pool.query(
+        `UPDATE ${tableName} SET numero_dossier_utilisateur = $1 WHERE id = $2`,
+        [numeroDossierUtilisateur, newId]
+      );
+      
+      console.log(`📁 Numéro dossier: ${numeroDossierUtilisateur}`);
     }
     
+    // ============================================================
+    // GESTION DES ARTISTES POUR OCC
+    // ============================================================
     if (type === 'OCC') {
       const allArtists = [];
-      if (data.artistes && data.artistes.trim() !== '') allArtists.push({ nom: data.artistes.trim(), prenom: '', role: 'Artiste principal' });
+      if (data.artistes && data.artistes.trim() !== '') {
+        allArtists.push({ nom: data.artistes.trim(), prenom: '', role: 'Artiste principal' });
+      }
       if (data.otherArtistsDetail && data.otherArtistsDetail.length > 0) {
         for (const artist of data.otherArtistsDetail) {
-          if (artist.nom && artist.nom.trim() !== '') allArtists.push({ nom: artist.nom.trim(), prenom: artist.prenom||'', role: artist.role||'Artiste participant' });
+          if (artist.nom && artist.nom.trim() !== '') {
+            allArtists.push({ 
+              nom: artist.nom.trim(), 
+              prenom: artist.prenom || '', 
+              role: artist.role || 'Artiste participant' 
+            });
+          }
         }
       }
       for (const artist of allArtists) {
         let artisteId;
-        const existingArtiste = await pool.query('SELECT id FROM artistes WHERE LOWER(nom) = LOWER($1)', [artist.nom]);
+        const existingArtiste = await pool.query(
+          'SELECT id FROM artistes WHERE LOWER(nom) = LOWER($1)',
+          [artist.nom]
+        );
         if (existingArtiste.rows.length === 0) {
-          const newArtiste = await pool.query('INSERT INTO artistes (nom, prenom, role) VALUES ($1, $2, $3) RETURNING id', [artist.nom, artist.prenom, artist.role]);
+          const newArtiste = await pool.query(
+            'INSERT INTO artistes (nom, prenom, role) VALUES ($1, $2, $3) RETURNING id',
+            [artist.nom, artist.prenom, artist.role]
+          );
           artisteId = newArtiste.rows[0].id;
-        } else artisteId = existingArtiste.rows[0].id;
-        await pool.query('INSERT INTO event_artistes (event_id, artiste_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [newId, artisteId]);
+        } else {
+          artisteId = existingArtiste.rows[0].id;
+        }
+        await pool.query(
+          'INSERT INTO event_artistes (event_id, artiste_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+          [newId, artisteId]
+        );
       }
     }
+    
+    // ============================================================
+    // NOTIFICATION
+    // ============================================================
+    try {
+      await pool.query(
+        `INSERT INTO notifications (message, type, usager_id, created_at) 
+         VALUES ($1, $2, $3, NOW())`,
+        [`Nouveau ${type} ajouté: ${data.denomination || data.genreManifestation || 'Nouvel usager'}`, 'new', newId]
+      );
+    } catch (notifError) {
+      console.log('⚠️ Erreur notification:', notifError.message);
+    }
+    
     console.log(`✅ ${type} ajouté avec succès - ID: ${newId}`);
     res.json({ success: true, id: newId, message: `${type} ajouté avec succès` });
+    
   } catch (error) {
     console.error('❌ Erreur ajout usager:', error);
     res.status(500).json({ success: false, message: error.message });

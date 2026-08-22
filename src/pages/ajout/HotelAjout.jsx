@@ -7,9 +7,11 @@ import {
   ArrowLeft, ArrowRight, Save, X, Edit, Hash, Radio, Tv,
   Headphones, MoreHorizontal, Briefcase, Home, PlusCircle
 } from 'lucide-react';
+import { useToast } from '../../components/Toast';
 
 const HotelAjout = ({ onCancel }) => {
   const navigate = useNavigate();
+  const showToast = useToast();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [userInfo, setUserInfo] = useState({ 
@@ -21,8 +23,10 @@ const HotelAjout = ({ onCancel }) => {
   const [montant, setMontant] = useState('');
   const [uniter, setUniter] = useState(1);
   const [soitTotal, setSoitTotal] = useState(0);
+
   const [regionsList, setRegionsList] = useState([]);
   const [newRegion, setNewRegion] = useState('');
+  const [newRegionPhone, setNewRegionPhone] = useState('');
   const [showAddRegion, setShowAddRegion] = useState(false);
 
   const [hotelData, setHotelData] = useState({
@@ -40,6 +44,16 @@ const HotelAjout = ({ onCancel }) => {
     total: '', aCompterDu: '', echeance: '', confirmationNom: '', dateSignature: '', lieuSignature: '',
     region: ''
   });
+
+  const formatPhoneNumber = (phone) => {
+    if (!phone) return '';
+    const cleaned = phone.replace(/\s/g, '').replace(/[^0-9]/g, '');
+    if (cleaned.length === 0) return '';
+    if (cleaned.length <= 3) return cleaned;
+    if (cleaned.length <= 5) return `${cleaned.slice(0, 3)} ${cleaned.slice(3)}`;
+    if (cleaned.length <= 8) return `${cleaned.slice(0, 3)} ${cleaned.slice(3, 5)} ${cleaned.slice(5)}`;
+    return `${cleaned.slice(0, 3)} ${cleaned.slice(3, 5)} ${cleaned.slice(5, 8)} ${cleaned.slice(8, 10)}`;
+  };
 
   const formatNumber = (value) => {
     if (value === '' || value === null || value === undefined) return '';
@@ -85,26 +99,57 @@ const HotelAjout = ({ onCancel }) => {
     try {
       const response = await fetch('http://localhost:3001/api/regions');
       const result = await response.json();
-      if (result.success) setRegionsList(result.regions.map(r => r.nom));
-    } catch (error) { console.error(error); }
+      if (result.success) {
+        setRegionsList(result.regions);
+      }
+    } catch (error) {
+      console.error('Erreur chargement régions:', error);
+    }
   };
 
   const handleAddRegion = async () => {
-    if (newRegion.trim() && !regionsList.includes(newRegion.trim())) {
-      try {
-        const response = await fetch('http://localhost:3001/api/regions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nom: newRegion.trim() })
-        });
-        const result = await response.json();
-        if (result.success) {
-          setRegionsList([...regionsList, newRegion.trim()]);
-          setNewRegion('');
-          setShowAddRegion(false);
-          alert(`✅ Région "${newRegion.trim()}" ajoutée!`);
-        }
-      } catch (error) { console.error(error); }
+    const trimmed = newRegion.trim();
+    if (!trimmed) {
+      showToast('Veuillez saisir un nom de région', 'error');
+      return;
+    }
+    if (regionsList.some(r => r.nom === trimmed)) {
+      showToast('Cette région existe déjà', 'error');
+      return;
+    }
+
+    const adminToken = localStorage.getItem('adminToken');
+    if (!adminToken) {
+      showToast('Token administrateur manquant. Veuillez vous reconnecter.', 'error');
+      return;
+    }
+
+    try {
+      const response = await fetch('http://localhost:3001/api/regions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'adminToken': adminToken
+        },
+        body: JSON.stringify({
+          nom: trimmed,
+          telephone: newRegionPhone.trim() || null
+        })
+      });
+      const result = await response.json();
+      if (result.success) {
+        setRegionsList([...regionsList, result.region]);
+        setNewRegion('');
+        setNewRegionPhone('');
+        setShowAddRegion(false);
+        showToast(`✅ Région "${trimmed}" ajoutée !`, 'success');
+        loadRegions();
+      } else {
+        showToast(`❌ ${result.message}`, 'error');
+      }
+    } catch (error) {
+      console.error('Erreur ajout région:', error);
+      showToast('❌ Erreur de connexion', 'error');
     }
   };
 
@@ -175,7 +220,7 @@ const HotelAjout = ({ onCancel }) => {
 
     if (currentStep === 1) {
       if (!hotelData.demandeur || !hotelData.denomination || !hotelData.region) {
-        alert('Veuillez remplir les champs obligatoires: Demandeur, Dénomination et Région');
+        showToast('Veuillez remplir les champs obligatoires: Demandeur, Dénomination et Région', 'error');
         return;
       }
       setCurrentStep(2);
@@ -183,7 +228,7 @@ const HotelAjout = ({ onCancel }) => {
     }
     if (currentStep === 2) {
       if (!hotelData.representantNom || !hotelData.representantCin) {
-        alert('Veuillez remplir les infos du représentant légal');
+        showToast('Veuillez remplir les infos du représentant légal', 'error');
         return;
       }
       setCurrentStep(3);
@@ -191,7 +236,7 @@ const HotelAjout = ({ onCancel }) => {
     }
     if (currentStep === 3) {
       if (!hotelData.activite) {
-        alert('Veuillez sélectionner une activité');
+        showToast('Veuillez sélectionner une activité', 'error');
         return;
       }
       setCurrentStep(4);
@@ -207,7 +252,7 @@ const HotelAjout = ({ onCancel }) => {
     setIsSubmitting(true);
     const currentUser = getCurrentUser();
     if (!currentUser || !currentUser.id) {
-      alert('Erreur: Utilisateur non identifié');
+      showToast('Erreur: Utilisateur non identifié', 'error');
       setIsSubmitting(false);
       return;
     }
@@ -215,6 +260,7 @@ const HotelAjout = ({ onCancel }) => {
     const finalData = {
       type: 'Hôtel',
       userId: currentUser.id,
+      prefix: userInfo.prefix || currentUser.prefix || '',
       ...hotelData,
       fraisDossier: parseFloat(fraisDossier) || 0,
       montantMensuel: parseFloat(montant) || 0,
@@ -229,8 +275,27 @@ const HotelAjout = ({ onCancel }) => {
         body: JSON.stringify(finalData)
       });
       const result = await response.json();
+      
       if (result.success) {
-        alert('✅ Hôtel ajouté avec succès !');
+        const updatedUser = getCurrentUser();
+        if (updatedUser) {
+          updatedUser.compteurs = updatedUser.compteurs || {};
+          const nouveauCompteur = (updatedUser.compteurs['Hôtel'] || 0) + 1;
+          updatedUser.compteurs['Hôtel'] = nouveauCompteur;
+          localStorage.setItem('user', JSON.stringify(updatedUser));
+          
+          setUserInfo(prev => ({
+            ...prev,
+            compteurs: {
+              ...prev.compteurs,
+              'Hôtel': nouveauCompteur
+            }
+          }));
+          
+          console.log(`✅ Compteur Hôtel incrémenté à ${nouveauCompteur}`);
+        }
+        
+        showToast('✅ Hôtel ajouté avec succès !', 'success');
         navigate('/confirme-paiement', { 
           state: { 
             usager: { 
@@ -239,32 +304,40 @@ const HotelAjout = ({ onCancel }) => {
               demandeur: hotelData.demandeur,
               telephone: hotelData.telephone,
               region: hotelData.region,
-              montant_mensuel: parseFloat(montant) || 0,
-              frais_dossier: parseFloat(fraisDossier) || 0,
-              montant_total: parseFloat(montant) || 0,
-              soit_total: soitTotal,
-              adresse: hotelData.adresseSiege,
+              adresse_siege: hotelData.adresseSiege,
+              nif_stat: hotelData.nifStat,
+              email: hotelData.email,
               etoiles: hotelData.etoiles,
               ravinala: hotelData.ravinala,
               activite: hotelData.activite,
               representant_nom: hotelData.representantNom,
-              representant_par: hotelData.representantPar,
-              date_evenement: null,
-              lieu_evenement: null,
-              genre_manifestation: null,
-              organisateurs: null,
-              artistes: null,
-              nom_evenement: null
+              representant_adresse: hotelData.representantAdresse,
+              representant_tel: hotelData.representantTel,
+              representant_cin: hotelData.representantCin,
+              representant_cin_delivree: hotelData.representantCinDelivree,
+              representant_cin_lieu: hotelData.representantCinLieu,
+              representant_fonction: hotelData.representantFonction,
+              moyens_communication: hotelData.moyensCommunication,
+              a_compter_du: hotelData.aCompterDu,
+              echeance: hotelData.echeance,
+              confirmation_nom: hotelData.confirmationNom,
+              lieu_signature: hotelData.lieuSignature,
+              date_signature: hotelData.dateSignature,
+              montant_mensuel: parseFloat(montant) || 0,
+              frais_dossier: parseFloat(fraisDossier) || 0,
+              soit_total: soitTotal,
+              uniter: uniter,
+              numero_dossier_utilisateur: `${userInfo.prefix || ''} ${(userInfo.compteurs?.['Hôtel'] || 0) + 1}/${getTrimestreFromMonth(new Date().getMonth() + 1)}/${userInfo.anneeEnCours || new Date().getFullYear()}`
             }, 
             type: 'hotel' 
           } 
         });
       } else {
-        alert('❌ Erreur: ' + result.message);
+        showToast('❌ Erreur: ' + result.message, 'error');
       }
     } catch (error) {
       console.error(error);
-      alert('❌ Erreur de connexion');
+      showToast('❌ Erreur de connexion', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -353,16 +426,41 @@ const HotelAjout = ({ onCancel }) => {
           <div className="form-input" style={{ display: 'flex', gap: '10px' }}>
             <select name="region" value={hotelData.region || ''} onChange={handleHotelChange} className="input-style" style={{ flex: 1 }} required>
               <option value="">Sélectionner une région</option>
-              {regionsList.map((region, idx) => (<option key={idx} value={region}>{region}</option>))}
+              {regionsList.map((region) => {
+                const phone = region.telephone && region.telephone.trim() !== '' 
+                  ? formatPhoneNumber(region.telephone) 
+                  : null;
+                return (
+                  <option key={region.id} value={region.nom}>
+                    {region.nom} {phone ? `- ${phone}` : ''}
+                  </option>
+                );
+              })}
             </select>
             <button type="button" onClick={() => setShowAddRegion(!showAddRegion)} className="btn-add-region">+</button>
           </div>
         </div>
+
         {showAddRegion && (
           <div className="form-row">
             <div className="form-label"><h2><PlusCircle size={18} strokeWidth={2} /> Nouvelle région :</h2></div>
-            <div className="form-input" style={{ display: 'flex', gap: '10px' }}>
-              <input type="text" value={newRegion} onChange={(e) => setNewRegion(e.target.value)} placeholder="Nom de la nouvelle région" className="input-style" style={{ flex: 1 }} />
+            <div className="form-input" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <input 
+                type="text" 
+                value={newRegion} 
+                onChange={(e) => setNewRegion(e.target.value)} 
+                placeholder="Nom de la région" 
+                className="input-style" 
+                style={{ flex: 1, minWidth: '150px' }} 
+              />
+              <input 
+                type="text" 
+                value={newRegionPhone} 
+                onChange={(e) => setNewRegionPhone(e.target.value)} 
+                placeholder="Téléphone (optionnel)" 
+                className="input-style" 
+                style={{ flex: 1, minWidth: '150px' }} 
+              />
               <button type="button" onClick={handleAddRegion} className="btn-add-region-confirm">Ajouter</button>
             </div>
           </div>
@@ -517,6 +615,20 @@ const HotelAjout = ({ onCancel }) => {
         <div className="form-label"><h2><Edit size={18} strokeWidth={2} /> Soussigné(e) :</h2></div>
         <div className="form-input">
           <input type="text" name="confirmationNom" value={hotelData.confirmationNom} onChange={handleHotelChange} className="input-style" placeholder="Nom du signataire" />
+        </div>
+      </div>
+
+      <div className="form-row">
+        <div className="form-label"><h2><Calendar size={18} strokeWidth={2} /> A compter du :</h2></div>
+        <div className="form-input">
+          <input type="date" name="aCompterDu" value={hotelData.aCompterDu} onChange={handleHotelChange} className="input-style" />
+        </div>
+      </div>
+
+      <div className="form-row">
+        <div className="form-label"><h2><Calendar size={18} strokeWidth={2} /> Echéance :</h2></div>
+        <div className="form-input">
+          <input type="date" name="echeance" value={hotelData.echeance} onChange={handleHotelChange} className="input-style" />
         </div>
       </div>
 

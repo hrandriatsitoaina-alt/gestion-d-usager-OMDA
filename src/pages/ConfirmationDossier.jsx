@@ -1,3 +1,4 @@
+// src/pages/ConfirmationDossier.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { QRCodeCanvas } from 'qrcode.react';
@@ -8,10 +9,11 @@ import {
   Hotel, Store, Bus, PartyPopper, Tv2, Ticket, File, ArrowLeft,
   Clock, CreditCard, FileCheck, Loader2
 } from 'lucide-react';
-// import '../styles/confirmation-dossier.css';
+import '../styles/confirmation-dossier.css';
 import MiniSidebar from '../components/MiniSidebar';
+import { useToast } from '../components/Toast';
 
-// Import des générateurs PDF (inchangés)
+// Import des générateurs PDF
 import { generateHotelPDF } from './pdf/hotel_pdf';
 import { generateMagasinPDF } from './pdf/magasin_pdf';
 import { generateMediaPDF } from './pdf/media_pdf';
@@ -23,6 +25,7 @@ import { generateFacturePDF } from './pdf/facture_pdf';
 const ConfirmationDossier = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const showToast = useToast();
   const qrRef = useRef(null);
 
   const [usager, setUsager] = useState(null);
@@ -35,6 +38,7 @@ const ConfirmationDossier = () => {
   const [isDownloading, setIsDownloading] = useState(false);
   const [validatedDossiers, setValidatedDossiers] = useState({});
   const [currentUser, setCurrentUser] = useState(null);
+  const [isCreatingFacture, setIsCreatingFacture] = useState(false);
 
   // Mapping des types
   const typeLabels = {
@@ -117,7 +121,7 @@ const ConfirmationDossier = () => {
     fetchCurrentUser();
   }, []);
 
-  // Fonctions utilitaires (inchangées)
+  // Fonctions utilitaires
   const formatDateForQR = (dateString) => {
     if (!dateString) return 'Date non spécifiée';
     try {
@@ -213,7 +217,7 @@ const ConfirmationDossier = () => {
     }
   };
 
-  // Génération des documents
+  // ✅ Génération des documents
   const generateDocument = async (docType) => {
     if (!usager) return;
     setIsGenerating(true);
@@ -265,16 +269,63 @@ const ConfirmationDossier = () => {
     }
   };
 
+  // ✅ Générer tout
   const handleGenerateAll = async () => {
     await generateDocument('Contrat');
     setTimeout(() => generateDocument('Facture'), 500);
     setTimeout(() => generateDocument('QR Code'), 1000);
   };
 
-  // Téléchargement QR
+  // ✅ CRÉER LA FACTURE ET REDIRIGER VERS GENERATION_FACTURE
+  const handleGenerateFacture = async () => {
+    if (!usager || !currentUser) {
+      showToast('Utilisateur non identifié', 'error');
+      return;
+    }
+    
+    setIsCreatingFacture(true);
+    
+    try {
+      setNotification({ type: 'info', message: '🔄 Création de la facture...' });
+      
+      const response = await fetch('http://localhost:3001/api/factures/creer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          usagerId: usager.id,
+          usagerType: usagerType,
+          userId: currentUser.id,
+          typeFacture: 'Redevances',
+          regionUsager: usager.region || ''
+        })
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        setNotification({ type: 'success', message: '✅ Facture créée avec succès' });
+        
+        // Rediriger vers la page de génération
+        setTimeout(() => {
+          navigate('/generation-facture', {
+            state: { factureId: data.factureId }
+          });
+        }, 500);
+      } else {
+        setNotification({ type: 'error', message: '❌ ' + data.message });
+        showToast('❌ ' + data.message, 'error');
+      }
+    } catch (error) {
+      console.error('Erreur:', error);
+      setNotification({ type: 'error', message: '❌ Erreur de création de la facture' });
+      showToast('❌ Erreur de connexion', 'error');
+    } finally {
+      setIsCreatingFacture(false);
+    }
+  };
+
   const handleDownloadQR = async () => {
     if (!qrRef.current) {
-      alert('QR code non disponible');
+      showToast('QR code non disponible', 'error');
       return;
     }
     setIsDownloading(true);
@@ -291,12 +342,10 @@ const ConfirmationDossier = () => {
       link.download = `qr-code-omda-${timestamp}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
-      setNotification({ type: 'success', message: '✅ QR Code téléchargé avec succès' });
-      setTimeout(() => setNotification(null), 3000);
+      showToast('✅ QR Code téléchargé avec succès', 'success');
     } catch (error) {
       console.error('Erreur téléchargement:', error);
-      setNotification({ type: 'error', message: '❌ Erreur téléchargement QR Code' });
-      setTimeout(() => setNotification(null), 3000);
+      showToast('❌ Erreur téléchargement QR Code', 'error');
     } finally {
       setIsDownloading(false);
     }
@@ -487,6 +536,19 @@ const ConfirmationDossier = () => {
             </div>
 
             <div className="documents-actions">
+              {/* ✅ Bouton Facture */}
+              <button
+                className="btn-facture"
+                onClick={handleGenerateFacture}
+                disabled={isCreatingFacture}
+              >
+                {isCreatingFacture ? (
+                  <><Loader2 size={18} className="spinner" strokeWidth={2} /> Création...</>
+                ) : (
+                  <><Receipt size={18} strokeWidth={2} /> Facture</>
+                )}
+              </button>
+
               <button
                 className="btn-generate-all"
                 onClick={handleGenerateAll}
@@ -498,6 +560,7 @@ const ConfirmationDossier = () => {
                   <><FileCheck size={18} strokeWidth={2} /> Tout générer et télécharger</>
                 )}
               </button>
+
               <button className="btn-dashboard" onClick={handleGoDashboard}>
                 <ArrowLeft size={18} strokeWidth={2} /> Retour Dashboard
               </button>

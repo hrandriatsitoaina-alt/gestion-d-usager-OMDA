@@ -1,30 +1,29 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from 'path'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  base: './',
-  root: './',  // La racine est le dossier courant
+  base: './', // ESSENTIEL pour Electron
   server: {
-    port: 3000,
-    open: false,
+    port: 5173,
+    // Important pour Electron
     strictPort: true,
-    host: true
+    host: 'localhost',
   },
   build: {
     outDir: 'dist',
-    emptyOutDir: true,
-    assetsDir: 'assets',
+    sourcemap: false,
+    // Optimisations pour Electron
     rollupOptions: {
-      input: {
-        main: path.resolve(__dirname, 'index.html')
-      }
-    }
+      output: {
+        manualChunks: undefined,
+      },
+    },
   },
+  // Résoudre les problèmes de compatibilité
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src')
-    }
-  }
-})
+      '@': '/src',
+    },
+  },
+});
