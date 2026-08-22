@@ -2,11 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../styles/AdminPanel.css';
-import GestionCrud from './gestion_crud'; // Import du composant de gestion
+import GestionCrud from './gestion_crud';
+import GestionRegionCrud from './gestion_region_crud'; // Import du nouveau composant
 import {
   Users, FolderOpen, Activity, Settings, Bell,
   UserPlus, Edit, Trash2, CheckCircle, XCircle,
-  Crown, LogOut, BarChart, AlertCircle
+  Crown, BarChart, MapPin, Plus
 } from 'lucide-react';
 
 const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
@@ -23,7 +24,6 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
   const [successMsg, setSuccessMsg] = useState(null);
   const [token, setToken] = useState(null);
   const [currentSuperAdmin, setCurrentSuperAdmin] = useState(null);
-  const [currentUserRole, setCurrentUserRole] = useState(null);
   const [currentUserId, setCurrentUserId] = useState(null);
   const [superAdminData, setSuperAdminData] = useState({
     nom: '',
@@ -40,11 +40,10 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
     superAdmins: 0,
     daf: 0
   });
-  
   const [activities, setActivities] = useState([]);
   const [notifications, setNotifications] = useState([]);
-  
-  // État pour la Gestion des Usagers (intégrée)
+
+  // États pour la Gestion des Usagers (intégrée)
   const [selectedType, setSelectedType] = useState('');
   const [filteredUsagers, setFilteredUsagers] = useState([]);
   const [selectedUsager, setSelectedUsager] = useState(null);
@@ -61,10 +60,12 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
     region: ''
   });
 
+  // Suppression des états liés aux régions (déplacés dans GestionRegionCrud)
+
   const usagerTypes = [
     'Hôtel', 'Grand Surface', 'Télé/Radio', 'OCC', 'Bus', 'Night club'
   ];
-  
+
   const [formData, setFormData] = useState({
     nom: '',
     email: '',
@@ -73,34 +74,43 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
     statut: 'actif'
   });
 
-  const roles = [
-    { value: 'user', label: '👤 Utilisateur' },
-    { value: 'admin', label: '👑 Administrateur' },
-    { value: 'daf', label: '📊 DAF' },
-    { value: 'super_admin', label: '⭐ Super Admin' }
-  ];
-
+  // ----------------------------------------------
+  // 1. CHARGEMENT INITIAL
+  // ----------------------------------------------
   useEffect(() => {
     let currentToken = propToken;
     if (!currentToken) {
       currentToken = localStorage.getItem('adminToken');
     }
-    
     if (!currentToken) {
       setError('Session expirée - Veuillez vous reconnecter');
       setLoading(false);
       return;
     }
-    
     setToken(currentToken);
-    fetchUsers(currentToken);
-    fetchUsagers(currentToken);
-    fetchSuperAdmin(currentToken);
-    fetchActivities(currentToken);
-    fetchNotifications(currentToken);
+    fetchAllData(currentToken);
   }, [propToken]);
 
-  // ----- Fetch Notifications -----
+  const fetchAllData = async (currentToken) => {
+    try {
+      await Promise.all([
+        fetchUsers(currentToken),
+        fetchUsagers(currentToken),
+        fetchSuperAdmin(currentToken),
+        fetchActivities(currentToken),
+        fetchNotifications(currentToken)
+        // fetchRegions retiré
+      ]);
+    } catch (err) {
+      console.error('Erreur chargement données:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ----------------------------------------------
+  // 2. REQUÊTES API (sans fetchRegions)
+  // ----------------------------------------------
   const fetchNotifications = async (currentToken) => {
     try {
       const response = await fetch('http://localhost:3001/api/admin/notifications', {
@@ -108,24 +118,17 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
       });
       if (response.ok) {
         const data = await response.json();
-        if (data.success) {
-          setNotifications(data.notifications || []);
-        } else {
-          setNotifications([]);
-        }
-      } else if (response.status === 404) {
-        // Route non trouvée, on ignore
-        setNotifications([]);
+        if (data.success) setNotifications(data.notifications || []);
+        else setNotifications([]);
       } else {
         setNotifications([]);
       }
     } catch (error) {
-      console.error('Erreur fetchNotifications:', error);
+      console.error('fetchNotifications error:', error);
       setNotifications([]);
     }
   };
 
-  // ----- Fonctions existantes (inchangées) -----
   const fetchSuperAdmin = async (currentToken) => {
     try {
       const response = await fetch('http://localhost:3001/api/admin/users', {
@@ -145,7 +148,7 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         }
       }
     } catch (error) {
-      console.error('Erreur fetchSuperAdmin:', error);
+      console.error('fetchSuperAdmin error:', error);
     }
   };
 
@@ -159,7 +162,6 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         setUsers(data.users || []);
         const currentUser = data.users?.find(u => u.role === 'super_admin') || data.users?.[0];
         if (currentUser) {
-          setCurrentUserRole(currentUser.role || 'user');
           setCurrentUserId(currentUser.id);
         }
         const total = data.users?.length || 0;
@@ -168,15 +170,15 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         const admins = data.users?.filter(u => u.role === 'admin').length || 0;
         const superAdmins = data.users?.filter(u => u.role === 'super_admin').length || 0;
         const daf = data.users?.filter(u => u.role === 'daf').length || 0;
-        setStats(prev => ({
-          ...prev,
+        setStats({
           totalUsers: total,
+          totalUsagers: stats.totalUsagers,
           activeUsers: active,
           inactiveUsers: inactive,
           admins: admins,
           superAdmins: superAdmins,
           daf: daf
-        }));
+        });
         setError(null);
       } else {
         setError(data.message || 'Erreur');
@@ -186,10 +188,8 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         }
       }
     } catch (error) {
-      console.error('Erreur fetchUsers:', error);
+      console.error('fetchUsers error:', error);
       setError('Erreur de connexion');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -202,14 +202,12 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
       let usagersData = [];
       if (Array.isArray(data)) {
         usagersData = data;
-      } else if (data && typeof data === 'object') {
-        if (Array.isArray(data.usagers)) {
-          usagersData = data.usagers;
-        } else if (Array.isArray(data.data)) {
-          usagersData = data.data;
-        } else {
-          usagersData = Object.values(data).filter(item => typeof item === 'object' && item !== null && item.id);
-        }
+      } else if (data?.usagers) {
+        usagersData = data.usagers;
+      } else if (data?.data) {
+        usagersData = data.data;
+      } else {
+        usagersData = Object.values(data).filter(item => item && item.id);
       }
       setUsagers(usagersData);
       setStats(prev => ({ ...prev, totalUsagers: usagersData.length }));
@@ -217,7 +215,7 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         handleTypeChange(selectedType);
       }
     } catch (error) {
-      console.error('Erreur fetchUsagers:', error);
+      console.error('fetchUsagers error:', error);
       setUsagers([]);
     }
   };
@@ -234,7 +232,7 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         setActivities([]);
       }
     } catch (error) {
-      console.error('Erreur fetchActivities:', error);
+      console.error('fetchActivities error:', error);
       setActivities([]);
     }
   };
@@ -251,19 +249,17 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
       });
       fetchActivities(token);
     } catch (error) {
-      console.error('Erreur logActivity:', error);
+      console.error('logActivity error:', error);
     }
   };
 
-  // ----- Gestion Utilisateurs -----
+  // ----------------------------------------------
+  // 4. GESTION DES UTILISATEURS (inchangée)
+  // ----------------------------------------------
   const handleAddUser = async (e) => {
     e.preventDefault();
     if (!formData.nom || !formData.email || !formData.mot_de_passe) {
       alert('Veuillez remplir tous les champs');
-      return;
-    }
-    if ((formData.role === 'admin' || formData.role === 'daf') && formData.mot_de_passe.length !== 4) {
-      alert('Le mot de passe Admin/DAF doit contenir 4 chiffres');
       return;
     }
     try {
@@ -273,29 +269,24 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         body: JSON.stringify(formData)
       });
       const data = await response.json();
-      if (data.success) {
-        setSuccessMsg('Utilisateur ajouté avec succès');
-        await logActivity('Ajout utilisateur', `Ajout de l'utilisateur ${formData.nom} (${formData.role})`);
+      if (response.ok && data.success) {
+        setSuccessMsg('Utilisateur ajouté');
+        await logActivity('Ajout utilisateur', `Ajout de ${formData.nom}`);
         setFormData({ nom: '', email: '', mot_de_passe: '', role: 'user', statut: 'actif' });
         setShowAddForm(false);
         fetchUsers(token);
         setTimeout(() => setSuccessMsg(null), 3000);
       } else {
-        alert('Erreur: ' + data.message);
+        alert('Erreur: ' + (data.message || 'Impossible d\'ajouter l\'utilisateur'));
       }
     } catch (error) {
-      console.error('Erreur handleAddUser:', error);
-      alert('Erreur');
+      console.error('handleAddUser error:', error);
+      alert('Erreur de connexion');
     }
   };
 
   const handleEditUser = async (e) => {
     e.preventDefault();
-    if ((editingUser.mot_de_passe && editingUser.mot_de_passe.length !== 4) && 
-        (editingUser.role === 'admin' || editingUser.role === 'daf')) {
-      alert('Le mot de passe Admin/DAF doit contenir 4 chiffres');
-      return;
-    }
     try {
       const updateData = {
         nom: editingUser.nom,
@@ -312,18 +303,18 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         body: JSON.stringify(updateData)
       });
       const data = await response.json();
-      if (data.success) {
-        setSuccessMsg('Utilisateur modifié avec succès');
-        await logActivity('Modification utilisateur', `Modification de l'utilisateur ${editingUser.nom}`);
+      if (response.ok && data.success) {
+        setSuccessMsg('Utilisateur modifié');
+        await logActivity('Modification utilisateur', `Modification de ${editingUser.nom}`);
         setEditingUser(null);
         fetchUsers(token);
         setTimeout(() => setSuccessMsg(null), 3000);
       } else {
-        alert('Erreur: ' + data.message);
+        alert('Erreur: ' + (data.message || 'Impossible de modifier l\'utilisateur'));
       }
     } catch (error) {
-      console.error('Erreur handleEditUser:', error);
-      alert('Erreur');
+      console.error('handleEditUser error:', error);
+      alert('Erreur de connexion');
     }
   };
 
@@ -348,17 +339,17 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         body: JSON.stringify(updateData)
       });
       const data = await response.json();
-      if (data.success) {
-        setSuccessMsg(`Utilisateur ${action} avec succès`);
-        await logActivity('Modification statut', `${action} de l'utilisateur ${user.nom}`);
+      if (response.ok && data.success) {
+        setSuccessMsg(`Utilisateur ${action}`);
+        await logActivity('Modification statut', `${action} de ${user.nom}`);
         fetchUsers(token);
         setTimeout(() => setSuccessMsg(null), 3000);
       } else {
-        alert('Erreur: ' + data.message);
+        alert('Erreur: ' + (data.message || 'Impossible de modifier le statut'));
       }
     } catch (error) {
-      console.error('Erreur handleToggleStatus:', error);
-      alert('Erreur');
+      console.error('handleToggleStatus error:', error);
+      alert('Erreur de connexion');
     }
   };
 
@@ -367,24 +358,24 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
       alert('Impossible de supprimer le Super Admin');
       return;
     }
-    if (!window.confirm(`⚠️ Supprimer définitivement "${nom}" ? Cette action est irréversible !`)) return;
+    if (!window.confirm(`⚠️ Supprimer définitivement "${nom}" ?`)) return;
     try {
       const response = await fetch(`http://localhost:3001/api/admin/users/${id}`, {
         method: 'DELETE',
         headers: { 'adminToken': token }
       });
       const data = await response.json();
-      if (data.success) {
-        setSuccessMsg(`Utilisateur "${nom}" supprimé avec succès`);
-        await logActivity('Suppression utilisateur', `Suppression de l'utilisateur ${nom}`);
+      if (response.ok && data.success) {
+        setSuccessMsg(`Utilisateur "${nom}" supprimé`);
+        await logActivity('Suppression utilisateur', `Suppression de ${nom}`);
         fetchUsers(token);
         setTimeout(() => setSuccessMsg(null), 3000);
       } else {
-        alert('Erreur: ' + data.message);
+        alert('Erreur: ' + (data.message || 'Impossible de supprimer l\'utilisateur'));
       }
     } catch (error) {
-      console.error('Erreur handleDeleteUser:', error);
-      alert('Erreur');
+      console.error('handleDeleteUser error:', error);
+      alert('Erreur de connexion');
     }
   };
 
@@ -392,10 +383,6 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
     e.preventDefault();
     if (superAdminData.mot_de_passe !== superAdminData.confirm_mot_de_passe) {
       alert('Les mots de passe ne correspondent pas');
-      return;
-    }
-    if (superAdminData.mot_de_passe && superAdminData.mot_de_passe.length !== 4) {
-      alert('Le mot de passe doit contenir 4 chiffres');
       return;
     }
     try {
@@ -414,8 +401,8 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         body: JSON.stringify(updateData)
       });
       const data = await response.json();
-      if (data.success) {
-        setSuccessMsg('Compte Super Admin modifié avec succès');
+      if (response.ok && data.success) {
+        setSuccessMsg('Compte Super Admin modifié');
         await logActivity('Modification Super Admin', 'Modification du compte Super Admin');
         setShowEditSuperAdmin(false);
         setSuperAdminData({ ...superAdminData, mot_de_passe: '', confirm_mot_de_passe: '' });
@@ -423,23 +410,24 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         fetchSuperAdmin(token);
         setTimeout(() => setSuccessMsg(null), 3000);
       } else {
-        alert('Erreur: ' + data.message);
+        alert('Erreur: ' + (data.message || 'Impossible de modifier le Super Admin'));
       }
     } catch (error) {
-      console.error('Erreur handleUpdateSuperAdmin:', error);
-      alert('Erreur');
+      console.error('handleUpdateSuperAdmin error:', error);
+      alert('Erreur de connexion');
     }
   };
 
-  // ----- Gestion Usagers (intégrée) -----
+  // ----------------------------------------------
+  // 5. GESTION DES USAGERS (intégrée)
+  // ----------------------------------------------
   const handleTypeChange = (type) => {
     setSelectedType(type);
     const usagersArray = Array.isArray(usagers) ? usagers : [];
     if (type === 'tous') {
       setFilteredUsagers(usagersArray);
     } else if (type) {
-      const filtered = usagersArray.filter(u => u && u.type_usager === type);
-      setFilteredUsagers(filtered);
+      setFilteredUsagers(usagersArray.filter(u => u && u.type_usager === type));
     } else {
       setFilteredUsagers([]);
     }
@@ -474,19 +462,19 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         })
       });
       const data = await response.json();
-      if (data.success) {
-        setSuccessMsg('Usager modifié avec succès');
-        await logActivity('Modification usager', `Modification de l'usager ${selectedUsager.denomination}`);
+      if (response.ok && data.success) {
+        setSuccessMsg('Usager modifié');
+        await logActivity('Modification usager', `Modification de ${selectedUsager.denomination}`);
         setShowEditUsager(false);
         setSelectedUsager(null);
         fetchUsagers(token);
         setTimeout(() => setSuccessMsg(null), 3000);
       } else {
-        alert('Erreur: ' + data.message);
+        alert('Erreur: ' + (data.message || 'Impossible de modifier l\'usager'));
       }
     } catch (error) {
-      console.error('Erreur handleUpdateUsager:', error);
-      alert('Erreur lors de la modification');
+      console.error('handleUpdateUsager error:', error);
+      alert('Erreur de connexion');
     }
   };
 
@@ -504,23 +492,25 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         headers: { 'adminToken': token }
       });
       const data = await response.json();
-      if (data.success) {
-        setSuccessMsg(`Usager "${usagerToDelete.denomination}" supprimé avec succès`);
-        await logActivity('Suppression usager', `Suppression de l'usager ${usagerToDelete.denomination}`);
+      if (response.ok && data.success) {
+        setSuccessMsg(`Usager "${usagerToDelete.denomination}" supprimé`);
+        await logActivity('Suppression usager', `Suppression de ${usagerToDelete.denomination}`);
         setShowDeleteConfirm(false);
         setUsagerToDelete(null);
         fetchUsagers(token);
         setTimeout(() => setSuccessMsg(null), 3000);
       } else {
-        alert('Erreur: ' + data.message);
+        alert('Erreur: ' + (data.message || 'Impossible de supprimer l\'usager'));
       }
     } catch (error) {
-      console.error('Erreur handleDeleteUsager:', error);
-      alert('Erreur lors de la suppression');
+      console.error('handleDeleteUsager error:', error);
+      alert('Erreur de connexion');
     }
   };
 
-  // ----- Filtrage et utilitaires -----
+  // ----------------------------------------------
+  // 6. RENDU
+  // ----------------------------------------------
   const filteredUsers = users.filter(user =>
     user?.nom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user?.email?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -536,27 +526,13 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
     return roleMap[role] || roleMap['user'];
   };
 
-  if (loading) {
-    return (
-      <div className="admin-loading">
-        <div className="loading-spinner"></div>
-        <p>Chargement...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="admin-loading">
-        <p style={{ color: 'red' }}>{error}</p>
-        <button onClick={onClose} className="close-btn">Fermer</button>
-      </div>
-    );
-  }
+  if (loading) return <div className="admin-loading"><div className="loading-spinner"></div><p>Chargement...</p></div>;
+  if (error) return <div className="admin-loading"><p style={{ color: 'red' }}>{error}</p><button onClick={onClose} className="close-btn">Fermer</button></div>;
 
   return (
     <div className="admin-panel">
       {successMsg && <div className="success-message">✓ {successMsg}</div>}
+      {error && <div className="error-message">⚠️ {error}</div>}
 
       <div className="admin-header">
         <div className="header-content">
@@ -591,9 +567,13 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         <button className={`tab ${activeTab === 'gestion' ? 'active' : ''}`} onClick={() => setActiveTab('gestion')}>
           <FolderOpen size={16} /> Gestion Usagers
         </button>
+        {/* Nouvel onglet pour les régions */}
+        <button className={`tab ${activeTab === 'regions' ? 'active' : ''}`} onClick={() => setActiveTab('regions')}>
+          <MapPin size={16} /> Régions
+        </button>
       </div>
 
-      {/* Onglet Utilisateurs */}
+      {/* ---- ONGLET UTILISATEURS ---- */}
       {activeTab === 'users' && (
         <div className="content">
           <div className="content-header">
@@ -632,7 +612,7 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         </div>
       )}
 
-      {/* Onglet Activités */}
+      {/* ---- ONGLET ACTIVITÉS ---- */}
       {activeTab === 'activities' && (
         <div className="content">
           <h3><Activity size={18} /> Historique des activités</h3>
@@ -656,10 +636,11 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         </div>
       )}
 
-      {/* Onglet Paramètres */}
+      {/* ---- ONGLET PARAMÈTRES (sans la gestion des régions) ---- */}
       {activeTab === 'settings' && (
         <div className="content">
           <div className="settings-container">
+            {/* Carte Super Admin */}
             <div className="settings-card">
               <div className="settings-card-header">
                 <Crown size={24} className="settings-icon" />
@@ -669,14 +650,16 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
                 </div>
               </div>
               <div className="settings-card-content">
-                <div className="settings-info">
-                  <div className="info-row"><span className="info-label">👤 Nom:</span><span className="info-value">{currentSuperAdmin?.nom}</span></div>
-                  <div className="info-row"><span className="info-label">📧 Email:</span><span className="info-value">{currentSuperAdmin?.email}</span></div>
-                  <div className="info-row"><span className="info-label">⭐ Rôle:</span><span className="info-value badge-super">Super Admin</span></div>
+                <div className="settings-info-row" style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '15px' }}>
+                  <div className="info-item"><span className="info-label">👤 Nom :</span><span className="info-value">{currentSuperAdmin?.nom}</span></div>
+                  <div className="info-item"><span className="info-label">📧 Email :</span><span className="info-value">{currentSuperAdmin?.email}</span></div>
+                  <div className="info-item"><span className="info-label">⭐ Rôle :</span><span className="info-value badge-super">Super Admin</span></div>
                 </div>
                 <button className="settings-btn" onClick={() => setShowEditSuperAdmin(true)}><Edit size={14} /> Modifier</button>
               </div>
             </div>
+
+            {/* Carte Statistiques */}
             <div className="settings-card">
               <div className="settings-card-header">
                 <BarChart size={24} className="settings-icon" />
@@ -698,7 +681,7 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         </div>
       )}
 
-      {/* Onglet Notifications */}
+      {/* ---- ONGLET NOTIFICATIONS ---- */}
       {activeTab === 'notifications' && (
         <div className="content">
           <h3><Bell size={18} /> Notifications</h3>
@@ -723,15 +706,25 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         </div>
       )}
 
-      {/* Onglet Gestion Usagers - intégré */}
+      {/* ---- ONGLET GESTION USAGERS ---- */}
       {activeTab === 'gestion' && (
         <div className="content gestion-content">
-          {/* On réutilise le composant GestionCrud avec une prop pour revenir */}
           <GestionCrud onBack={() => setActiveTab('users')} />
         </div>
       )}
 
-      {/* Modals (Ajout, Édition, etc.) */}
+      {/* ---- ONGLET GESTION RÉGIONS ---- */}
+      {activeTab === 'regions' && (
+        <div className="content gestion-content">
+          <GestionRegionCrud onBack={() => setActiveTab('users')} />
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* MODALS (utilisateurs, super admin, usagers) - inchangées */}
+      {/* ============================================================ */}
+
+      {/* Ajout utilisateur */}
       {showAddForm && (
         <div className="modal">
           <div className="modal-content">
@@ -756,6 +749,7 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         </div>
       )}
 
+      {/* Édition utilisateur */}
       {editingUser && (
         <div className="modal">
           <div className="modal-content">
@@ -780,6 +774,7 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         </div>
       )}
 
+      {/* Édition Super Admin */}
       {showEditSuperAdmin && currentSuperAdmin && (
         <div className="modal">
           <div className="modal-content">
@@ -801,7 +796,7 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         </div>
       )}
 
-      {/* Modals Usagers */}
+      {/* ---- MODALS USAGERS (inchangées) ---- */}
       {showEditUsager && selectedUsager && (
         <div className="modal">
           <div className="modal-content">

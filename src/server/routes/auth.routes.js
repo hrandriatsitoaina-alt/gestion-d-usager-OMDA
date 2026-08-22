@@ -9,7 +9,6 @@ const config = require('../config');
 router.post('/auth/register', async (req, res) => {
   const { nom, email, mot_de_passe } = req.body;
 
-  // Validation
   if (!nom || !email || !mot_de_passe) {
     return res.status(400).json({ success: false, message: 'Tous les champs sont requis.' });
   }
@@ -18,13 +17,11 @@ router.post('/auth/register', async (req, res) => {
   }
 
   try {
-    // Vérifier si l'email existe déjà
     const existing = await pool.query('SELECT id FROM utilisateurs WHERE email = $1', [email]);
     if (existing.rows.length > 0) {
       return res.status(409).json({ success: false, message: 'Cet email est déjà utilisé.' });
     }
 
-    // Insérer le nouvel utilisateur (role='user', statut='inactif')
     const result = await pool.query(
       `INSERT INTO utilisateurs (nom, email, mot_de_passe, role, statut)
        VALUES ($1, $2, $3, 'user', 'inactif')
@@ -33,8 +30,6 @@ router.post('/auth/register', async (req, res) => {
     );
 
     const newUser = result.rows[0];
-
-    // Optionnel : initialiser les compteurs pour les types d'usager (si la table existe)
     const currentYear = new Date().getFullYear();
     const typesUsager = ['Hôtel', 'Grand Surface', 'Télé/Radio', 'OCC', 'Bus', 'Night club'];
     for (const type of typesUsager) {
@@ -58,7 +53,7 @@ router.post('/auth/register', async (req, res) => {
 });
 
 // ============================================================
-// TES ROUTES EXISTANTES (inchangées)
+// ROUTE DE LOGIN (POST /auth/login)
 // ============================================================
 router.post('/auth/login', async (req, res) => {
   const { username, password } = req.body;
@@ -103,45 +98,11 @@ router.post('/auth/login', async (req, res) => {
   }
 });
 
-router.post('/admin/verify', async (req, res) => {
-  const { password } = req.body;
-  try {
-    const superAdminResult = await pool.query(
-      "SELECT mot_de_passe FROM utilisateurs WHERE role = 'super_admin' LIMIT 1"
-    );
-    let adminPassword = superAdminResult.rows.length > 0 ? superAdminResult.rows[0].mot_de_passe : '1234';
-    
-    if (password === adminPassword) {
-      return res.json({ 
-        success: true, 
-        token: config.ADMIN_SECRET_TOKEN, 
-        message: 'Accès Super Admin autorisé',
-        role: 'super_admin'
-      });
-    }
-    
-    const dafResult = await pool.query(
-      "SELECT mot_de_passe FROM utilisateurs WHERE role = 'daf' LIMIT 1"
-    );
-    if (dafResult.rows.length > 0) {
-      const dafPassword = dafResult.rows[0].mot_de_passe;
-      if (password === dafPassword) {
-        return res.json({ 
-          success: true, 
-          token: config.DAF_SECRET_TOKEN, 
-          message: 'Accès DAF autorisé',
-          role: 'daf'
-        });
-      }
-    }
-    
-    res.status(401).json({ success: false, message: 'Mot de passe incorrect' });
-  } catch (error) {
-    console.error('Erreur verify admin:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
+// ============================================================
+// ROUTES POUR LE FRONTEND (Ces routes doivent RESTER)
+// ============================================================
 
+// ✅ GET /auth/users - Liste des utilisateurs (pour le frontend)
 router.get('/auth/users', async (req, res) => {
   try {
     const result = await pool.query(
@@ -149,10 +110,12 @@ router.get('/auth/users', async (req, res) => {
     );
     res.json({ success: true, users: result.rows });
   } catch (error) {
+    console.error('Erreur auth/users:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
+// ✅ GET /auth/current-user - Récupérer l'utilisateur courant
 router.get('/auth/current-user', async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
@@ -187,6 +150,7 @@ router.get('/auth/current-user', async (req, res) => {
   }
 });
 
+// ✅ GET /users/stats - Statistiques des utilisateurs
 router.get('/users/stats', async (req, res) => {
   try {
     const result = await pool.query(`

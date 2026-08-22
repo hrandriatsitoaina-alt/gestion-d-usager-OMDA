@@ -8,15 +8,17 @@ import {
   ArrowLeft, ArrowRight, Save, X, Eye, Edit, Trash2,
   Hash, Home, Phone, BarChart, Info
 } from 'lucide-react';
+import { useToast } from '../../components/Toast';
 
 const OccAjout = ({ onCancel }) => {
   const navigate = useNavigate();
+  const showToast = useToast();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [userInfo, setUserInfo] = useState({ 
-    id: null, nom: '', prefix: '', 
-    compteurs: { 'OCC': 0 }, 
-    anneeEnCours: new Date().getFullYear() 
+  const [userInfo, setUserInfo] = useState({
+    id: null, nom: '', prefix: '',
+    compteurs: { 'OCC': 0 },
+    anneeEnCours: new Date().getFullYear()
   });
   const [fraisDossier, setFraisDossier] = useState('');
   const [montant, setMontant] = useState('');
@@ -24,9 +26,12 @@ const OccAjout = ({ onCancel }) => {
   const [soitTotal, setSoitTotal] = useState(0);
   const [globalDossierNumber, setGlobalDossierNumber] = useState('');
   const [globalTotalCount, setGlobalTotalCount] = useState(0);
+
   const [regionsList, setRegionsList] = useState([]);
   const [newRegion, setNewRegion] = useState('');
+  const [newRegionPhone, setNewRegionPhone] = useState('');
   const [showAddRegion, setShowAddRegion] = useState(false);
+
   const [hasOtherArtists, setHasOtherArtists] = useState(false);
   const [otherArtistsInputs, setOtherArtistsInputs] = useState([]);
 
@@ -51,6 +56,16 @@ const OccAjout = ({ onCancel }) => {
     lieuAjout: '',
     region: ''
   });
+
+  const formatPhoneNumber = (phone) => {
+    if (!phone) return '';
+    const cleaned = phone.replace(/\s/g, '').replace(/[^0-9]/g, '');
+    if (cleaned.length === 0) return '';
+    if (cleaned.length <= 3) return cleaned;
+    if (cleaned.length <= 5) return `${cleaned.slice(0, 3)} ${cleaned.slice(3)}`;
+    if (cleaned.length <= 8) return `${cleaned.slice(0, 3)} ${cleaned.slice(3, 5)} ${cleaned.slice(5)}`;
+    return `${cleaned.slice(0, 3)} ${cleaned.slice(3, 5)} ${cleaned.slice(5, 8)} ${cleaned.slice(8, 10)}`;
+  };
 
   const formatNumber = (value) => {
     if (value === '' || value === null || value === undefined) return '';
@@ -104,24 +119,28 @@ const OccAjout = ({ onCancel }) => {
     try {
       const response = await fetch('http://localhost:3001/api/regions');
       const result = await response.json();
-      if (result.success) setRegionsList(result.regions.map(r => r.nom));
-    } catch (error) { console.error(error); }
+      if (result.success) {
+        setRegionsList(result.regions);
+      }
+    } catch (error) {
+      console.error('Erreur chargement régions:', error);
+    }
   };
 
   const handleAddRegion = async () => {
     const trimmed = newRegion.trim();
     if (!trimmed) {
-      alert('Veuillez saisir un nom de région');
+      showToast('Veuillez saisir un nom de région', 'error');
       return;
     }
-    if (regionsList.includes(trimmed)) {
-      alert('Cette région existe déjà');
+    if (regionsList.some(r => r.nom === trimmed)) {
+      showToast('Cette région existe déjà', 'error');
       return;
     }
 
-    const currentUser = getCurrentUser();
-    if (!currentUser) {
-      alert('Vous devez être connecté pour ajouter une région');
+    const adminToken = localStorage.getItem('adminToken');
+    if (!adminToken) {
+      showToast('Token administrateur manquant. Veuillez vous reconnecter.', 'error');
       return;
     }
 
@@ -130,24 +149,27 @@ const OccAjout = ({ onCancel }) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentUser.id}`
+          'adminToken': adminToken
         },
-        body: JSON.stringify({ nom: trimmed })
+        body: JSON.stringify({
+          nom: trimmed,
+          telephone: newRegionPhone.trim() || null
+        })
       });
-
       const result = await response.json();
-
-      if (response.ok && result.success) {
-        setRegionsList([...regionsList, trimmed]);
+      if (result.success) {
+        setRegionsList([...regionsList, result.region]);
         setNewRegion('');
+        setNewRegionPhone('');
         setShowAddRegion(false);
-        alert(`✅ Région "${trimmed}" ajoutée avec succès !`);
+        showToast(`✅ Région "${trimmed}" ajoutée !`, 'success');
+        loadRegions();
       } else {
-        alert(`❌ Erreur : ${result.message || 'Impossible d\'ajouter la région'}`);
+        showToast(`❌ ${result.message}`, 'error');
       }
     } catch (error) {
-      console.error('Erreur réseau lors de l\'ajout de la région :', error);
-      alert('❌ Erreur de connexion au serveur');
+      console.error('Erreur ajout région:', error);
+      showToast('❌ Erreur de connexion', 'error');
     }
   };
 
@@ -263,7 +285,7 @@ const OccAjout = ({ onCancel }) => {
 
     if (currentStep === 1) {
       if (!occData.organisateurs || !occData.genreManifestation || !occData.dateEvenement || !occData.lieuEvenement) {
-        alert('Veuillez remplir les champs obligatoires: Organisateurs, Genre, Date et Lieu');
+        showToast('Veuillez remplir les champs obligatoires: Organisateurs, Genre, Date et Lieu', 'error');
         return;
       }
       setCurrentStep(2);
@@ -271,7 +293,7 @@ const OccAjout = ({ onCancel }) => {
     }
     if (currentStep === 2) {
       if (!occData.representantCin) {
-        alert('Veuillez remplir les infos CIN du représentant');
+        showToast('Veuillez remplir les infos CIN du représentant', 'error');
         return;
       }
       setCurrentStep(3);
@@ -288,7 +310,7 @@ const OccAjout = ({ onCancel }) => {
     if (currentStep === 4 && hasOtherArtists) {
       const allFilled = otherArtistsInputs.every(a => a.nom);
       if (!allFilled) {
-        alert('Veuillez remplir tous les artistes supplémentaires');
+        showToast('Veuillez remplir tous les artistes supplémentaires', 'error');
         return;
       }
       setCurrentStep(5);
@@ -304,7 +326,7 @@ const OccAjout = ({ onCancel }) => {
     setIsSubmitting(true);
     const currentUser = getCurrentUser();
     if (!currentUser || !currentUser.id) {
-      alert('Erreur: Utilisateur non identifié');
+      showToast('Erreur: Utilisateur non identifié', 'error');
       setIsSubmitting(false);
       return;
     }
@@ -321,7 +343,6 @@ const OccAjout = ({ onCancel }) => {
       const globalMonth = String(new Date().getMonth() + 1).padStart(2, '0');
       const globalYear = new Date().getFullYear();
       const nouveauTotalGlobal = totalGlobal + 1;
-      // ✅ Numéro global : compteur/MM/AAAA (sans le jour)
       const numeroDossierGlobal = `${nouveauTotalGlobal}/${globalMonth}/${globalYear}`;
       
       const prefix = userInfo.prefix || currentUser.nom?.substring(0, 3).toUpperCase() || '';
@@ -329,7 +350,6 @@ const OccAjout = ({ onCancel }) => {
       const nouveauCompteur = compteurActuel + 1;
       const currentMonth = new Date().getMonth() + 1;
       const currentTrimestre = getTrimestreFromMonth(currentMonth);
-      // ✅ Numéro utilisateur : préfixe compteur/trimestre/année
       const numeroDossierUtilisateur = `${prefix} ${nouveauCompteur}/${currentTrimestre}/${userInfo.anneeEnCours || new Date().getFullYear()}`;
 
       const finalData = {
@@ -361,12 +381,22 @@ const OccAjout = ({ onCancel }) => {
           updatedUser.compteurs = updatedUser.compteurs || {};
           updatedUser.compteurs['OCC'] = nouveauCompteur;
           localStorage.setItem('user', JSON.stringify(updatedUser));
+
+          setUserInfo(prev => ({
+            ...prev,
+            compteurs: {
+              ...prev.compteurs,
+              'OCC': nouveauCompteur
+            }
+          }));
+
+          console.log(`✅ Compteur OCC incrémenté à ${nouveauCompteur}`);
         }
         
-        alert('✅ Occasionnelle ajoutée avec succès !');
-        navigate('/confirme-paiement', { 
-          state: { 
-            usager: { 
+        showToast('✅ Occasionnelle ajoutée avec succès !', 'success');
+        navigate('/confirme-paiement', {
+          state: {
+            usager: {
               id: result.id,
               denomination: occData.genreManifestation || occData.nom_evenement || 'OCC',
               demandeur: occData.organisateurs,
@@ -379,6 +409,9 @@ const OccAjout = ({ onCancel }) => {
               organisateurs: occData.organisateurs,
               artistes: occData.artistes,
               representant_par: occData.representantPar,
+              representant_cin: occData.representantCin,
+              representant_cin_delivree: occData.representantCinDelivree,
+              representant_cin_lieu: occData.representantCinLieu,
               numero_dossier_utilisateur: numeroDossierUtilisateur,
               numero_dossier_global: numeroDossierGlobal,
               frais_dossier: parseFloat(fraisDossier) || 0,
@@ -386,31 +419,32 @@ const OccAjout = ({ onCancel }) => {
               montant_retard: isRetard ? parseFloat(montantRetard) || 0 : 0,
               is_retard: isRetard,
               soit_total: soitTotal,
-              uniter: uniter || 1
-            }, 
+              uniter: uniter || 1,
+              confirmation_nom: occData.confirmationNom,
+              lieu_ajout: occData.lieuAjout,
+              date_signature: occData.dateSignature,
+              adresse: occData.adresse,
+              domicile: occData.domicile
+            },
             type: 'occ'
-          } 
+          }
         });
       } else {
-        alert('❌ Erreur: ' + result.message);
+        showToast('❌ Erreur: ' + result.message, 'error');
       }
     } catch (error) {
       console.error(error);
-      alert('❌ Erreur de connexion');
+      showToast('❌ Erreur de connexion', 'error');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // ======================= RENDER STEPS =======================
-
   const renderStep1 = () => {
-    // Récupération du compteur global depuis le numéro global (format : compteur/MM/AAAA)
     const globalParts = globalDossierNumber.split('/');
     const globalCount = globalParts[0] || '0';
     const globalMonth = String(new Date().getMonth() + 1).padStart(2, '0');
     const globalYear = new Date().getFullYear();
-    // ✅ Affichage global : compteur/MM/AAAA
     const globalDisplay = `${globalCount}/${globalMonth}/${globalYear}`;
 
     const prefix = userInfo.prefix || '';
@@ -523,16 +557,41 @@ const OccAjout = ({ onCancel }) => {
           <div className="form-input" style={{ display: 'flex', gap: '10px' }}>
             <select name="region" value={occData.region || ''} onChange={handleOccChange} className="input-style" style={{ flex: 1 }}>
               <option value="">Sélectionner une région</option>
-              {regionsList.map((region, idx) => (<option key={idx} value={region}>{region}</option>))}
+              {regionsList.map((region) => {
+                const phone = region.telephone && region.telephone.trim() !== ''
+                  ? formatPhoneNumber(region.telephone)
+                  : null;
+                return (
+                  <option key={region.id} value={region.nom}>
+                    {region.nom} {phone ? `- ${phone}` : ''}
+                  </option>
+                );
+              })}
             </select>
             <button type="button" onClick={() => setShowAddRegion(!showAddRegion)} className="btn-add-region">+</button>
           </div>
         </div>
+
         {showAddRegion && (
           <div className="form-row">
             <div className="form-label"><h2><PlusCircle size={18} strokeWidth={2} /> Nouvelle région :</h2></div>
-            <div className="form-input" style={{ display: 'flex', gap: '10px' }}>
-              <input type="text" value={newRegion} onChange={(e) => setNewRegion(e.target.value)} placeholder="Nom de la nouvelle région" className="input-style" style={{ flex: 1 }} />
+            <div className="form-input" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                value={newRegion}
+                onChange={(e) => setNewRegion(e.target.value)}
+                placeholder="Nom de la région"
+                className="input-style"
+                style={{ flex: 1, minWidth: '150px' }}
+              />
+              <input
+                type="text"
+                value={newRegionPhone}
+                onChange={(e) => setNewRegionPhone(e.target.value)}
+                placeholder="Téléphone (optionnel)"
+                className="input-style"
+                style={{ flex: 1, minWidth: '150px' }}
+              />
               <button type="button" onClick={handleAddRegion} className="btn-add-region-confirm">Ajouter</button>
             </div>
           </div>

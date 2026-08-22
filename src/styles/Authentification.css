@@ -92,6 +92,7 @@
   .main-nav {
     display: flex;
     gap: 1.8rem;
+    margin: 0px 100px;
   }
   .main-nav a {
     color: rgba(255,255,255,0.8);

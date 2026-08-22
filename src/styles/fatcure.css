@@ -124,7 +124,8 @@
 
 .date-text {
     font-weight: 500;
-    color: var(--primary-blue);
+    color: rgb(255, 255, 255);
+    text-shadow: 1px 1px 1px rgb(156, 156, 156);
 }
 
 /* Dashboard Grid */

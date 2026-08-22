@@ -3,14 +3,32 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import {
-  ArrowLeft, X, Calendar, MapPin, DollarSign, Users,
-  RefreshCw, Music, Eye, Check, Circle, ChevronLeft,
-  ChevronRight, Sparkles, AlertCircle
+  Calendar,
+  MapPin,
+  Building2,
+  Users,
+  RotateCcw,
+  RefreshCw,
+  ArrowLeft,
+  Eye,
+  X,
+  DollarSign,
+  Phone,
+  Mail,
+  Home,
+  Store,
+  TrendingUp,
+  AlertCircle,
+  CheckCircle,
+  Music,
+  Sparkles,
+  Check,
+  Circle,
 } from 'lucide-react';
-import '../styles/date_grandSurface.css';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import MiniSidebar from '../components/MiniSidebar';
+import '../styles/date_grandSurface.css';
 
 const API_URL = 'http://localhost:3001/api';
 
@@ -23,37 +41,44 @@ const DateNight = () => {
   const [showModal, setShowModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-  
-  // États pour les filtres
+
+  // Filtres
   const [anneeRecherche, setAnneeRecherche] = useState(new Date().getFullYear());
   const [regionFiltre, setRegionFiltre] = useState('');
   const [anneesDisponibles, setAnneesDisponibles] = useState([]);
   const [regionsDisponibles, setRegionsDisponibles] = useState([]);
-  
-  // États pour les statistiques
+
+  // Statistiques
   const [statsGraph, setStatsGraph] = useState({
     bonPayeur: 0,
     payeurMoyen: 0,
     mauvaisPayeur: 0,
     nonPayeur: 0,
-    total: 0
+    total: 0,
   });
 
-  // États pour les notifications
   const [notification, setNotification] = useState(null);
   const [apiError, setApiError] = useState(null);
   const [montantTotalRecu, setMontantTotalRecu] = useState(0);
 
-  // Mois labels
   const moisLabelsShort = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
 
-  // Chargement des régions
+  // ---- Formatage du téléphone ----
+  const formatPhoneNumber = (phone) => {
+    if (!phone) return '-';
+    const cleaned = phone.replace(/\D/g, '');
+    if (cleaned.length === 10) {
+      return `${cleaned.slice(0, 3)} ${cleaned.slice(3, 5)} ${cleaned.slice(5, 7)} ${cleaned.slice(7, 9)} ${cleaned.slice(9)}`;
+    }
+    return phone;
+  };
+
+  // ---- Chargement des régions ----
   const loadRegions = useCallback(async () => {
     try {
       const response = await axios.get(`${API_URL}/regions`);
       if (response.data.success) {
         setRegionsDisponibles(response.data.regions || []);
-        console.log('📍 Régions chargées:', response.data.regions);
       } else {
         setRegionsDisponibles([]);
       }
@@ -63,11 +88,10 @@ const DateNight = () => {
     }
   }, []);
 
-  // Chargement des années disponibles
+  // ---- Chargement des années disponibles ----
   const loadAnnees = useCallback(async () => {
     try {
       const response = await axios.get(`${API_URL}/paiements/annees-disponibles/nightclub`);
-      console.log('📡 Années disponibles nightclub:', response.data);
       if (response.data.success) {
         setAnneesDisponibles(response.data.annees || []);
         if (response.data.annees.length > 0 && !response.data.annees.includes(new Date().getFullYear())) {
@@ -86,44 +110,30 @@ const DateNight = () => {
     }
   }, []);
 
-  // Chargement des données principales
+  // ---- Chargement des données ----
   const loadData = useCallback(async () => {
     setLoading(true);
     setApiError(null);
-    
     try {
-      console.log('📡 Chargement des usagers nightclub...');
-      
-      // Récupérer les usagers nightclub
       const usagersResponse = await axios.get(`${API_URL}/usagers/paiements/nightclub`);
-      console.log('📡 Réponse usagers nightclub:', usagersResponse.data);
-      
       let usagersData = [];
       let paiements = [];
-      
-      // Récupérer les usagers
+
       if (usagersResponse.data.success && usagersResponse.data.usagers) {
         usagersData = usagersResponse.data.usagers;
-        console.log(`✅ ${usagersData.length} usagers nightclub trouvés`);
       } else {
-        console.warn('⚠️ Aucun usager nightclub trouvé dans la réponse');
-        // Essayer de récupérer depuis l'API générale des usagers
         try {
           const allUsagersResponse = await axios.get(`${API_URL}/usagers`);
-          console.log('📡 Réponse all usagers:', allUsagersResponse.data);
-          
           if (allUsagersResponse.data.success && allUsagersResponse.data.usagers) {
-            usagersData = allUsagersResponse.data.usagers.filter(u => 
-              u.type_usager === 'nightclub' || u.type === 'nightclub' || u.type_usager === 'night_club'
+            usagersData = allUsagersResponse.data.usagers.filter(
+              (u) => u.type_usager === 'nightclub' || u.type === 'nightclub' || u.type_usager === 'night_club'
             );
-            console.log(`✅ ${usagersData.length} usagers nightclub filtrés depuis la liste générale`);
           }
         } catch (err) {
           console.error('❌ Erreur chargement usagers généraux:', err);
         }
       }
-      
-      // Si toujours pas d'usagers, afficher un message
+
       if (usagersData.length === 0) {
         setUsagers([]);
         setFilteredUsagers([]);
@@ -131,88 +141,79 @@ const DateNight = () => {
         setApiError('Aucun usager nightclub trouvé dans la base de données');
         return;
       }
-      
-      // Récupérer les paiements
+
       try {
         const paiementsResponse = await axios.get(`${API_URL}/paiements/tous`);
         if (paiementsResponse.data.success) {
           paiements = paiementsResponse.data.paiements || [];
-          console.log(`💰 ${paiements.length} paiements récupérés`);
         }
       } catch (err) {
         console.warn('⚠️ Erreur chargement paiements:', err);
       }
-      
-      // Transformer les données
-      const usagersWithYearData = usagersData.map(usager => {
-        // Filtrer les paiements pour cet usager et l'année sélectionnée
-        const moisPayesPourAnnee = paiements.filter(p => 
-          p.usager_id === usager.id && 
-          (p.usager_type === 'nightclub' || p.usager_type === 'night_club' || p.usager_type === usager.type_usager) &&
-          p.annee === anneeRecherche &&
-          p.statut === 'paye'
+
+      const usagersWithYearData = usagersData.map((usager) => {
+        const moisPayesPourAnnee = paiements.filter(
+          (p) =>
+            p.usager_id === usager.id &&
+            (p.usager_type === 'nightclub' || p.usager_type === 'night_club' || p.usager_type === usager.type_usager) &&
+            p.annee === anneeRecherche &&
+            p.statut === 'paye'
         );
-        
-        const moisPayes = moisPayesPourAnnee.map(p => p.mois);
-        
+
+        const moisPayes = moisPayesPourAnnee.map((p) => p.mois);
+
         return {
           ...usager,
           moisPayes: moisPayes,
           totalMoisPayesAnnee: moisPayes.length,
           anneeCourante: anneeRecherche,
-          montant_total_paye: moisPayesPourAnnee.reduce((sum, p) => sum + parseFloat(p.montant || 0), 0)
+          montant_total_paye: moisPayesPourAnnee.reduce((sum, p) => sum + parseFloat(p.montant || 0), 0),
         };
       });
-      
-      console.log('📊 Usagers transformés:', usagersWithYearData);
-      
-      // Appliquer le filtre région
+
       let filtered = [...usagersWithYearData];
       if (regionFiltre) {
-        filtered = filtered.filter(u => u.region === regionFiltre);
+        filtered = filtered.filter((u) => u.region === regionFiltre);
       }
-      
+
       setUsagers(usagersWithYearData);
       setFilteredUsagers(filtered);
       updateStats(filtered);
-      
+
       const totalRecu = filtered.reduce((sum, u) => sum + (u.montant_total_paye || 0), 0);
       setMontantTotalRecu(totalRecu);
-      
     } catch (error) {
       console.error('❌ Erreur chargement données nightclub:', error);
       setApiError(error.message || 'Erreur de chargement');
-      setNotification({ 
-        type: 'error', 
-        message: '❌ Erreur de chargement des données nightclub' 
+      setNotification({
+        type: 'error',
+        message: '❌ Erreur de chargement des données nightclub',
       });
     } finally {
       setLoading(false);
     }
   }, [anneeRecherche, regionFiltre]);
 
-  // Filtrer par région
+  const updateStats = (data) => {
+    const stats = {
+      bonPayeur: data.filter((u) => (u.totalMoisPayesAnnee || 0) >= 9).length,
+      payeurMoyen: data.filter((u) => (u.totalMoisPayesAnnee || 0) >= 5 && (u.totalMoisPayesAnnee || 0) <= 8).length,
+      mauvaisPayeur: data.filter((u) => (u.totalMoisPayesAnnee || 0) > 0 && (u.totalMoisPayesAnnee || 0) < 5).length,
+      nonPayeur: data.filter((u) => (u.totalMoisPayesAnnee || 0) === 0).length,
+      total: data.length,
+    };
+    setStatsGraph(stats);
+  };
+
   const filterByRegion = useCallback(() => {
     let filtered = [...usagers];
     if (regionFiltre) {
-      filtered = filtered.filter(u => u.region === regionFiltre);
+      filtered = filtered.filter((u) => u.region === regionFiltre);
     }
     setFilteredUsagers(filtered);
     updateStats(filtered);
     setCurrentPage(1);
   }, [usagers, regionFiltre]);
-
-  // Mise à jour des statistiques
-  const updateStats = (data) => {
-    const stats = {
-      bonPayeur: data.filter(u => (u.totalMoisPayesAnnee || 0) >= 9).length,
-      payeurMoyen: data.filter(u => (u.totalMoisPayesAnnee || 0) >= 5 && (u.totalMoisPayesAnnee || 0) <= 8).length,
-      mauvaisPayeur: data.filter(u => (u.totalMoisPayesAnnee || 0) > 0 && (u.totalMoisPayesAnnee || 0) < 5).length,
-      nonPayeur: data.filter(u => (u.totalMoisPayesAnnee || 0) === 0).length,
-      total: data.length
-    };
-    setStatsGraph(stats);
-  };
 
   // Effets
   useEffect(() => {
@@ -285,33 +286,24 @@ const DateNight = () => {
     return 'Critique';
   };
 
-  // Calcul des pourcentages pour le graphique
-  const bonPayeurPercent = statsGraph.total > 0 ? (statsGraph.bonPayeur / statsGraph.total) * 100 : 0;
-  const payeurMoyenPercent = statsGraph.total > 0 ? (statsGraph.payeurMoyen / statsGraph.total) * 100 : 0;
-  const mauvaisPayeurPercent = statsGraph.total > 0 ? (statsGraph.mauvaisPayeur / statsGraph.total) * 100 : 0;
-  const nonPayeurPercent = statsGraph.total > 0 ? (statsGraph.nonPayeur / statsGraph.total) * 100 : 0;
-
   // Statistiques rapides
   const totalUsagers = filteredUsagers.length;
-  const nonPayes = filteredUsagers.filter(u => (u.totalMoisPayesAnnee || 0) === 0).length;
-  const partiels = filteredUsagers.filter(u => (u.totalMoisPayesAnnee || 0) > 0 && (u.totalMoisPayesAnnee || 0) < 12).length;
-  const aJour = filteredUsagers.filter(u => (u.totalMoisPayesAnnee || 0) === 12).length;
+  const nonPayes = filteredUsagers.filter((u) => (u.totalMoisPayesAnnee || 0) === 0).length;
+  const partiels = filteredUsagers.filter((u) => (u.totalMoisPayesAnnee || 0) > 0 && (u.totalMoisPayesAnnee || 0) < 12).length;
+  const aJour = filteredUsagers.filter((u) => (u.totalMoisPayesAnnee || 0) === 12).length;
   const tauxPaiement = totalUsagers > 0 ? Math.round(((totalUsagers - nonPayes) / totalUsagers) * 100) : 0;
 
-  const handleRetour = () => navigate('/dashboard');
+  const handleRetour = () => navigate('/autre-usager');
 
   return (
     <>
       <Header />
-      <Sidebar />
+      {/* <Sidebar /> */}
       <MiniSidebar />
       <main className="contenu-grandsurface">
         {notification && (
           <div className={`notif ${notification.type}`}>
-            <span>
-              {notification.type === 'success' ? <Check size={16} /> : 
-               notification.type === 'info' ? <Sparkles size={16} /> : <X size={16} />}
-            </span>
+            <span>{notification.type === 'success' ? <Check size={16} /> : notification.type === 'info' ? <Sparkles size={16} /> : <X size={16} />}</span>
             <span>{notification.message}</span>
             <button className="notif-close" onClick={() => setNotification(null)}>
               <X size={16} />
@@ -320,40 +312,72 @@ const DateNight = () => {
         )}
 
         <div className="grandsurface-container">
-          {/* ===== HEADER + FILTRES ===== */}
-          <div className="header-filters-card">
-            <div className="header-filters-left">
-              <button className="btn-retour-header" onClick={handleRetour}>
-                <ArrowLeft size={18} /> Retour
-              </button>
-              <div className="header-filters-title">
-                <h1><Music size={22} /> Night Clubs</h1>
-                <p>Suivi des paiements mensuels</p>
+          {/* ===== EN-TÊTE ===== */}
+          <div className="page-header">
+            <div className="header-left">
+              <h1>
+                <Music className="header-icon" size={28} />
+                Night Clubs : <span>Suivi des paiements</span>
+              </h1>
+              <div className="header-stats">
+                <span className="stat-badge">
+                  <strong>{totalUsagers}</strong> Usagers
+                </span>
+                <span className="stat-badge">
+                  <strong>{aJour}</strong> À jour
+                </span>
+                <span className="stat-badge">
+                  <strong>{partiels}</strong> En retard
+                </span>
+                <span className="stat-badge">
+                  <strong>{nonPayes}</strong> Non payés
+                </span>
+                <span className="stat-badge">
+                  <strong>{tauxPaiement}%</strong> Taux
+                </span>
               </div>
             </div>
-            <div className="header-filters-right">
-              <div className="filter-group">
-                <label><Calendar size={14} /> Année</label>
-                <select 
-                  value={anneeRecherche} 
+            <button className="btn-back" onClick={handleRetour}>
+              <ArrowLeft size={18} /> Retour
+            </button>
+          </div>
+
+          {/* ===== FILTRES ===== */}
+          <div className="filters-container">
+            <div className="filters-row">
+              {/* Année */}
+              <div className="filter-item">
+                <label htmlFor="anneeSelect">
+                  <Calendar size={14} className="filter-icon" /> Année
+                </label>
+                <select
+                  id="anneeSelect"
+                  value={anneeRecherche}
                   onChange={(e) => handleAnneeChange(e.target.value)}
-                  className="filter-select"
+                  className="form-select"
                 >
                   {anneesDisponibles.length > 0 ? (
-                    anneesDisponibles.map(an => (
-                      <option key={an} value={an}>{an}</option>
+                    anneesDisponibles.map((an) => (
+                      <option key={an} value={an}>
+                        {an}
+                      </option>
                     ))
                   ) : (
                     <option value={new Date().getFullYear()}>{new Date().getFullYear()}</option>
                   )}
                 </select>
               </div>
-              <div className="filter-group">
-                <label><MapPin size={14} /> Région</label>
-                <select 
-                  value={regionFiltre} 
+
+              {/* Région */}
+              <div className="filter-item">
+                <label htmlFor="regionSelect">
+                  <MapPin size={14} className="filter-icon" /> Région
+                </label>
+                <select
+                  id="regionSelect"
+                  value={regionFiltre}
                   onChange={(e) => handleRegionChange(e.target.value)}
-                  className="filter-select"
+                  className="form-select"
                 >
                   <option value="">Toutes les régions</option>
                   {regionsDisponibles && regionsDisponibles.length > 0 ? (
@@ -367,14 +391,16 @@ const DateNight = () => {
                   )}
                 </select>
               </div>
-              <div className="filter-group filter-actions">
+
+              {/* Boutons d'action */}
+              <div className="filter-item filter-actions">
                 <label>&nbsp;</label>
                 <div className="filter-buttons">
                   <button className="btn-reset" onClick={resetFilters}>
-                    <RefreshCw size={14} /> Réinitialiser
+                    <RotateCcw size={16} /> Réinitialiser
                   </button>
                   <button className="btn-refresh" onClick={refreshData}>
-                    <RefreshCw size={14} /> Rafraîchir
+                    <RefreshCw size={16} /> Rafraîchir
                   </button>
                 </div>
               </div>
@@ -384,64 +410,43 @@ const DateNight = () => {
           {/* ===== INDICATEUR ===== */}
           <div className="indicator-bar">
             <span className="indicator-item">
-              <Calendar size={14} /> Année : <strong>{anneeRecherche}</strong>
+              <Calendar size={14} className="indicator-icon" /> Année : <strong>{anneeRecherche}</strong>
             </span>
             {regionFiltre && (
               <span className="indicator-item">
-                <MapPin size={14} /> Région : <strong>{regionFiltre}</strong>
+                <MapPin size={14} className="indicator-icon" /> Région : <strong>{regionFiltre}</strong>
               </span>
             )}
             <span className="indicator-item">
-              <DollarSign size={14} /> Total reçu : <strong>{montantTotalRecu.toLocaleString()} Ar</strong>
+              <DollarSign size={14} className="indicator-icon" /> Total reçu :{' '}
+              <strong>{montantTotalRecu.toLocaleString()} Ar</strong>
             </span>
             <span className="indicator-item indicator-total">
-              <Users size={14} /> Total usagers : <strong>{totalUsagers}</strong>
+              <Users size={14} className="indicator-icon" /> Total usagers : <strong>{totalUsagers}</strong>
             </span>
-          </div>
-
-          {/* ===== STATISTIQUES RAPIDES ===== */}
-          <div className="quick-stats">
-            <div className="quick-stat">
-              <span className="quick-stat-value">{totalUsagers}</span>
-              <span className="quick-stat-label">Total</span>
-            </div>
-            <div className="quick-stat">
-              <span className="quick-stat-value" style={{color: '#28a745'}}>{aJour}</span>
-              <span className="quick-stat-label">À jour</span>
-            </div>
-            <div className="quick-stat">
-              <span className="quick-stat-value" style={{color: '#ffc107'}}>{partiels}</span>
-              <span className="quick-stat-label">En retard</span>
-            </div>
-            <div className="quick-stat">
-              <span className="quick-stat-value" style={{color: '#dc3545'}}>{nonPayes}</span>
-              <span className="quick-stat-label">Non payés</span>
-            </div>
-            <div className="quick-stat">
-              <span className="quick-stat-value" style={{color: '#0284c7'}}>{tauxPaiement}%</span>
-              <span className="quick-stat-label">Taux</span>
-            </div>
           </div>
 
           {/* ===== TABLEAU ===== */}
           <div className="table-wrapper">
             {loading ? (
-              <div className="loading-container">
-                <div className="spinner"></div>
-                <p>Chargement des données...</p>
+              <div className="loading-state">
+                <div className="spinner" />
+                <p>Chargement des données…</p>
               </div>
             ) : apiError ? (
-              <div className="empty error">
-                <p><AlertCircle size={18} /> {apiError}</p>
-                <button className="btn-refresh" onClick={refreshData}>
-                  <RefreshCw size={14} /> Rafraîchir
+              <div className="error-state">
+                <AlertCircle size={32} />
+                <p>{apiError}</p>
+                <button className="btn-retry" onClick={refreshData}>
+                  <RefreshCw size={16} /> Réessayer
                 </button>
               </div>
             ) : currentUsagers.length === 0 ? (
-              <div className="empty">
+              <div className="empty-state">
+                <AlertCircle size={32} />
                 <p>Aucun usager nightclub trouvé pour la période sélectionnée</p>
-                <button className="btn-refresh" onClick={refreshData}>
-                  <RefreshCw size={14} /> Rafraîchir
+                <button className="btn-retry" onClick={refreshData}>
+                  <RefreshCw size={16} /> Réessayer
                 </button>
               </div>
             ) : (
@@ -457,7 +462,9 @@ const DateNight = () => {
                       <th>Région</th>
                       <th>Jauge Max</th>
                       {[...Array(12)].map((_, i) => (
-                        <th key={i} className="month-col">{i+1}</th>
+                        <th key={i} className="month-col">
+                          {i + 1}
+                        </th>
                       ))}
                       <th>Total</th>
                       <th>Payé (Ar)</th>
@@ -474,20 +481,21 @@ const DateNight = () => {
                       const montantMensuel = usager.montant_mensuel || 0;
                       const totalPayeAr = usager.montant_total_paye || 0;
                       const reste = (12 - totalPayes) * montantMensuel;
-                      
+
                       return (
-                        <tr key={usager.id} style={{borderLeft: `4px solid ${statusColor}`}}>
+                        <tr key={usager.id} style={{ borderLeft: `4px solid ${statusColor}` }}>
                           <td className="sticky-id">#{String(usager.id).padStart(3, '0')}</td>
                           <td className="sticky-nom">
                             <strong>{usager.denomination || usager.nom || '-'}</strong>
                             {usager.region && (
-                              <div style={{fontSize: '0.65em', color: '#666'}}>
-                                <MapPin size={12} /> {usager.region}
+                              <div style={{ fontSize: '0.65em', color: '#666' }}>
+                                <MapPin size={12} style={{ display: 'inline', marginRight: '2px' }} />
+                                {usager.region}
                               </div>
                             )}
                           </td>
                           <td>{usager.demandeur || usager.representant_par || '-'}</td>
-                          <td>{usager.telephone || '-'}</td>
+                          <td>{formatPhoneNumber(usager.telephone)}</td>
                           <td>{usager.adresse_siege || usager.adresse || '-'}</td>
                           <td>{usager.region || '-'}</td>
                           <td>{usager.jauge_max || '-'}</td>
@@ -502,17 +510,19 @@ const DateNight = () => {
                               </td>
                             );
                           })}
-                          <td className="total-cell"><strong>{totalPayes}/12</strong></td>
+                          <td className="total-cell">
+                            <strong>{totalPayes}/12</strong>
+                          </td>
                           <td className="paye-cell">{totalPayeAr.toLocaleString()} Ar</td>
                           <td className="reste-cell">{reste.toLocaleString()} Ar</td>
                           <td className="status-cell">
-                            <span className="status-badge" style={{background: `${statusColor}20`, color: statusColor}}>
+                            <span className="status-badge" style={{ background: `${statusColor}20`, color: statusColor }}>
                               {statusText}
                             </span>
                           </td>
                           <td className="action-cell">
-                            <button className="view-more-btn" onClick={() => openModal(usager)}>
-                              <Eye size={16} />
+                            <button className="btn-view" onClick={() => openModal(usager)}>
+                              <Eye size={18} />
                             </button>
                           </td>
                         </tr>
@@ -526,36 +536,36 @@ const DateNight = () => {
 
           {/* ===== PAGINATION ===== */}
           {filteredUsagers.length > 0 && (
-            <>
+            <div className="pagination-container">
               <div className="pagination">
-                <button 
-                  className="page-btn" 
-                  onClick={() => goToPage(currentPage - 1)} 
+                <button
+                  className="page-btn"
+                  onClick={() => goToPage(currentPage - 1)}
                   disabled={currentPage === 1}
                 >
-                  <ChevronLeft size={16} />
+                  ◀
                 </button>
                 {[...Array(totalPages)].map((_, i) => (
-                  <button 
-                    key={i} 
-                    className={`page-btn ${currentPage === i + 1 ? 'active' : ''}`} 
+                  <button
+                    key={i}
+                    className={`page-btn ${currentPage === i + 1 ? 'active' : ''}`}
                     onClick={() => goToPage(i + 1)}
                   >
                     {i + 1}
                   </button>
                 ))}
-                <button 
-                  className="page-btn" 
-                  onClick={() => goToPage(currentPage + 1)} 
+                <button
+                  className="page-btn"
+                  onClick={() => goToPage(currentPage + 1)}
                   disabled={currentPage === totalPages}
                 >
-                  <ChevronRight size={16} />
+                  ▶
                 </button>
               </div>
               <div className="pagination-info">
                 {indexOfFirstItem + 1} - {Math.min(indexOfLastItem, filteredUsagers.length)} sur {filteredUsagers.length}
               </div>
-            </>
+            </div>
           )}
         </div>
       </main>
@@ -565,79 +575,103 @@ const DateNight = () => {
         <div className="modal-overlay" onClick={closeModal}>
           <div className="modal-container" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3><Music size={18} /> {selectedUsager.denomination || selectedUsager.nom || 'Night Club'}</h3>
+              <h3>
+                <Music size={18} /> {selectedUsager.denomination || selectedUsager.nom || 'Night Club'}
+              </h3>
               <button className="modal-close" onClick={closeModal}>
                 <X size={20} />
               </button>
             </div>
             <div className="modal-body">
               <div className="modal-section">
-                <h4><Music size={16} /> INFORMATIONS</h4>
+                <h4>
+                  <Music size={16} /> Informations
+                </h4>
                 <div className="modal-row">
-                  <strong>ID :</strong> <span>#{String(selectedUsager.id).padStart(3, '0')}</span>
+                  <span>ID</span>
+                  <strong>#{String(selectedUsager.id).padStart(3, '0')}</strong>
                 </div>
                 <div className="modal-row">
-                  <strong>Dénomination :</strong> <span>{selectedUsager.denomination || selectedUsager.nom || '-'}</span>
+                  <span>Dénomination</span>
+                  <strong>{selectedUsager.denomination || selectedUsager.nom || '-'}</strong>
                 </div>
                 <div className="modal-row">
-                  <strong>Demandeur :</strong> <span>{selectedUsager.demandeur || selectedUsager.representant_par || '-'}</span>
+                  <span>Demandeur</span>
+                  <strong>{selectedUsager.demandeur || selectedUsager.representant_par || '-'}</strong>
                 </div>
                 <div className="modal-row">
-                  <strong>Adresse :</strong> <span>{selectedUsager.adresse_siege || selectedUsager.adresse || '-'}</span>
+                  <span>Adresse</span>
+                  <strong>{selectedUsager.adresse_siege || selectedUsager.adresse || '-'}</strong>
                 </div>
                 <div className="modal-row">
-                  <strong>Téléphone :</strong> <span>{selectedUsager.telephone || '-'}</span>
+                  <span>Téléphone</span>
+                  <strong>{formatPhoneNumber(selectedUsager.telephone)}</strong>
                 </div>
                 <div className="modal-row">
-                  <strong>Région :</strong> <span>{selectedUsager.region || '-'}</span>
+                  <span>Région</span>
+                  <strong>{selectedUsager.region || '-'}</strong>
                 </div>
                 <div className="modal-row">
-                  <strong>Jauge Max :</strong> <span>{selectedUsager.jauge_max || '-'}</span>
+                  <span>Jauge Max</span>
+                  <strong>{selectedUsager.jauge_max || '-'}</strong>
                 </div>
                 <div className="modal-row">
-                  <strong>Type :</strong> <span>{selectedUsager.type || selectedUsager.categorie || '-'}</span>
+                  <span>Type</span>
+                  <strong>{selectedUsager.type || selectedUsager.categorie || '-'}</strong>
                 </div>
               </div>
               <div className="modal-section">
-                <h4><DollarSign size={16} /> PAIEMENTS - {selectedUsager.anneeCourante || anneeRecherche}</h4>
+                <h4>
+                  <DollarSign size={16} /> Paiements - {selectedUsager.anneeCourante || anneeRecherche}
+                </h4>
                 <div className="modal-row">
-                  <strong>Montant mensuel :</strong> 
-                  <span>{(selectedUsager.montant_mensuel || 0).toLocaleString()} Ar</span>
+                  <span>Montant mensuel</span>
+                  <strong>{(selectedUsager.montant_mensuel || 0).toLocaleString()} Ar</strong>
                 </div>
                 <div className="modal-row">
-                  <strong>Mois payés :</strong> 
-                  <span>{selectedUsager.totalMoisPayesAnnee || 0}/12</span>
+                  <span>Mois payés</span>
+                  <strong>{selectedUsager.totalMoisPayesAnnee || 0}/12</strong>
                 </div>
                 <div className="modal-row">
-                  <strong>Détails :</strong> 
-                  <span>
-                    {selectedUsager.moisPayes && selectedUsager.moisPayes.length > 0 
-                      ? selectedUsager.moisPayes.map(m => moisLabelsShort[m - 1]).join(', ') 
+                  <span>Détails</span>
+                  <strong>
+                    {selectedUsager.moisPayes && selectedUsager.moisPayes.length > 0
+                      ? selectedUsager.moisPayes.map((m) => moisLabelsShort[m - 1]).join(', ')
                       : 'Aucun paiement'}
-                  </span>
+                  </strong>
                 </div>
                 <div className="modal-row">
-                  <strong>Total payé :</strong> 
-                  <span style={{color: '#28a745', fontWeight: 'bold'}}>
+                  <span>Total payé</span>
+                  <strong style={{ color: '#28a745' }}>
                     {(selectedUsager.montant_total_paye || 0).toLocaleString()} Ar
-                  </span>
+                  </strong>
                 </div>
                 <div className="modal-row">
-                  <strong>Reste :</strong> 
-                  <span style={{color: '#dc3545', fontWeight: 'bold'}}>
+                  <span>Reste</span>
+                  <strong style={{ color: '#dc3545' }}>
                     {((12 - (selectedUsager.totalMoisPayesAnnee || 0)) * (selectedUsager.montant_mensuel || 0)).toLocaleString()} Ar
-                  </span>
+                  </strong>
                 </div>
                 <div className="modal-row">
-                  <strong>Statut :</strong> 
-                  <span className="status-badge" style={{background: `${getStatusColor(selectedUsager)}20`, color: getStatusColor(selectedUsager)}}>
-                    {getStatusText(selectedUsager)}
-                  </span>
+                  <span>Statut</span>
+                  <strong>
+                    <span
+                      className="status-badge"
+                      style={{
+                        background: `${getStatusColor(selectedUsager)}20`,
+                        color: getStatusColor(selectedUsager),
+                      }}
+                    >
+                      {getStatusText(selectedUsager)}
+                    </span>
+                  </strong>
                 </div>
               </div>
             </div>
             <div className="modal-footer">
-              <button className="modal-btn" onClick={closeModal}>Fermer</button>
+              <button className="btn-modal-close" onClick={closeModal}>
+                Fermer
+              </button>
             </div>
           </div>
         </div>

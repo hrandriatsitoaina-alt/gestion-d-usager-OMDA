@@ -8,24 +8,26 @@ import {
   PlusCircle, Radio, Tv, Antenna, Globe, Layers, CheckCircle,
   UserPlus, Headphones, Sparkles, Monitor, Mic, Music
 } from 'lucide-react';
+import { useToast } from '../../components/Toast';
 
 const MediaAjout = ({ onCancel }) => {
   const navigate = useNavigate();
+  const showToast = useToast();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [userInfo, setUserInfo] = useState({ 
-    id: null, nom: '', prefix: '', 
-    compteurs: { 'Télé/Radio': 0 }, 
-    anneeEnCours: new Date().getFullYear() 
+  const [userInfo, setUserInfo] = useState({
+    id: null, nom: '', prefix: '',
+    compteurs: { 'Télé/Radio': 0 },
+    anneeEnCours: new Date().getFullYear()
   });
   const [fraisDossier, setFraisDossier] = useState('');
   const [uniter, setUniter] = useState(1);
   const [soitTotal, setSoitTotal] = useState(0);
+
   const [regionsList, setRegionsList] = useState([]);
   const [newRegion, setNewRegion] = useState('');
+  const [newRegionPhone, setNewRegionPhone] = useState('');
   const [showAddRegion, setShowAddRegion] = useState(false);
-  const [hasRegions, setHasRegions] = useState(false);
-  const [regionsInputs, setRegionsInputs] = useState([]);
 
   const [mediaData, setMediaData] = useState({
     proprietaireNom: '', proprietaireAdresse: '', proprietaireTel: '', proprietaireCin: '',
@@ -41,6 +43,16 @@ const MediaAjout = ({ onCancel }) => {
     confirmationNom: '', dateSignature: '', lieuSignature: '',
     region: ''
   });
+
+  const formatPhoneNumber = (phone) => {
+    if (!phone) return '';
+    const cleaned = phone.replace(/\s/g, '').replace(/[^0-9]/g, '');
+    if (cleaned.length === 0) return '';
+    if (cleaned.length <= 3) return cleaned;
+    if (cleaned.length <= 5) return `${cleaned.slice(0, 3)} ${cleaned.slice(3)}`;
+    if (cleaned.length <= 8) return `${cleaned.slice(0, 3)} ${cleaned.slice(3, 5)} ${cleaned.slice(5)}`;
+    return `${cleaned.slice(0, 3)} ${cleaned.slice(3, 5)} ${cleaned.slice(5, 8)} ${cleaned.slice(8, 10)}`;
+  };
 
   const formatNumber = (value) => {
     if (value === '' || value === null || value === undefined) return '';
@@ -78,26 +90,57 @@ const MediaAjout = ({ onCancel }) => {
     try {
       const response = await fetch('http://localhost:3001/api/regions');
       const result = await response.json();
-      if (result.success) setRegionsList(result.regions.map(r => r.nom));
-    } catch (error) { console.error(error); }
+      if (result.success) {
+        setRegionsList(result.regions);
+      }
+    } catch (error) {
+      console.error('Erreur chargement régions:', error);
+    }
   };
 
   const handleAddRegion = async () => {
-    if (newRegion.trim() && !regionsList.includes(newRegion.trim())) {
-      try {
-        const response = await fetch('http://localhost:3001/api/regions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nom: newRegion.trim() })
-        });
-        const result = await response.json();
-        if (result.success) {
-          setRegionsList([...regionsList, newRegion.trim()]);
-          setNewRegion('');
-          setShowAddRegion(false);
-          alert(`✅ Région "${newRegion.trim()}" ajoutée!`);
-        }
-      } catch (error) { console.error(error); }
+    const trimmed = newRegion.trim();
+    if (!trimmed) {
+      showToast('Veuillez saisir un nom de région', 'error');
+      return;
+    }
+    if (regionsList.some(r => r.nom === trimmed)) {
+      showToast('Cette région existe déjà', 'error');
+      return;
+    }
+
+    const adminToken = localStorage.getItem('adminToken');
+    if (!adminToken) {
+      showToast('Token administrateur manquant. Veuillez vous reconnecter.', 'error');
+      return;
+    }
+
+    try {
+      const response = await fetch('http://localhost:3001/api/regions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'adminToken': adminToken
+        },
+        body: JSON.stringify({
+          nom: trimmed,
+          telephone: newRegionPhone.trim() || null
+        })
+      });
+      const result = await response.json();
+      if (result.success) {
+        setRegionsList([...regionsList, result.region]);
+        setNewRegion('');
+        setNewRegionPhone('');
+        setShowAddRegion(false);
+        showToast(`✅ Région "${trimmed}" ajoutée !`, 'success');
+        loadRegions();
+      } else {
+        showToast(`❌ ${result.message}`, 'error');
+      }
+    } catch (error) {
+      console.error('Erreur ajout région:', error);
+      showToast('❌ Erreur de connexion', 'error');
     }
   };
 
@@ -112,10 +155,10 @@ const MediaAjout = ({ onCancel }) => {
   useEffect(() => {
     const currentUser = getCurrentUser();
     if (currentUser) {
-      setUserInfo(prev => ({ 
-        ...prev, 
+      setUserInfo(prev => ({
+        ...prev,
         id: currentUser.id,
-        nom: currentUser.nom, 
+        nom: currentUser.nom,
         prefix: currentUser.prefix,
         compteurs: currentUser.compteurs || { 'Télé/Radio': 0 },
         anneeEnCours: currentUser.anneeEnCours || new Date().getFullYear()
@@ -127,26 +170,6 @@ const MediaAjout = ({ onCancel }) => {
   const handleMediaChange = (e) => {
     const { name, value, type, checked } = e.target;
     setMediaData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
-  };
-
-  const handleMediaRegionChange = (index, field, value) => {
-    const updatedRegions = [...regionsInputs];
-    updatedRegions[index][field] = value;
-    setRegionsInputs(updatedRegions);
-  };
-
-  const handleMediaHasRegionsChange = (e) => {
-    setHasRegions(e.target.checked);
-    if (!e.target.checked) setRegionsInputs([]);
-  };
-
-  const handleMediaNombreRegionsChange = (value) => {
-    const count = parseInt(value) || 0;
-    const newRegions = [];
-    for (let i = 0; i < count; i++) {
-      newRegions.push({ nom: '', frequence: '', audience: '' });
-    }
-    setRegionsInputs(newRegions);
   };
 
   const getTotalSteps = () => 4;
@@ -162,7 +185,7 @@ const MediaAjout = ({ onCancel }) => {
 
     if (currentStep === 1) {
       if (!mediaData.proprietaireNom || !mediaData.proprietaireCin || !mediaData.proprietaireAdresse || !mediaData.proprietaireTel) {
-        alert('Veuillez remplir tous les champs du propriétaire');
+        showToast('Veuillez remplir tous les champs du propriétaire', 'error');
         return;
       }
       setCurrentStep(2);
@@ -170,7 +193,7 @@ const MediaAjout = ({ onCancel }) => {
     }
     if (currentStep === 2) {
       if (!mediaData.representantNom || !mediaData.representantCin || !mediaData.representantAdresse || !mediaData.representantTel) {
-        alert('Veuillez remplir tous les champs du représentant légal');
+        showToast('Veuillez remplir tous les champs du représentant légal', 'error');
         return;
       }
       setCurrentStep(3);
@@ -178,15 +201,8 @@ const MediaAjout = ({ onCancel }) => {
     }
     if (currentStep === 3) {
       if (!mediaData.denomination || !mediaData.frequence || !mediaData.siege || !mediaData.telephone || !mediaData.taux) {
-        alert('Veuillez remplir tous les champs de la station');
+        showToast('Veuillez remplir tous les champs de la station', 'error');
         return;
-      }
-      if (hasRegions && regionsInputs.length > 0) {
-        const allRegionsFilled = regionsInputs.every(r => r.nom && r.frequence && r.audience);
-        if (!allRegionsFilled) {
-          alert('Veuillez remplir tous les détails des régions');
-          return;
-        }
       }
       setCurrentStep(4);
       return;
@@ -201,7 +217,7 @@ const MediaAjout = ({ onCancel }) => {
     setIsSubmitting(true);
     const currentUser = getCurrentUser();
     if (!currentUser || !currentUser.id) {
-      alert('Erreur: Utilisateur non identifié');
+      showToast('Erreur: Utilisateur non identifié', 'error');
       setIsSubmitting(false);
       return;
     }
@@ -209,9 +225,8 @@ const MediaAjout = ({ onCancel }) => {
     const finalData = {
       type: 'Télé/Radio',
       userId: currentUser.id,
+      prefix: userInfo.prefix || currentUser.prefix || '',
       ...mediaData,
-      regionsDetail: regionsInputs,
-      hasRegions,
       fraisDossier: parseFloat(fraisDossier) || 0,
       soitTotal: soitTotal,
       uniter: uniter
@@ -225,42 +240,81 @@ const MediaAjout = ({ onCancel }) => {
       });
       const result = await response.json();
       if (result.success) {
-        alert('✅ Télé/Radio ajouté avec succès !');
-        navigate('/confirme-paiement', { 
-          state: { 
-            usager: { 
+        const updatedUser = getCurrentUser();
+        if (updatedUser) {
+          updatedUser.compteurs = updatedUser.compteurs || {};
+          const nouveauCompteur = (updatedUser.compteurs['Télé/Radio'] || 0) + 1;
+          updatedUser.compteurs['Télé/Radio'] = nouveauCompteur;
+          localStorage.setItem('user', JSON.stringify(updatedUser));
+
+          setUserInfo(prev => ({
+            ...prev,
+            compteurs: {
+              ...prev.compteurs,
+              'Télé/Radio': nouveauCompteur
+            }
+          }));
+
+          console.log(`✅ Compteur Télé/Radio incrémenté à ${nouveauCompteur}`);
+        }
+
+        showToast('✅ Télé/Radio ajouté avec succès !', 'success');
+        navigate('/confirme-paiement', {
+          state: {
+            usager: {
               id: result.id,
               denomination: mediaData.denomination,
               demandeur: mediaData.proprietaireNom,
               telephone: mediaData.telephone,
               region: mediaData.region,
+              adresse_siege: mediaData.siege,
+              email: mediaData.email,
+              proprietaire_nom: mediaData.proprietaireNom,
+              proprietaire_adresse: mediaData.proprietaireAdresse,
+              proprietaire_tel: mediaData.proprietaireTel,
+              proprietaire_cin: mediaData.proprietaireCin,
+              proprietaire_cin_delivree: mediaData.proprietaireCinDelivree,
+              proprietaire_cin_lieu: mediaData.proprietaireCinLieu,
+              representant_nom: mediaData.representantNom,
+              representant_adresse: mediaData.representantAdresse,
+              representant_tel: mediaData.representantTel,
+              representant_cin: mediaData.representantCin,
+              representant_cin_delivree: mediaData.representantCinDelivree,
+              representant_cin_lieu: mediaData.representantCinLieu,
+              representant_pouvoir_date: mediaData.representantPouvoirDate,
+              representant_pouvoir_par: mediaData.representantPouvoirPar,
+              representant_fonction: mediaData.representantFonction,
+              frequence: mediaData.frequence,
+              canal: mediaData.canal,
+              siege: mediaData.siege,
+              nif: mediaData.nif,
+              stat: mediaData.stat,
+              taux: mediaData.taux,
+              couverture_capitale: mediaData.couvertureCapitale,
+              couverture_chef_lieu_province: mediaData.couvertureChefLieuProvince,
+              couverture_chef_lieu_region: mediaData.couvertureChefLieuRegion,
+              couverture_district: mediaData.couvertureDistrict,
+              horaires_jusqua12: mediaData.horairesJusqua12,
+              horaires_13a24: mediaData.horaires13a24,
+              confirmation_nom: mediaData.confirmationNom,
+              lieu_signature: mediaData.lieuSignature,
+              date_signature: mediaData.dateSignature,
               montant_mensuel: 0,
               frais_dossier: parseFloat(fraisDossier) || 0,
               montant_total: parseFloat(mediaData.taux) || 0,
               soit_total: soitTotal,
               uniter: uniter || 1,
-              adresse: mediaData.siege,
-              activite: 'Télé/Radio',
-              frequence: mediaData.frequence,
-              canal: mediaData.canal,
-              representant_nom: mediaData.representantNom,
-              representant_par: mediaData.representantPar,
-              date_evenement: null,
-              lieu_evenement: null,
-              genre_manifestation: null,
-              organisateurs: null,
-              artistes: null,
-              nom_evenement: null
-            }, 
+              numero_dossier_utilisateur: `${userInfo.prefix || ''} ${(userInfo.compteurs?.['Télé/Radio'] || 0) + 1}/${getTrimestreFromMonth(new Date().getMonth() + 1)}/${userInfo.anneeEnCours || new Date().getFullYear()}`
+            },
             type: 'media'
-          } 
+          }
         });
       } else {
-        alert('❌ Erreur: ' + result.message);
+        showToast('❌ Erreur: ' + result.message, 'error');
       }
     } catch (error) {
       console.error(error);
-      alert('❌ Erreur de connexion');
+      showToast('❌ Erreur de connexion', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -286,9 +340,9 @@ const MediaAjout = ({ onCancel }) => {
         </div>
 
         <div className="form-section-title">
-          <UserPlus size={18} strokeWidth={2} /> 1) PROPRIÉTAIRE DE LA STATION
+          <UserPlus size={18} strokeWidth={2} /> 1) RENSEIGNEMENTS SUR LE PROPRIETAIRE DE LA STATION :
         </div>
-        
+
         <div className="form-row">
           <div className="form-label"><h2><User size={18} strokeWidth={2} /> Nom et prénoms :</h2></div>
           <div className="form-input">
@@ -297,7 +351,7 @@ const MediaAjout = ({ onCancel }) => {
         </div>
 
         <div className="form-row">
-          <div className="form-label"><h2><Home size={18} strokeWidth={2} /> Adresse :</h2></div>
+          <div className="form-label"><h2><Home size={18} strokeWidth={2} /> Adresse (domicile) :</h2></div>
           <div className="form-input">
             <input type="text" name="proprietaireAdresse" value={mediaData.proprietaireAdresse} onChange={handleMediaChange} className="input-style" placeholder="Adresse du propriétaire" required />
           </div>
@@ -318,9 +372,10 @@ const MediaAjout = ({ onCancel }) => {
         </div>
 
         <div className="form-row">
-          <div className="form-label"><h2><Calendar size={18} strokeWidth={2} /> Délivrée le / Lieu :</h2></div>
+          <div className="form-label"><h2><Calendar size={18} strokeWidth={2} /> Délivrée le :</h2></div>
           <div className="form-input-horizontal">
             <input type="date" name="proprietaireCinDelivree" value={mediaData.proprietaireCinDelivree} onChange={handleMediaChange} className="input-date" />
+            <span style={{ margin: '0 8px' }}>à</span>
             <input type="text" name="proprietaireCinLieu" value={mediaData.proprietaireCinLieu} onChange={handleMediaChange} placeholder="Lieu de délivrance" className="input-lieu" />
           </div>
         </div>
@@ -330,16 +385,41 @@ const MediaAjout = ({ onCancel }) => {
           <div className="form-input" style={{ display: 'flex', gap: '10px' }}>
             <select name="region" value={mediaData.region || ''} onChange={handleMediaChange} className="input-style" style={{ flex: 1 }} required>
               <option value="">Sélectionner une région</option>
-              {regionsList.map((region, idx) => (<option key={idx} value={region}>{region}</option>))}
+              {regionsList.map((region) => {
+                const phone = region.telephone && region.telephone.trim() !== ''
+                  ? formatPhoneNumber(region.telephone)
+                  : null;
+                return (
+                  <option key={region.id} value={region.nom}>
+                    {region.nom} {phone ? `- ${phone}` : ''}
+                  </option>
+                );
+              })}
             </select>
             <button type="button" onClick={() => setShowAddRegion(!showAddRegion)} className="btn-add-region">+</button>
           </div>
         </div>
+
         {showAddRegion && (
           <div className="form-row">
             <div className="form-label"><h2><PlusCircle size={18} strokeWidth={2} /> Nouvelle région :</h2></div>
-            <div className="form-input" style={{ display: 'flex', gap: '10px' }}>
-              <input type="text" value={newRegion} onChange={(e) => setNewRegion(e.target.value)} placeholder="Nom de la nouvelle région" className="input-style" style={{ flex: 1 }} />
+            <div className="form-input" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                value={newRegion}
+                onChange={(e) => setNewRegion(e.target.value)}
+                placeholder="Nom de la région"
+                className="input-style"
+                style={{ flex: 1, minWidth: '150px' }}
+              />
+              <input
+                type="text"
+                value={newRegionPhone}
+                onChange={(e) => setNewRegionPhone(e.target.value)}
+                placeholder="Téléphone (optionnel)"
+                className="input-style"
+                style={{ flex: 1, minWidth: '150px' }}
+              />
               <button type="button" onClick={handleAddRegion} className="btn-add-region-confirm">Ajouter</button>
             </div>
           </div>
@@ -351,9 +431,9 @@ const MediaAjout = ({ onCancel }) => {
   const renderStep2 = () => (
     <>
       <div className="form-section-title">
-        <UserPlus size={18} strokeWidth={2} /> 2) REPRÉSENTANT LÉGAL
+        <UserPlus size={18} strokeWidth={2} /> 2) RENSEIGNEMENTS SUR LE REPRESENTANT LEGAL :
       </div>
-      
+
       <div className="form-row">
         <div className="form-label"><h2><User size={18} strokeWidth={2} /> Nom et prénoms :</h2></div>
         <div className="form-input">
@@ -362,7 +442,7 @@ const MediaAjout = ({ onCancel }) => {
       </div>
 
       <div className="form-row">
-        <div className="form-label"><h2><Home size={18} strokeWidth={2} /> Adresse :</h2></div>
+        <div className="form-label"><h2><Home size={18} strokeWidth={2} /> Adresse (domicile) :</h2></div>
         <div className="form-input">
           <input type="text" name="representantAdresse" value={mediaData.representantAdresse} onChange={handleMediaChange} className="input-style" placeholder="Adresse du représentant" required />
         </div>
@@ -383,9 +463,10 @@ const MediaAjout = ({ onCancel }) => {
       </div>
 
       <div className="form-row">
-        <div className="form-label"><h2><Calendar size={18} strokeWidth={2} /> Délivrée le / Lieu :</h2></div>
+        <div className="form-label"><h2><Calendar size={18} strokeWidth={2} /> Délivrée le :</h2></div>
         <div className="form-input-horizontal">
           <input type="date" name="representantCinDelivree" value={mediaData.representantCinDelivree} onChange={handleMediaChange} className="input-date" />
+          <span style={{ margin: '0 8px' }}>à</span>
           <input type="text" name="representantCinLieu" value={mediaData.representantCinLieu} onChange={handleMediaChange} placeholder="Lieu de délivrance" className="input-lieu" />
         </div>
       </div>
@@ -411,9 +492,9 @@ const MediaAjout = ({ onCancel }) => {
   const renderStep3 = () => (
     <>
       <div className="form-section-title">
-        <Monitor size={18} strokeWidth={2} /> 3) RENSEIGNEMENTS SUR LA STATION
+        <Monitor size={18} strokeWidth={2} /> 3) RENSEIGNEMENTS SUR LA STATION RADIO/TV :
       </div>
-      
+
       <div className="form-row">
         <div className="form-label"><h2><Building2 size={18} strokeWidth={2} /> Dénomination :</h2></div>
         <div className="form-input">
@@ -436,7 +517,7 @@ const MediaAjout = ({ onCancel }) => {
       </div>
 
       <div className="form-row">
-        <div className="form-label"><h2><MapPin size={18} strokeWidth={2} /> Siège social :</h2></div>
+        <div className="form-label"><h2><MapPin size={18} strokeWidth={2} /> Siège :</h2></div>
         <div className="form-input">
           <input type="text" name="siege" value={mediaData.siege} onChange={handleMediaChange} className="input-style" placeholder="Adresse du siège social" required />
         </div>
@@ -467,6 +548,19 @@ const MediaAjout = ({ onCancel }) => {
         <div className="form-label"><h2><FileText size={18} strokeWidth={2} /> STAT :</h2></div>
         <div className="form-input">
           <input type="text" name="stat" value={mediaData.stat} onChange={handleMediaChange} className="input-style" placeholder="Numéro STAT" />
+        </div>
+      </div>
+
+      <div className="form-row">
+        <div className="form-label"><h2><DollarSign size={18} strokeWidth={2} /> Taux :</h2></div>
+        <div className="form-input">
+          <input type="text" value={getDisplayValue(mediaData.taux)} onChange={(e) => {
+            const rawValue = e.target.value.replace(/\s/g, '');
+            if (rawValue === '' || /^\d+$/.test(rawValue)) {
+              setMediaData(prev => ({ ...prev, taux: rawValue }));
+              e.target.value = formatNumber(rawValue);
+            }
+          }} className="input-style" required placeholder="Montant en Ar" />
         </div>
       </div>
 
@@ -512,67 +606,7 @@ const MediaAjout = ({ onCancel }) => {
         </div>
       </div>
 
-      <div className="form-section-subtitle">
-        <Layers size={16} strokeWidth={2} /> Présence par région :
-      </div>
-      <div className="form-row">
-        <div className="form-label"></div>
-        <div className="form-input">
-          <label className="checkbox-label">
-            <input type="checkbox" checked={hasRegions} onChange={handleMediaHasRegionsChange} />
-            Activer les régions
-          </label>
-        </div>
-      </div>
-
-      {hasRegions && (
-        <>
-          <div className="form-row">
-            <div className="form-label"><h2><Hash size={18} strokeWidth={2} /> Nombre de régions :</h2></div>
-            <div className="form-input">
-              <input type="number" onChange={(e) => handleMediaNombreRegionsChange(e.target.value)} className="input-style" min="1" placeholder="Nombre de régions" />
-            </div>
-          </div>
-          {regionsInputs.map((region, i) => (
-            <div key={i} className="region-card">
-              <h4><MapPin size={16} strokeWidth={2} /> Région {i+1}</h4>
-              <div className="form-row">
-                <div className="form-label"><h2>📌 Nom :</h2></div>
-                <div className="form-input">
-                  <input type="text" placeholder="Nom de la région" value={region.nom} onChange={(e) => handleMediaRegionChange(i, 'nom', e.target.value)} className="input-style" />
-                </div>
-              </div>
-              <div className="form-row">
-                <div className="form-label"><h2><Radio size={16} strokeWidth={2} /> Fréquence :</h2></div>
-                <div className="form-input">
-                  <input type="text" placeholder="Fréquence" value={region.frequence} onChange={(e) => handleMediaRegionChange(i, 'frequence', e.target.value)} className="input-style" />
-                </div>
-              </div>
-              <div className="form-row">
-                <div className="form-label"><h2><Users size={16} strokeWidth={2} /> Audience :</h2></div>
-                <div className="form-input">
-                  <input type="text" placeholder="Audience estimée" value={region.audience} onChange={(e) => handleMediaRegionChange(i, 'audience', e.target.value)} className="input-style" />
-                </div>
-              </div>
-            </div>
-          ))}
-        </>
-      )}
-
-      <div className="form-section-subtitle"> Calculs :</div>
-      
-      <div className="form-row">
-        <div className="form-label"><h2><DollarSign size={18} strokeWidth={2} /> Taux :</h2></div>
-        <div className="form-input">
-          <input type="text" value={getDisplayValue(mediaData.taux)} onChange={(e) => {
-            const rawValue = e.target.value.replace(/\s/g, '');
-            if (rawValue === '' || /^\d+$/.test(rawValue)) {
-              setMediaData(prev => ({ ...prev, taux: rawValue }));
-              e.target.value = formatNumber(rawValue);
-            }
-          }} className="input-style" required placeholder="Montant en Ar" />
-        </div>
-      </div>
+      <div className="form-section-subtitle">Calculs :</div>
 
       <div className="form-row">
         <div className="form-label"><h2><FileText size={18} strokeWidth={2} /> Frais de dossier :</h2></div>
@@ -657,7 +691,6 @@ const MediaAjout = ({ onCancel }) => {
             <tr><td><Building2 size={16} strokeWidth={2} /> Dénomination</td><td>{mediaData.denomination || '-'}</td></tr>
             <tr><td><Radio size={16} strokeWidth={2} /> Fréquence</td><td>{mediaData.frequence || '-'}</td></tr>
             <tr><td><MapPin size={16} strokeWidth={2} /> Siège</td><td>{mediaData.siege || '-'}</td></tr>
-            <tr><td><MapPin size={16} strokeWidth={2} /> Région</td><td>{mediaData.region || '-'}</td></tr>
             <tr><td><DollarSign size={16} strokeWidth={2} /> Taux</td><td>{formatNumber(mediaData.taux || 0)} Ar</td></tr>
             <tr><td><FileText size={16} strokeWidth={2} /> Frais de dossier</td><td>{formatNumber(fraisDossier || 0)} Ar</td></tr>
             <tr><td><Hash size={16} strokeWidth={2} /> Uniter</td><td>{uniter}</td></tr>

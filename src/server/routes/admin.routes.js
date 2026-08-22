@@ -1,12 +1,43 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../database');
-const { verifyAdminToken } = require('../middleware');
+const config = require('../config');
 
-// GET /api/admin/users
+// ============================================================
+// MIDDLEWARE DE VÉRIFICATION (IMPORTANT)
+// ============================================================
+const verifyAdminToken = (req, res, next) => {
+  const adminToken = req.headers.adminToken || req.headers['admintoken'];
+  if (!adminToken) {
+    return res.status(403).json({ success: false, message: 'Non autorisé - Token manquant' });
+  }
+  if (adminToken !== config.ADMIN_SECRET_TOKEN) {
+    return res.status(403).json({ success: false, message: 'Non autorisé - Token invalide' });
+  }
+  next();
+};
+
+const verifyDAFToken = (req, res, next) => {
+  const adminToken = req.headers.adminToken || req.headers['admintoken'];
+  if (!adminToken) {
+    return res.status(403).json({ success: false, message: 'Non autorisé - Token manquant' });
+  }
+  if (adminToken !== config.ADMIN_SECRET_TOKEN && adminToken !== config.DAF_SECRET_TOKEN) {
+    return res.status(403).json({ success: false, message: 'Non autorisé - Token invalide' });
+  }
+  next();
+};
+
+// ============================================================
+// ROUTES SUPER ADMIN (avec /api/ prefix)
+// ============================================================
+
+// ✅ GET /api/admin/users - Liste des utilisateurs
 router.get('/admin/users', verifyAdminToken, async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, nom, email, role, statut, created_at, derniere_connexion FROM utilisateurs ORDER BY id');
+    const result = await pool.query(
+      'SELECT id, nom, email, role, statut, created_at, derniere_connexion FROM utilisateurs ORDER BY id'
+    );
     res.json({ success: true, users: result.rows });
   } catch (error) {
     console.error('Erreur admin users:', error);
@@ -14,7 +45,7 @@ router.get('/admin/users', verifyAdminToken, async (req, res) => {
   }
 });
 
-// POST /api/admin/users
+// ✅ POST /api/admin/users - Créer un utilisateur
 router.post('/admin/users', verifyAdminToken, async (req, res) => {
   const { nom, email, mot_de_passe, role, statut } = req.body;
   if (!nom || !email || !mot_de_passe) {
@@ -53,7 +84,7 @@ router.post('/admin/users', verifyAdminToken, async (req, res) => {
   }
 });
 
-// PUT /api/admin/users/:id
+// ✅ PUT /api/admin/users/:id - Modifier un utilisateur
 router.put('/admin/users/:id', verifyAdminToken, async (req, res) => {
   const { id } = req.params;
   const { nom, email, role, statut, mot_de_passe } = req.body;
@@ -86,7 +117,7 @@ router.put('/admin/users/:id', verifyAdminToken, async (req, res) => {
   }
 });
 
-// DELETE /api/admin/users/:id
+// ✅ DELETE /api/admin/users/:id - Supprimer un utilisateur
 router.delete('/admin/users/:id', verifyAdminToken, async (req, res) => {
   const { id } = req.params;
   try {
@@ -105,7 +136,7 @@ router.delete('/admin/users/:id', verifyAdminToken, async (req, res) => {
   }
 });
 
-// POST /api/admin/change-password
+// ✅ POST /api/admin/change-password - Changer mot de passe
 router.post('/admin/change-password', verifyAdminToken, async (req, res) => {
   const { oldPassword, newPassword } = req.body;
   try {
@@ -129,7 +160,7 @@ router.post('/admin/change-password', verifyAdminToken, async (req, res) => {
   }
 });
 
-// GET /api/admin/activities
+// ✅ GET /api/admin/activities - Liste des activités
 router.get('/admin/activities', verifyAdminToken, async (req, res) => {
   try {
     const result = await pool.query(`
@@ -151,7 +182,7 @@ router.get('/admin/activities', verifyAdminToken, async (req, res) => {
   }
 });
 
-// POST /api/admin/activities
+// ✅ POST /api/admin/activities - Créer une activité
 router.post('/admin/activities', verifyAdminToken, async (req, res) => {
   const { action, details, user_id } = req.body;
   try {
@@ -162,6 +193,46 @@ router.post('/admin/activities', verifyAdminToken, async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Erreur create activity:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ✅ POST /api/admin/verify - Vérifier les accès (CRUCIAL pour Super Admin)
+router.post('/admin/verify', async (req, res) => {
+  const { password } = req.body;
+  try {
+    const superAdminResult = await pool.query(
+      "SELECT mot_de_passe FROM utilisateurs WHERE role = 'super_admin' LIMIT 1"
+    );
+    let adminPassword = superAdminResult.rows.length > 0 ? superAdminResult.rows[0].mot_de_passe : '1234';
+    
+    if (password === adminPassword) {
+      return res.json({ 
+        success: true, 
+        token: config.ADMIN_SECRET_TOKEN, 
+        message: 'Accès Super Admin autorisé',
+        role: 'super_admin'
+      });
+    }
+    
+    const dafResult = await pool.query(
+      "SELECT mot_de_passe FROM utilisateurs WHERE role = 'daf' LIMIT 1"
+    );
+    if (dafResult.rows.length > 0) {
+      const dafPassword = dafResult.rows[0].mot_de_passe;
+      if (password === dafPassword) {
+        return res.json({ 
+          success: true, 
+          token: config.DAF_SECRET_TOKEN, 
+          message: 'Accès DAF autorisé',
+          role: 'daf'
+        });
+      }
+    }
+    
+    res.status(401).json({ success: false, message: 'Mot de passe incorrect' });
+  } catch (error) {
+    console.error('Erreur verify admin:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
