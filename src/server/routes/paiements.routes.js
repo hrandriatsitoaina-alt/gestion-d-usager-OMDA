@@ -1,27 +1,25 @@
 // server/routes/paiements.routes.js
 const express = require('express');
 const router = express.Router();
-const pool = require('../database');
-const { verifyAnyUser } = require('../middleware');
+const { pool } = require('../database');
+const { authMiddleware } = require('../middleware');
 
 // ============================================================
 // ROUTE DE TEST
 // ============================================================
-router.get('/paiements/test', (req, res) => {
-  res.json({ 
-    success: true, 
-    message: 'Route paiements fonctionne !',
-    token: req.headers.adminToken || 'Aucun token'
-  });
+
+router.get('/paiements/test', authMiddleware, (req, res) => {
+  res.json({ success: true, message: 'Route paiements fonctionne !' });
 });
 
 // ============================================================
 // GET - Statistiques des paiements
 // ============================================================
-router.get('/paiements/stats', async (req, res) => {
+
+router.get('/paiements/stats', authMiddleware, async (req, res) => {
   try {
     console.log('📊 Récupération des statistiques de paiements...');
-    
+
     const stats = {
       hotel: { total: 0, totalPayes: 0, nonPayes: 0, montantTotal: 0 },
       'grand-surface': { total: 0, totalPayes: 0, nonPayes: 0, montantTotal: 0 },
@@ -30,7 +28,7 @@ router.get('/paiements/stats', async (req, res) => {
       media: { total: 0, totalPayes: 0, nonPayes: 0, montantTotal: 0 },
       occ: { total: 0, totalPayes: 0, nonPayes: 0, montantTotal: 0 }
     };
-    
+
     const types = [
       { name: 'hotel', table: 'usagers_hotel' },
       { name: 'grand-surface', table: 'usagers_magasin' },
@@ -39,12 +37,12 @@ router.get('/paiements/stats', async (req, res) => {
       { name: 'media', table: 'usagers_media' },
       { name: 'occ', table: 'usagers_occasionnel' }
     ];
-    
+
     for (const type of types) {
       try {
         const totalResult = await pool.query(`SELECT COUNT(*) as count FROM ${type.table}`);
         stats[type.name].total = parseInt(totalResult.rows[0].count) || 0;
-        
+
         const payesResult = await pool.query(
           `SELECT COUNT(DISTINCT usager_id) as count, COALESCE(SUM(montant), 0) as total_montant 
            FROM paiements 
@@ -54,13 +52,13 @@ router.get('/paiements/stats', async (req, res) => {
         stats[type.name].totalPayes = parseInt(payesResult.rows[0].count) || 0;
         stats[type.name].montantTotal = parseFloat(payesResult.rows[0].total_montant) || 0;
         stats[type.name].nonPayes = Math.max(0, stats[type.name].total - stats[type.name].totalPayes);
-        
+
         console.log(`✅ ${type.name}: total=${stats[type.name].total}, payes=${stats[type.name].totalPayes}, montant=${stats[type.name].montantTotal}`);
       } catch (err) {
         console.error(`❌ Erreur pour ${type.name}:`, err.message);
       }
     }
-    
+
     res.json({ success: true, stats });
   } catch (error) {
     console.error('❌ Erreur paiements stats:', error);
@@ -71,7 +69,7 @@ router.get('/paiements/stats', async (req, res) => {
 // ============================================================
 // POST - Enregistrer un paiement (AVEC RENOUVELLEMENT COMPLET)
 // ============================================================
-router.post('/paiements/enregistrer', verifyAnyUser, async (req, res) => {
+router.post('/paiements/enregistrer', authMiddleware, async (req, res) => {
   const { 
     usagerId, 
     usagerType, 
@@ -84,18 +82,17 @@ router.post('/paiements/enregistrer', verifyAnyUser, async (req, res) => {
     estRetard,
     reference
   } = req.body;
-  
+
   console.log('📝 Données reçues:', { usagerId, usagerType, montant, datePaiement, nombreMois, anneeDebut, fraisDossier, montantRetard, estRetard, reference });
-  console.log('🔑 Token reçu:', req.headers.adminToken || req.headers['admintoken']);
-  
+
   if (!usagerId || !usagerType || !montant) {
     return res.status(400).json({ success: false, message: 'Champs obligatoires manquants' });
   }
-  
+
   if (montant <= 0) {
     return res.status(400).json({ success: false, message: 'Le montant doit être supérieur à 0' });
   }
-  
+
   try {
     const typeMapping = {
       'hotel': 'usagers_hotel',
@@ -105,21 +102,17 @@ router.post('/paiements/enregistrer', verifyAnyUser, async (req, res) => {
       'bus': 'usagers_bus',
       'nightclub': 'usagers_nightclub'
     };
-    
+
     const tableName = typeMapping[usagerType];
     if (!tableName) {
       return res.status(400).json({ success: false, message: 'Type d\'usager invalide' });
     }
-    
-    // ============================================================
-    // RÉCUPÉRATION DE L'USAGER (avec gestion spéciale pour OCC)
-    // ============================================================
+
     let existing;
     let usagerFraisDossier = 0;
     let denomination = 'Inconnu';
 
     if (usagerType === 'occ') {
-      // La table OCC n'a pas de colonne frais_dossier
       const result = await pool.query(
         `SELECT id, denomination FROM ${tableName} WHERE id = $1`,
         [usagerId]
@@ -129,10 +122,8 @@ router.post('/paiements/enregistrer', verifyAnyUser, async (req, res) => {
       }
       existing = result.rows[0];
       denomination = existing.denomination;
-      // Pour OCC, on utilise la valeur passée dans le body, sinon 0
-      usagerFraisDossier = 0; // pas de valeur en base
+      usagerFraisDossier = 0;
     } else {
-      // Autres types : on peut lire frais_dossier depuis la table
       const result = await pool.query(
         `SELECT id, denomination, frais_dossier FROM ${tableName} WHERE id = $1`,
         [usagerId]
@@ -144,28 +135,24 @@ router.post('/paiements/enregistrer', verifyAnyUser, async (req, res) => {
       denomination = existing.denomination;
       usagerFraisDossier = parseFloat(existing.frais_dossier) || 0;
     }
-    
-    // Déterminer la valeur finale du frais de dossier
+
     const fraisDossierValue = (fraisDossier !== undefined && fraisDossier !== null) 
       ? parseFloat(fraisDossier) 
       : usagerFraisDossier;
-    
+
     console.log(`✅ Usager trouvé: ${denomination}`);
     console.log(`📄 Frais de dossier: ${fraisDossierValue}`);
-    
-    // ============================================================
-    // CAS OCC - Paiement unique
-    // ============================================================
+
     if (usagerType === 'occ') {
       const occCheck = await pool.query(
         `SELECT id FROM paiements WHERE usager_id = $1 AND usager_type = 'occ' AND statut = 'paye'`,
         [usagerId]
       );
-      
+
       if (occCheck.rows.length > 0) {
         return res.status(400).json({ success: false, message: 'Ce paiement OCC a déjà été effectué' });
       }
-      
+
       await pool.query(
         `INSERT INTO paiements 
          (usager_id, usager_type, type_paiement, montant, date_paiement, 
@@ -182,64 +169,57 @@ router.post('/paiements/enregistrer', verifyAnyUser, async (req, res) => {
           reference || null
         ]
       );
-      
+
       console.log(`✅ Paiement OCC enregistré (frais: ${fraisDossierValue}, retard: ${montantRetard})`);
-      
+
       return res.json({ 
         success: true, 
         message: `Paiement occasionnel enregistré avec succès`,
         montant
       });
     }
-    
-    // ============================================================
-    // CAS MENSUEL - AVEC RENOUVELLEMENT COMPLET ET FRAIS DE DOSSIER
-    // ============================================================
-    
+
     const datePaiementObj = new Date(datePaiement);
     const moisDepart = datePaiementObj.getMonth() + 1;
     const anneeDepart = anneeDebut || datePaiementObj.getFullYear();
     const nbMois = nombreMois || 1;
     const montantParMois = montant / nbMois;
-    
+
     const paiementsExistants = await pool.query(
       `SELECT mois, annee FROM paiements 
        WHERE usager_id = $1 AND usager_type = $2 AND type_paiement = 'mensuel' AND statut = 'paye'
        ORDER BY annee, mois`,
       [usagerId, usagerType]
     );
-    
+
     const moisPayes = new Set();
     for (const p of paiementsExistants.rows) {
       moisPayes.add(`${p.annee}-${p.mois}`);
     }
-    
+
     console.log(`📅 Mois déjà payés (${moisPayes.size}):`, Array.from(moisPayes));
-    
+
     let anneeActuelle = anneeDepart;
     let moisActuel = moisDepart;
     let moisTrouves = 0;
     let detailsMois = [];
     let maxRecherche = 36;
-    
-    // Flag pour savoir si c'est le premier mois inséré (pour ajouter les frais)
     let isFirstInsert = true;
-    
+
     while (moisTrouves < nbMois && maxRecherche > 0) {
       if (moisActuel > 12) {
         moisActuel = 1;
         anneeActuelle++;
       }
-      
+
       const key = `${anneeActuelle}-${moisActuel}`;
-      
+
       if (!moisPayes.has(key)) {
-        // Déterminer les valeurs à insérer
         const currentFrais = isFirstInsert ? fraisDossierValue : 0;
         const currentMontantRetard = isFirstInsert ? (parseFloat(montantRetard) || 0) : 0;
         const currentEstRetard = isFirstInsert ? (estRetard === true || estRetard === 'true' ? true : false) : false;
         const currentReference = isFirstInsert ? (reference || null) : null;
-        
+
         await pool.query(
           `INSERT INTO paiements 
            (usager_id, usager_type, type_paiement, annee, mois, montant, date_paiement, statut,
@@ -258,7 +238,7 @@ router.post('/paiements/enregistrer', verifyAnyUser, async (req, res) => {
             currentReference
           ]
         );
-        
+
         moisTrouves++;
         detailsMois.push({ 
           mois: moisActuel, 
@@ -270,26 +250,24 @@ router.post('/paiements/enregistrer', verifyAnyUser, async (req, res) => {
         });
         console.log(`✅ Mois ${moisActuel}/${anneeActuelle} enregistré (frais: ${currentFrais}, retard: ${currentMontantRetard})`);
         moisPayes.add(key);
-        
-        // Après le premier insert, on met le flag à false
         isFirstInsert = false;
       } else {
         console.log(`⚠️ Mois ${moisActuel}/${anneeActuelle} déjà payé - ignoré`);
       }
-      
+
       moisActuel++;
       maxRecherche--;
     }
-    
+
     if (moisTrouves === 0) {
       return res.status(400).json({ 
         success: false, 
         message: 'Tous les mois demandés sont déjà payés' 
       });
     }
-    
+
     console.log(`✅ ${moisTrouves} mois enregistrés sur ${nbMois} demandés`);
-    
+
     res.json({ 
       success: true, 
       message: `${moisTrouves} mois enregistrés avec succès`,
@@ -299,7 +277,7 @@ router.post('/paiements/enregistrer', verifyAnyUser, async (req, res) => {
         totalMoisPayes: moisPayes.size
       }
     });
-    
+
   } catch (error) {
     console.error('❌ Erreur paiement enregistrer:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -309,67 +287,47 @@ router.post('/paiements/enregistrer', verifyAnyUser, async (req, res) => {
 // ============================================================
 // GET - Historique des paiements (avec noms et régions)
 // ============================================================
-router.get('/paiements/historique', async (req, res) => {
+router.get('/paiements/historique', authMiddleware, async (req, res) => {
   try {
     console.log('📄 Récupération de l\'historique des paiements...');
     const historique = [];
-    
+
     const result = await pool.query(`
       SELECT 
-        p.id,
-        p.usager_id,
-        p.usager_type,
-        p.type_paiement,
-        p.mois,
-        p.annee,
-        p.montant,
-        p.date_paiement,
-        p.frais_dossier,
-        p.montant_retard,
-        p.est_retard,
-        p.reference,
-        p.statut,
-        p.created_at
+        p.id, p.usager_id, p.usager_type, p.type_paiement, p.mois, p.annee,
+        p.montant, p.date_paiement, p.frais_dossier, p.montant_retard,
+        p.est_retard, p.reference, p.statut, p.created_at
       FROM paiements p
       ORDER BY p.created_at DESC
       LIMIT 50
     `);
-    
+
     for (const row of result.rows) {
       let usagerNom = 'Inconnu';
       let region = 'N/A';
-      
-      if (row.usager_type === 'hotel') {
-        const u = await pool.query(`SELECT denomination, region FROM usagers_hotel WHERE id = $1`, [row.usager_id]);
-        if (u.rows.length > 0) { usagerNom = u.rows[0].denomination; region = u.rows[0].region; }
-      } else if (row.usager_type === 'grand-surface') {
-        const u = await pool.query(`SELECT denomination, region FROM usagers_magasin WHERE id = $1`, [row.usager_id]);
-        if (u.rows.length > 0) { usagerNom = u.rows[0].denomination; region = u.rows[0].region; }
-      } else if (row.usager_type === 'bus') {
-        const u = await pool.query(`SELECT denomination, region FROM usagers_bus WHERE id = $1`, [row.usager_id]);
-        if (u.rows.length > 0) { usagerNom = u.rows[0].denomination; region = u.rows[0].region; }
-      } else if (row.usager_type === 'nightclub') {
-        const u = await pool.query(`SELECT denomination, region FROM usagers_nightclub WHERE id = $1`, [row.usager_id]);
-        if (u.rows.length > 0) { usagerNom = u.rows[0].denomination; region = u.rows[0].region; }
-      } else if (row.usager_type === 'media') {
-        const u = await pool.query(`SELECT denomination, region FROM usagers_media WHERE id = $1`, [row.usager_id]);
-        if (u.rows.length > 0) { usagerNom = u.rows[0].denomination; region = u.rows[0].region; }
-      } else if (row.usager_type === 'occ') {
-        const u = await pool.query(`SELECT denomination, region FROM usagers_occasionnel WHERE id = $1`, [row.usager_id]);
+
+      const tableMap = {
+        'hotel': 'usagers_hotel',
+        'grand-surface': 'usagers_magasin',
+        'bus': 'usagers_bus',
+        'nightclub': 'usagers_nightclub',
+        'media': 'usagers_media',
+        'occ': 'usagers_occasionnel'
+      };
+
+      const table = tableMap[row.usager_type];
+      if (table) {
+        const u = await pool.query(`SELECT denomination, region FROM ${table} WHERE id = $1`, [row.usager_id]);
         if (u.rows.length > 0) { usagerNom = u.rows[0].denomination; region = u.rows[0].region; }
       }
-      
+
       const typeLabels = {
-        'hotel': 'Hôtel',
-        'grand-surface': 'Grand Surface',
-        'bus': 'Bus',
-        'nightclub': 'Night club',
-        'media': 'Télé/Radio',
-        'occ': 'OCC'
+        'hotel': 'Hôtel', 'grand-surface': 'Grand Surface', 'bus': 'Bus',
+        'nightclub': 'Night club', 'media': 'Télé/Radio', 'occ': 'OCC'
       };
-      
+
       const moisLabels = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-      
+
       historique.push({
         id: row.id,
         usager: usagerNom,
@@ -388,38 +346,30 @@ router.get('/paiements/historique', async (req, res) => {
         region: region
       });
     }
-    
-    res.json({ 
-      success: true, 
-      historique: historique,
-      total: historique.length
-    });
+
+    res.json({ success: true, historique: historique, total: historique.length });
   } catch (error) {
     console.error('❌ Erreur historique paiements:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: error.message,
-      historique: [] 
-    });
+    res.status(500).json({ success: false, message: error.message, historique: [] });
   }
 });
 
 // ============================================================
 // GET - Années disponibles
 // ============================================================
-router.get('/paiements/annees-disponibles/:type', async (req, res) => {
+router.get('/paiements/annees-disponibles/:type', authMiddleware, async (req, res) => {
   const currentYear = new Date().getFullYear();
   try {
     const result = await pool.query(
       `SELECT DISTINCT annee FROM paiements WHERE annee IS NOT NULL ORDER BY annee DESC`
     );
-    
+
     let annees = result.rows.map(r => r.annee);
-    
+
     if (annees.length === 0) {
       annees = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1, currentYear + 2];
     }
-    
+
     res.json({ success: true, annees });
   } catch (error) {
     console.error('❌ Erreur annees disponibles:', error);
@@ -430,26 +380,15 @@ router.get('/paiements/annees-disponibles/:type', async (req, res) => {
 // ============================================================
 // GET - Tous les paiements (pour le tableau de bord financier)
 // ============================================================
-router.get('/paiements/tous', async (req, res) => {
+router.get('/paiements/tous', authMiddleware, async (req, res) => {
   try {
     console.log('📊 Récupération de tous les paiements...');
-    
+
     const result = await pool.query(`
       SELECT 
-        p.id,
-        p.usager_id,
-        p.usager_type,
-        p.type_paiement,
-        p.annee,
-        p.mois,
-        p.montant,
-        p.date_paiement,
-        p.frais_dossier,
-        p.montant_retard,
-        p.est_retard,
-        p.reference,
-        p.statut,
-        p.created_at,
+        p.id, p.usager_id, p.usager_type, p.type_paiement, p.annee, p.mois,
+        p.montant, p.date_paiement, p.frais_dossier, p.montant_retard,
+        p.est_retard, p.reference, p.statut, p.created_at,
         CASE 
           WHEN p.usager_type = 'hotel' THEN (SELECT denomination FROM usagers_hotel WHERE id = p.usager_id)
           WHEN p.usager_type = 'grand-surface' THEN (SELECT denomination FROM usagers_magasin WHERE id = p.usager_id)
@@ -471,46 +410,26 @@ router.get('/paiements/tous', async (req, res) => {
       FROM paiements p
       ORDER BY p.created_at DESC
     `);
-    
-    res.json({ 
-      success: true, 
-      paiements: result.rows,
-      total: result.rows.length
-    });
-    
+
+    res.json({ success: true, paiements: result.rows, total: result.rows.length });
   } catch (error) {
     console.error('❌ Erreur récupération tous les paiements:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: error.message,
-      paiements: [] 
-    });
+    res.status(500).json({ success: false, message: error.message, paiements: [] });
   }
 });
 
 // ============================================================
 // GET - Historique complet des paiements (avec noms et régions)
 // ============================================================
-router.get('/paiements/historique-complet', async (req, res) => {
+router.get('/paiements/historique-complet', authMiddleware, async (req, res) => {
   try {
     console.log('📄 Récupération de l\'historique complet des paiements...');
-    
+
     const result = await pool.query(`
       SELECT 
-        p.id,
-        p.usager_id,
-        p.usager_type,
-        p.type_paiement,
-        p.annee,
-        p.mois,
-        p.montant,
-        p.date_paiement,
-        p.frais_dossier,
-        p.montant_retard,
-        p.est_retard,
-        p.reference,
-        p.statut,
-        p.created_at,
+        p.id, p.usager_id, p.usager_type, p.type_paiement, p.annee, p.mois,
+        p.montant, p.date_paiement, p.frais_dossier, p.montant_retard,
+        p.est_retard, p.reference, p.statut, p.created_at,
         CASE 
           WHEN p.usager_type = 'hotel' THEN (SELECT denomination FROM usagers_hotel WHERE id = p.usager_id)
           WHEN p.usager_type = 'grand-surface' THEN (SELECT denomination FROM usagers_magasin WHERE id = p.usager_id)
@@ -534,30 +453,21 @@ router.get('/paiements/historique-complet', async (req, res) => {
       ORDER BY p.created_at DESC
       LIMIT 100
     `);
-    
-    res.json({ 
-      success: true, 
-      historique: result.rows,
-      total: result.rows.length
-    });
-    
+
+    res.json({ success: true, historique: result.rows, total: result.rows.length });
   } catch (error) {
     console.error('❌ Erreur historique complet:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: error.message,
-      historique: [] 
-    });
+    res.status(500).json({ success: false, message: error.message, historique: [] });
   }
 });
 
 // ============================================================
 // GET - Comptes d'usagers par type
 // ============================================================
-router.get('/usagers/comptes-par-type', async (req, res) => {
+router.get('/usagers/comptes-par-type', authMiddleware, async (req, res) => {
   try {
     console.log('📊 Comptage des usagers par type...');
-    
+
     const types = [
       { name: 'hotel', table: 'usagers_hotel' },
       { name: 'grand-surface', table: 'usagers_magasin' },
@@ -566,27 +476,23 @@ router.get('/usagers/comptes-par-type', async (req, res) => {
       { name: 'media', table: 'usagers_media' },
       { name: 'occ', table: 'usagers_occasionnel' }
     ];
-    
+
     const resultats = {};
-    
+
     for (const type of types) {
       const result = await pool.query(`SELECT COUNT(*) as count FROM ${type.table}`);
       resultats[type.name] = parseInt(result.rows[0].count) || 0;
     }
-    
+
     res.json({ 
       success: true, 
       types: resultats,
       total: Object.values(resultats).reduce((a, b) => a + b, 0)
     });
-    
+
   } catch (error) {
     console.error('❌ Erreur comptage usagers par type:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: error.message,
-      types: {} 
-    });
+    res.status(500).json({ success: false, message: error.message, types: {} });
   }
 });
 

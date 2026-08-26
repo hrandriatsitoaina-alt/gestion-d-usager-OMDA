@@ -1,8 +1,12 @@
+// server/config.js
+require('dotenv').config();
+
 module.exports = {
-    PORT: 3001,
-    ADMIN_SECRET_TOKEN: 'super_admin_secret_2026',
-    DAF_SECRET_TOKEN: 'daf_secret_token_2026',
+    PORT: process.env.PORT || 3001,
+    JWT_SECRET: process.env.JWT_SECRET,
+    ADMIN_SECRET_TOKEN: process.env.ADMIN_SECRET_TOKEN,
+    DAF_SECRET_TOKEN: process.env.DAF_SECRET_TOKEN,
     CORS_ORIGINS: ['http://localhost:3000', 'http://localhost:5173'],
     CORS_METHODS: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     CORS_HEADERS: ['Content-Type', 'adminToken', 'Authorization']
-  };
+};

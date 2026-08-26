@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('../database');
-const { verifyAdminToken } = require('../middleware');
+const { pool } = require('../database');
+const { requireSuperAdmin } = require('../middleware');
 
 // POST /api/backup/create
-router.post('/backup/create', verifyAdminToken, async (req, res) => {
+router.post('/backup/create', requireSuperAdmin, async (req, res) => {
   const { annee } = req.body;
   const currentYear = parseInt(annee) || new Date().getFullYear();
   try {
@@ -50,7 +50,7 @@ router.post('/backup/create', verifyAdminToken, async (req, res) => {
 });
 
 // POST /api/backup/reset-counters
-router.post('/backup/reset-counters', verifyAdminToken, async (req, res) => {
+router.post('/backup/reset-counters', requireSuperAdmin, async (req, res) => {
   const { annee } = req.body;
   const currentYear = parseInt(annee) || new Date().getFullYear();
   const nextYear = currentYear + 1;
@@ -95,7 +95,7 @@ router.post('/backup/reset-counters', verifyAdminToken, async (req, res) => {
 });
 
 // GET /api/backup/:annee
-router.get('/backup/:annee', verifyAdminToken, async (req, res) => {
+router.get('/backup/:annee', requireSuperAdmin, async (req, res) => {
   const { annee } = req.params;
   try {
     const result = await pool.query(
@@ -118,7 +118,7 @@ router.get('/backup/:annee', verifyAdminToken, async (req, res) => {
 });
 
 // GET /api/backup/list
-router.get('/backup/list', verifyAdminToken, async (req, res) => {
+router.get('/backup/list', requireSuperAdmin, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT id, annee, created_at FROM backup_annuel ORDER BY annee DESC`
@@ -131,7 +131,7 @@ router.get('/backup/list', verifyAdminToken, async (req, res) => {
 });
 
 // DELETE /api/backup/:annee
-router.delete('/backup/:annee', verifyAdminToken, async (req, res) => {
+router.delete('/backup/:annee', requireSuperAdmin, async (req, res) => {
   const { annee } = req.params;
   try {
     const result = await pool.query(
@@ -149,7 +149,7 @@ router.delete('/backup/:annee', verifyAdminToken, async (req, res) => {
 });
 
 // GET /api/backup/bilan/:annee
-router.get('/backup/bilan/:annee', verifyAdminToken, async (req, res) => {
+router.get('/backup/bilan/:annee', requireSuperAdmin, async (req, res) => {
   const { annee } = req.params;
   try {
     const backupResult = await pool.query(
@@ -198,11 +198,10 @@ router.get('/backup/bilan/:annee', verifyAdminToken, async (req, res) => {
 });
 
 // POST /api/backup/yearly-reset
-router.post('/backup/yearly-reset', verifyAdminToken, async (req, res) => {
+router.post('/backup/yearly-reset', requireSuperAdmin, async (req, res) => {
   const { annee } = req.body;
   const currentYear = parseInt(annee) || new Date().getFullYear();
   try {
-    // Simuler la création de backup et la réinitialisation
     await pool.query(
       `INSERT INTO activites (action, details, user_id, created_at) 
        VALUES ($1, $2, $3, NOW())`,

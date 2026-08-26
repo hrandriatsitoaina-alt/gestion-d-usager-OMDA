@@ -109,45 +109,21 @@ const OccAjout = ({ onCancel }) => {
   };
 
   const handleAddRegion = async () => {
-    const trimmed = newRegion.trim();
-    if (!trimmed) {
-      alert('Veuillez saisir un nom de région');
-      return;
-    }
-    if (regionsList.includes(trimmed)) {
-      alert('Cette région existe déjà');
-      return;
-    }
-
-    const currentUser = getCurrentUser();
-    if (!currentUser) {
-      alert('Vous devez être connecté pour ajouter une région');
-      return;
-    }
-
-    try {
-      const response = await fetch('http://localhost:3001/api/regions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentUser.id}`
-        },
-        body: JSON.stringify({ nom: trimmed })
-      });
-
-      const result = await response.json();
-
-      if (response.ok && result.success) {
-        setRegionsList([...regionsList, trimmed]);
-        setNewRegion('');
-        setShowAddRegion(false);
-        alert(`✅ Région "${trimmed}" ajoutée avec succès !`);
-      } else {
-        alert(`❌ Erreur : ${result.message || 'Impossible d\'ajouter la région'}`);
-      }
-    } catch (error) {
-      console.error('Erreur réseau lors de l\'ajout de la région :', error);
-      alert('❌ Erreur de connexion au serveur');
+    if (newRegion.trim() && !regionsList.includes(newRegion.trim())) {
+      try {
+        const response = await fetch('http://localhost:3001/api/regions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nom: newRegion.trim() })
+        });
+        const result = await response.json();
+        if (result.success) {
+          setRegionsList([...regionsList, newRegion.trim()]);
+          setNewRegion('');
+          setShowAddRegion(false);
+          alert(`✅ Région "${newRegion.trim()}" ajoutée!`);
+        }
+      } catch (error) { console.error(error); }
     }
   };
 
@@ -321,15 +297,13 @@ const OccAjout = ({ onCancel }) => {
       const globalMonth = String(new Date().getMonth() + 1).padStart(2, '0');
       const globalYear = new Date().getFullYear();
       const nouveauTotalGlobal = totalGlobal + 1;
-      // ✅ Numéro global : compteur/MM/AAAA (sans le jour)
-      const numeroDossierGlobal = `${nouveauTotalGlobal}/${globalMonth}/${globalYear}`;
+      const numeroDossierGlobal = `${nouveauTotalGlobal}/${globalDay}/${globalMonth}/${globalYear}`;
       
       const prefix = userInfo.prefix || currentUser.nom?.substring(0, 3).toUpperCase() || '';
       const compteurActuel = userInfo.compteurs?.['OCC'] || 0;
       const nouveauCompteur = compteurActuel + 1;
       const currentMonth = new Date().getMonth() + 1;
       const currentTrimestre = getTrimestreFromMonth(currentMonth);
-      // ✅ Numéro utilisateur : préfixe compteur/trimestre/année
       const numeroDossierUtilisateur = `${prefix} ${nouveauCompteur}/${currentTrimestre}/${userInfo.anneeEnCours || new Date().getFullYear()}`;
 
       const finalData = {
@@ -405,14 +379,11 @@ const OccAjout = ({ onCancel }) => {
   // ======================= RENDER STEPS =======================
 
   const renderStep1 = () => {
-    // Récupération du compteur global depuis le numéro global (format : compteur/MM/AAAA)
     const globalParts = globalDossierNumber.split('/');
     const globalCount = globalParts[0] || '0';
+    const globalDay = String(new Date().getDate()).padStart(2, '0');
     const globalMonth = String(new Date().getMonth() + 1).padStart(2, '0');
     const globalYear = new Date().getFullYear();
-    // ✅ Affichage global : compteur/MM/AAAA
-    const globalDisplay = `${globalCount}/${globalMonth}/${globalYear}`;
-
     const prefix = userInfo.prefix || '';
     const nextCompteur = (userInfo.compteurs?.['OCC'] || 0) + 1;
     const currentMonth = new Date().getMonth() + 1;
@@ -428,7 +399,7 @@ const OccAjout = ({ onCancel }) => {
           </div>
           <div className="user-info-row">
             <FileText size={18} strokeWidth={2} />
-            <span>Dossier Global: <strong>{globalDisplay}</strong></span>
+            <span>Dossier Global: <strong>{globalCount}/{globalDay}/{globalMonth}/{globalYear}</strong></span>
             <span style={{ marginLeft: '20px', color: '#007bff' }}>{userDossierDisplay}</span>
           </div>
           <div className="user-info-row" style={{ fontSize: '12px', color: '#6c757d' }}>
@@ -672,10 +643,9 @@ const OccAjout = ({ onCancel }) => {
   const renderStep4 = () => {
     const globalParts = globalDossierNumber.split('/');
     const globalCount = globalParts[0] || '0';
+    const globalDay = String(new Date().getDate()).padStart(2, '0');
     const globalMonth = String(new Date().getMonth() + 1).padStart(2, '0');
     const globalYear = new Date().getFullYear();
-    const globalDisplay = `${globalCount}/${globalMonth}/${globalYear}`;
-
     const prefix = userInfo.prefix || '';
     const nextCompteur = (userInfo.compteurs?.['OCC'] || 0) + 1;
     const currentMonth = new Date().getMonth() + 1;
@@ -692,7 +662,7 @@ const OccAjout = ({ onCancel }) => {
           <p><Clock size={16} strokeWidth={2} /> Cas de retard: <strong>{isRetard ? 'Oui' : 'Non'}</strong> {isRetard && `(Pénalité: ${formatNumber(montantRetard)} Ar)`}</p>
         </div>
         <table className="recap-table"><tbody>
-          <tr><td><FileText size={16} strokeWidth={2} /> Dossier Global N° {globalDisplay}</td><td><strong>{userDossierDisplay}</strong></td></tr>
+          <tr><td><FileText size={16} strokeWidth={2} /> Dossier Global N° {globalCount}/{globalDay}/{globalMonth}/{globalYear}</td><td><strong>{userDossierDisplay}</strong></td></tr>
           <tr><td><Users size={16} strokeWidth={2} /> Organisateurs</td><td>{occData.organisateurs || '-'}</td></tr>
           <tr><td><User size={16} strokeWidth={2} /> Representé par</td><td>{occData.representantPar || '-'}</td></tr>
           <tr><td><Music size={16} strokeWidth={2} /> Genre manifestation</td><td>{occData.genreManifestation || '-'}</td></tr>

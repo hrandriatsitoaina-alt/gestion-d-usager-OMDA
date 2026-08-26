@@ -1,11 +1,17 @@
-const { Pool } = require('pg');
+require('dotenv').config(); // Charger les variables d'environnement depuis le fichier .env
+const bcrypt = require('bcryptjs'); // Pour le hashage des mots de passe
+const { Pool } = require('pg'); // Pour se connecter à PostgreSQL
+
+// il faut installer bcrypt pour le hashage des mdp;
+//  jsonwebtoken pour la gestion des tokens JWT
+// npm install bcryptjs jsonwebtoken
 
 const pool = new Pool({
-  user: 'omda_user',
-  password: 'Omda2026',
-  host: 'localhost',
-  port: 5432,
-  database: 'omda_db'
+  user : process.env.PGUSER,
+  password : process.env.PGPASSWORD,
+  host : process.env.PGHOST,
+  port : process.env.PGPORT,
+  database : process.env.PGDATABASE,
 });
 
 pool.connect((err, client, release) => {
@@ -37,8 +43,20 @@ async function initDB() {
     console.log('✅ Table utilisateurs prête');
 
     // ============================================================
+    // CREATION DE LA COLONNE "doit_changer_mdp" DANS LA TABLE UTILISATEURS
+    // ============================================================
+
+    await pool.query(`
+        ALTER TABLE utilisateurs
+        ADD COLUMN IF NOT EXISTS doit_changer_mdp BOOLEAN DEFAULT TRUE
+      `
+    );
+    console.log('✅ Colonne doit_changer_mdp ajoutée à la table utilisateurs');
+
+    // ============================================================
     // TABLE REGIONS
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS regions (
         id SERIAL PRIMARY KEY,
@@ -51,6 +69,7 @@ async function initDB() {
     // ============================================================
     // TABLE COMPTEURS DOSSIERS UTILISATEURS
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS compteurs_dossiers_utilisateurs (
         id SERIAL PRIMARY KEY,
@@ -68,6 +87,7 @@ async function initDB() {
     // ============================================================
     // TABLE NOTIFICATIONS
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS notifications (
         id SERIAL PRIMARY KEY,
@@ -83,6 +103,7 @@ async function initDB() {
     // ============================================================
     // TABLE DELETE_REQUESTS
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS delete_requests (
         id SERIAL PRIMARY KEY,
@@ -97,6 +118,7 @@ async function initDB() {
     // ============================================================
     // TABLE DELETE_CONFIRMATIONS
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS delete_confirmations (
         id SERIAL PRIMARY KEY,
@@ -112,6 +134,7 @@ async function initDB() {
     // ============================================================
     // TABLE DELETE_HISTORY
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS delete_history (
         id SERIAL PRIMARY KEY,
@@ -129,6 +152,7 @@ async function initDB() {
     // ============================================================
     // TABLE ACTIVITES
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS activites (
         id SERIAL PRIMARY KEY,
@@ -143,6 +167,7 @@ async function initDB() {
     // ============================================================
     // TABLE USAGERS_VUS
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS usagers_vus (
         id SERIAL PRIMARY KEY,
@@ -157,6 +182,7 @@ async function initDB() {
     // ============================================================
     // TABLE ARTISTES
     // ============================================================
+
     await pool.query(`CREATE TABLE IF NOT EXISTS artistes (
       id SERIAL PRIMARY KEY, 
       nom VARCHAR(100) NOT NULL, 
@@ -170,6 +196,7 @@ async function initDB() {
     // ============================================================
     // TABLE PAIEMENTS (UNIQUE - REMPLACE TOUTES LES ANCIENNES)
     // ============================================================
+
     await pool.query(`
     CREATE TABLE IF NOT EXISTS paiements (
       id SERIAL PRIMARY KEY,
@@ -211,6 +238,7 @@ async function initDB() {
     // ============================================================
     // TABLE BACKUP_ANNUEL
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS backup_annuel (
         id SERIAL PRIMARY KEY,
@@ -224,6 +252,7 @@ async function initDB() {
     // ============================================================
     // TABLE USAGERS_HOTEL (AJOUT numero_dossier_utilisateur)
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS usagers_hotel (
         id SERIAL PRIMARY KEY,
@@ -264,6 +293,7 @@ async function initDB() {
     // ============================================================
     // TABLE USAGERS_MAGASIN (AJOUT numero_dossier_utilisateur)
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS usagers_magasin (
         id SERIAL PRIMARY KEY,
@@ -302,6 +332,7 @@ async function initDB() {
     // ============================================================
     // TABLE USAGERS_MEDIA (AJOUT numero_dossier_utilisateur)
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS usagers_media (
         id SERIAL PRIMARY KEY,
@@ -354,6 +385,7 @@ async function initDB() {
     // ============================================================
     // TABLE USAGERS_BUS (AJOUT numero_dossier_utilisateur)
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS usagers_bus (
         id SERIAL PRIMARY KEY,
@@ -393,6 +425,7 @@ async function initDB() {
     // ============================================================
     // TABLE USAGERS_NIGHTCLUB (AJOUT numero_dossier_utilisateur)
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS usagers_nightclub (
         id SERIAL PRIMARY KEY,
@@ -432,6 +465,7 @@ async function initDB() {
     // ============================================================
     // TABLE USAGERS_OCCASIONNEL (déjà avec numero_dossier_utilisateur)
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS usagers_occasionnel (
         id SERIAL PRIMARY KEY,
@@ -476,6 +510,7 @@ async function initDB() {
     // (déplacée ici : elle référence artistes ET usagers_occasionnel,
     //  qui doivent donc déjà exister)
     // ============================================================
+
     await pool.query(`CREATE TABLE IF NOT EXISTS event_artistes (
       id SERIAL PRIMARY KEY, 
       event_id INTEGER NOT NULL REFERENCES usagers_occasionnel(id) ON DELETE CASCADE, 
@@ -484,69 +519,77 @@ async function initDB() {
       UNIQUE(event_id, artiste_id))`);
     console.log('✅ Table event_artistes prête');
 
-    // ============================================================
-    // CRÉATION DES UTILISATEURS PAR DÉFAUT
-    // ============================================================
+  // ============================================================
+  // CRÉATION DES UTILISATEURS PAR DÉFAUT
+  // ============================================================
+    const currentYear = new Date().getFullYear();
+    const typesUsager = ['Hôtel', 'Grand Surface', 'Télé/Radio', 'Bus', 'Night club', 'OCC'];
+
     const usersList = [
       { nom: 'ANDRIAMAMONJY', email: 'andria@omda.mg', mot_de_passe: '1234', role: 'user' },
       { nom: 'RAKOTOARISOA', email: 'rakoto@omda.mg', mot_de_passe: '1234', role: 'user' },
       { nom: 'BERANTO', email: 'beranto@omda.mg', mot_de_passe: '1234', role: 'user' }
     ];
-    
-    const currentYear = new Date().getFullYear();
-    const typesUsager = ['Hôtel', 'Grand Surface', 'Télé/Radio', 'Bus', 'Night club', 'OCC'];
-    
+
     for (const user of usersList) {
       const exists = await pool.query("SELECT * FROM utilisateurs WHERE email = $1", [user.email]);
       if (exists.rows.length === 0) {
+        const hashedPassword = await bcrypt.hash(user.mot_de_passe, 12);
         const result = await pool.query(
-          `INSERT INTO utilisateurs (nom, email, mot_de_passe, role, statut) 
-           VALUES ($1, $2, $3, $4, 'actif') RETURNING id`,
-          [user.nom, user.email, user.mot_de_passe, user.role]
+          `INSERT INTO utilisateurs (nom, email, mot_de_passe, role, statut, doit_changer_mdp) 
+          VALUES ($1, $2, $3, $4, 'actif', TRUE) RETURNING id`,
+          [user.nom, user.email, hashedPassword, user.role]
         );
         const userId = result.rows[0].id;
         console.log(`✅ Utilisateur ${user.nom} créé`);
         for (const type of typesUsager) {
           await pool.query(
             `INSERT INTO compteurs_dossiers_utilisateurs (utilisateur_id, annee, compteur, type_usager) 
-             VALUES ($1, $2, 0, $3)`,
+            VALUES ($1, $2, 0, $3)`,
             [userId, currentYear, type]
           );
         }
       }
     }
+   
+    
+  
     
     // ============================================================
     // SUPER ADMIN
     // ============================================================
+
     const superAdminCheck = await pool.query("SELECT * FROM utilisateurs WHERE role = 'super_admin'");
     if (superAdminCheck.rows.length === 0) {
+      const defaultHash = await bcrypt.hash('1234', 12); // mot de passe temporaire, à changer obligatoirement
       const result = await pool.query(`
-        INSERT INTO utilisateurs (nom, email, mot_de_passe, role, statut) 
-        VALUES ('Super Administrateur', 'superadmin@omda.mg', '1234', 'super_admin', 'actif') 
+        INSERT INTO utilisateurs (nom, email, mot_de_passe, role, statut, doit_changer_mdp) 
+        VALUES ('Super Administrateur', 'superadmin@omda.mg', $1, 'super_admin', 'actif', TRUE) 
         RETURNING id
-      `);
+      `, [defaultHash]);
       const superAdminId = result.rows[0].id;
       for (const type of typesUsager) {
         await pool.query(
           `INSERT INTO compteurs_dossiers_utilisateurs (utilisateur_id, annee, compteur, type_usager) 
-           VALUES ($1, $2, 0, $3)`,
+          VALUES ($1, $2, 0, $3)`,
           [superAdminId, currentYear, type]
         );
       }
-      console.log('✅ Super Administrateur créé');
+      console.log('✅ Super Administrateur créé (mdp temporaire: 1234, changement obligatoire)');
     }
-    
+   
     // ============================================================
     // DAF
     // ============================================================
+
     const dafCheck = await pool.query("SELECT * FROM utilisateurs WHERE role = 'daf'");
     if (dafCheck.rows.length === 0) {
+      const defaultHash = await bcrypt.hash('5678', 12); // mot de passe temporaire, à changer obligatoirement
       const result = await pool.query(`
-        INSERT INTO utilisateurs (nom, email, mot_de_passe, role, statut) 
-        VALUES ('Directeur Financier', 'daf@omda.mg', '5678', 'daf', 'actif') 
+        INSERT INTO utilisateurs (nom, email, mot_de_passe, role, statut, doit_changer_mdp) 
+        VALUES ('Directeur Financier', 'daf@omda.mg', $1, 'daf', 'actif', TRUE) 
         RETURNING id
-      `);
+      ` , [defaultHash]);
       const dafId = result.rows[0].id;
       for (const type of typesUsager) {
         await pool.query(

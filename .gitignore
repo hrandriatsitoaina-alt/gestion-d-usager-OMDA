@@ -1,2 +1,24 @@
 node_modules/ 
 .vite/ 
+
+# Variables d'environnement
+.env
+.env.local
+.env.*.local
+
+# Build
+dist/
+release/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Éditeurs
+.vscode/
+.idea/

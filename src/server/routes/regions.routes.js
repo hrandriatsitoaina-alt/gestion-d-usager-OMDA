@@ -1,8 +1,8 @@
 // server/routes/regions.js
 const express = require('express');
 const router = express.Router();
-const pool = require('../database');
-const { verifyAdminToken } = require('../middleware'); // gardé pour DELETE
+const { pool } = require('../database');
+const { requireSuperAdmin } = require('../middleware');
 
 // GET /api/regions (public)
 router.get('/regions', async (req, res) => {
@@ -38,7 +38,7 @@ router.post('/regions', async (req, res) => {
 });
 
 // DELETE /api/regions/:id – garde la vérification admin (si besoin)
-router.delete('/regions/:id', verifyAdminToken, async (req, res) => {
+router.delete('/regions/:id', requireSuperAdmin, async (req, res) => {
   const { id } = req.params;
   try {
     const result = await pool.query('DELETE FROM regions WHERE id = $1 RETURNING id', [id]);
