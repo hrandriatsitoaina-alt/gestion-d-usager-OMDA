@@ -220,9 +220,10 @@ export const generateMediaPDF = (usager, paymentDetails) => {
     const fraisDossier = parseFloat(usager?.frais_dossier) || 0;
     const uniter = parseInt(usager?.uniter) || 1;
     
-    // ✅ Soit au Total = (Taux + Frais de dossier) × Uniter
-    const baseTotal = taux + fraisDossier;
-    const soitTotal = baseTotal * uniter;
+    // ✅ BONNE RÈGLE DE CALCUL : (Taux × Uniter) + Frais de dossier
+    // Le frais de dossier est FIXE et N'EST PAS multiplié par Uniter
+    const baseTotal = taux * uniter;
+    const soitTotal = baseTotal + fraisDossier;
     const totalEnLettres = nombreEnLettres(Math.round(soitTotal));
     
     const confirmationNom = usager?.confirmation_nom || '';
@@ -338,7 +339,7 @@ export const generateMediaPDF = (usager, paymentDetails) => {
     yPos += lineSpacing;
     
     doc.text(`Taux : ${formatNumber(taux)} Ariary`, marginX + 5, yPos);
-    yPos += lineSpacing ;
+    yPos += lineSpacing;
     
     // Couverture
     doc.setFont('times', 'bold');
@@ -365,7 +366,7 @@ export const generateMediaPDF = (usager, paymentDetails) => {
     
     drawCheckbox(doc, couvPos4, yPos, couvertureDistrict);
     doc.text('District', couvPos4 + 7, yPos);
-    yPos += lineSpacing ;
+    yPos += lineSpacing;
     
     // Horaires
     doc.setFont('times', 'bold');
@@ -384,13 +385,14 @@ export const generateMediaPDF = (usager, paymentDetails) => {
     
     drawCheckbox(doc, horairePos2, yPos, horaires13a24);
     doc.text('13 à 24 heures', horairePos2 + 7, yPos);
-    yPos += lineSpacing ;
+    yPos += lineSpacing;
     
-    // ✅ Soit au Total corrigé
+    // ✅ Soit au Total corrigé : (Taux × Uniter) + Frais de dossier
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text(`Soit au Total : ${formatNumber(soitTotal)} Ariary (${totalEnLettres} )`, marginX + 5, yPos);
-    yPos += lineSpacing + 2;
+    doc.text(`Soit au Total : ${formatNumber(soitTotal)} Ariary (${totalEnLettres})`, marginX + 5, yPos);
+    doc.text(`( ${formatNumber(taux)} × ${uniter} + ${formatNumber(fraisDossier)} )`, marginX + 5, yPos + 5);
+    yPos += lineSpacing + 5;
     
     // Signature
     doc.text(`Je soussigné(e) Mr/Mme ${confirmationNom || '……………………………………'}`, marginX + 5, yPos);

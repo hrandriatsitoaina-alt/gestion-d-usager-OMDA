@@ -1,4 +1,4 @@
-// src/server/routes/index.js
+// server/routes/index.js
 const express = require('express');
 const router = express.Router();
 
@@ -12,6 +12,7 @@ const backupRoutes = require('./backup.routes');
 const notificationsRoutes = require('./notifications.routes');
 const profileRoutes = require('./profile.routes');
 const factureRoutes = require('./facture.routes');
+const artistesRoutes = require('./artistes.routes'); //  NOUVEAU
 
 router.use(authRoutes);
 router.use(usagersRoutes);
@@ -22,6 +23,7 @@ router.use(financeRoutes);
 router.use(backupRoutes);
 router.use(notificationsRoutes);
 router.use(profileRoutes);
-router.use(factureRoutes); // ✅ Sans préfixe, comme les autres
+router.use(factureRoutes);
+router.use(artistesRoutes); //  AJOUTÉ
 
 module.exports = router;

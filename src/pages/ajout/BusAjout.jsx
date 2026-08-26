@@ -57,6 +57,19 @@ const BusAjout = ({ onCancel }) => {
   };
 
   const getDisplayValue = (rawValue) => formatNumber(rawValue);
+  
+  // ✅ CALCUL CORRIGÉ - (Montant × Uniter) + Frais de dossier
+  const calculateSoitTotal = () => {
+    const fraisVal = parseFloat(fraisDossier) || 0;
+    const montantVal = parseFloat(montant) || 0;
+    const uniterVal = parseInt(uniter) || 1;
+    return (montantVal * uniterVal) + fraisVal;
+  };
+
+  useEffect(() => {
+    setSoitTotal(calculateSoitTotal());
+  }, [fraisDossier, montant, uniter]);
+
   const getSoitTotalDisplay = () => formatNumber(soitTotal) + ' Ar';
 
   const getTrimestreFromMonth = (month) => {
@@ -148,14 +161,6 @@ const BusAjout = ({ onCancel }) => {
   };
 
   useEffect(() => {
-    const fraisVal = parseFloat(fraisDossier) || 0;
-    const montantVal = parseFloat(montant) || 0;
-    const totalMoyens = fraisVal + montantVal;
-    const finalTotal = totalMoyens * uniter;
-    setSoitTotal(finalTotal);
-  }, [fraisDossier, montant, uniter]);
-
-  useEffect(() => {
     const currentUser = getCurrentUser();
     if (currentUser) {
       setUserInfo(prev => ({
@@ -216,6 +221,7 @@ const BusAjout = ({ onCancel }) => {
     }
   };
 
+  // ✅ HANDLE FINAL SUBMIT CORRIGÉ - comme Hotel et OCC
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
     const currentUser = getCurrentUser();
@@ -225,16 +231,24 @@ const BusAjout = ({ onCancel }) => {
       return;
     }
 
+    const fraisVal = parseFloat(fraisDossier) || 0;
+    const montantVal = parseFloat(montant) || 0;
+    const uniterVal = parseInt(uniter) || 1;
+    const total = (montantVal * uniterVal) + fraisVal;
+
     const finalData = {
       type: 'Bus',
       userId: currentUser.id,
       prefix: userInfo.prefix || currentUser.prefix || '',
       ...busData,
-      fraisDossier: parseFloat(fraisDossier) || 0,
-      montantMensuel: parseFloat(montant) || 0,
-      soitTotal: soitTotal,
-      uniter: uniter
+      frais_dossier: fraisVal,
+      montant_mensuel: montantVal,
+      montant_total: montantVal,
+      soit_total: total,
+      uniter: uniterVal
     };
+
+    console.log('📤 Données envoyées au backend (Bus):', finalData);
 
     try {
       const response = await fetch('http://localhost:3001/api/usagers', {
@@ -243,6 +257,7 @@ const BusAjout = ({ onCancel }) => {
         body: JSON.stringify(finalData)
       });
       const result = await response.json();
+      
       if (result.success) {
         const updatedUser = getCurrentUser();
         if (updatedUser) {
@@ -250,7 +265,7 @@ const BusAjout = ({ onCancel }) => {
           const nouveauCompteur = (updatedUser.compteurs['Bus'] || 0) + 1;
           updatedUser.compteurs['Bus'] = nouveauCompteur;
           localStorage.setItem('user', JSON.stringify(updatedUser));
-
+          
           setUserInfo(prev => ({
             ...prev,
             compteurs: {
@@ -258,14 +273,15 @@ const BusAjout = ({ onCancel }) => {
               'Bus': nouveauCompteur
             }
           }));
-
+          
           console.log(`✅ Compteur Bus incrémenté à ${nouveauCompteur}`);
         }
-
+        
         showToast('✅ Bus ajouté avec succès !', 'success');
-        navigate('/confirme-paiement', {
-          state: {
-            usager: {
+        
+        navigate('/confirme-paiement', { 
+          state: { 
+            usager: { 
               id: result.id,
               denomination: busData.denomination,
               demandeur: busData.demandeur,
@@ -292,14 +308,15 @@ const BusAjout = ({ onCancel }) => {
               confirmation_nom: busData.confirmationNom,
               lieu_signature: busData.lieuSignature,
               date_signature: busData.dateSignature,
-              montant_mensuel: parseFloat(montant) || 0,
-              frais_dossier: parseFloat(fraisDossier) || 0,
-              soit_total: soitTotal,
-              uniter: uniter || 1,
+              montant_mensuel: montantVal,
+              frais_dossier: fraisVal,
+              montant_total: montantVal,
+              soit_total: total,
+              uniter: uniterVal,
               numero_dossier_utilisateur: `${userInfo.prefix || ''} ${(userInfo.compteurs?.['Bus'] || 0) + 1}/${getTrimestreFromMonth(new Date().getMonth() + 1)}/${userInfo.anneeEnCours || new Date().getFullYear()}`
-            },
+            }, 
             type: 'bus'
-          }
+          } 
         });
       } else {
         showToast('❌ Erreur: ' + result.message, 'error');
@@ -515,6 +532,7 @@ const BusAjout = ({ onCancel }) => {
         <div className="form-label"><h2><FileText size={18} strokeWidth={2} /> Frais de dossier :</h2></div>
         <div className="form-input">
           <input type="text" value={getDisplayValue(fraisDossier)} onChange={handleFraisDossierChange} className="input-style" placeholder="Frais de dossier en Ar" />
+          <span style={{ marginLeft: '10px', fontSize: '12px', color: '#6c757d' }}>(fixe, non multiplié par Uniter)</span>
         </div>
       </div>
 
@@ -537,6 +555,9 @@ const BusAjout = ({ onCancel }) => {
         <div className="form-label"><h2><DollarSign size={18} strokeWidth={2} /> Soit Total :</h2></div>
         <div className="form-input">
           <input type="text" value={getSoitTotalDisplay()} readOnly className="input-style total-field" />
+          <span style={{ marginLeft: '10px', fontSize: '12px', color: '#6c757d' }}>
+            (Montant × Uniter + Frais de dossier)
+          </span>
         </div>
       </div>
 
@@ -583,6 +604,11 @@ const BusAjout = ({ onCancel }) => {
     const currentTrimestre = getTrimestreFromMonth(currentMonth);
     const userDossierDisplay = `${userInfo.prefix || ''} ${nextCompteur}/${currentTrimestre}/${userInfo.anneeEnCours || new Date().getFullYear()}`;
 
+    const fraisVal = parseFloat(fraisDossier) || 0;
+    const montantVal = parseFloat(montant) || 0;
+    const uniterVal = parseInt(uniter) || 1;
+    const total = (montantVal * uniterVal) + fraisVal;
+
     return (
       <div className="recap-container">
         <h3><CheckCircle size={20} strokeWidth={2} /> RÉCAPITULATIF - BUS</h3>
@@ -597,11 +623,10 @@ const BusAjout = ({ onCancel }) => {
           <tr><td><Bus size={16} strokeWidth={2} /> Nombre véhicules</td><td>{busData.nombreVehicules || '0'}</td></tr>
           <tr><td><Route size={16} strokeWidth={2} /> Ligne</td><td>{busData.lignes || '-'}</td></tr>
           <tr><td><Navigation size={16} strokeWidth={2} /> Type</td><td>{busData.typeBus || '-'}</td></tr>
-          <tr><td><MapPinned size={16} strokeWidth={2} /> Parcours</td><td>{busData.trajet || '-'}</td></tr>
-          <tr><td><FileText size={16} strokeWidth={2} /> Frais de dossier</td><td>{formatNumber(fraisDossier || 0)} Ar</td></tr>
-          <tr><td><DollarSign size={16} strokeWidth={2} /> Montant mensuel</td><td>{formatNumber(montant || 0)} Ar/mois</td></tr>
-          <tr><td><Hash size={16} strokeWidth={2} /> Uniter</td><td>{uniter}</td></tr>
-          <tr><td><DollarSign size={16} strokeWidth={2} /> Soit Total</td><td><strong style={{ color: '#28a745' }}>{getSoitTotalDisplay()}</strong></td></tr>
+          <tr><td><FileText size={16} strokeWidth={2} /> Frais de dossier</td><td>{formatNumber(fraisVal)} Ar <span style={{ color: '#6c757d', fontSize: '12px' }}>(fixe)</span></td></tr>
+          <tr><td><DollarSign size={16} strokeWidth={2} /> Montant mensuel</td><td>{formatNumber(montantVal)} Ar/mois</td></tr>
+          <tr><td><Hash size={16} strokeWidth={2} /> Uniter</td><td>{uniterVal}</td></tr>
+          <tr><td><DollarSign size={16} strokeWidth={2} /> Soit Total</td><td><strong style={{ color: '#28a745' }}>{formatNumber(total)} Ar</strong></td></tr>
         </tbody></table>
       </div>
     );

@@ -75,6 +75,24 @@ const OccAjout = ({ onCancel }) => {
   };
 
   const getDisplayValue = (rawValue) => formatNumber(rawValue);
+  
+  const calculateSoitTotal = () => {
+    const fraisVal = parseFloat(fraisDossier) || 0;
+    const montantVal = parseFloat(montant) || 0;
+    const retardVal = parseFloat(montantRetard) || 0;
+    const uniterVal = parseInt(uniter) || 1;
+    
+    let total = (montantVal * uniterVal) + fraisVal;
+    if (isRetard) {
+      total += retardVal;
+    }
+    return total;
+  };
+
+  useEffect(() => {
+    setSoitTotal(calculateSoitTotal());
+  }, [fraisDossier, montant, uniter, isRetard, montantRetard]);
+
   const getSoitTotalDisplay = () => formatNumber(soitTotal) + ' Ar';
 
   const getTrimestreFromMonth = (month) => {
@@ -172,15 +190,6 @@ const OccAjout = ({ onCancel }) => {
       showToast('❌ Erreur de connexion', 'error');
     }
   };
-
-  useEffect(() => {
-    const fraisVal = parseFloat(fraisDossier) || 0;
-    const montantVal = parseFloat(montant) || 0;
-    const retardVal = parseFloat(montantRetard) || 0;
-    const base = (fraisVal + montantVal) * uniter;
-    const total = isRetard ? base + retardVal : base;
-    setSoitTotal(total);
-  }, [fraisDossier, montant, uniter, isRetard, montantRetard]);
 
   useEffect(() => {
     const loadUserData = async () => {
@@ -322,6 +331,7 @@ const OccAjout = ({ onCancel }) => {
     }
   };
 
+  // ✅ HANDLE FINAL SUBMIT - OCC sans montant_mensuel
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
     const currentUser = getCurrentUser();
@@ -352,22 +362,57 @@ const OccAjout = ({ onCancel }) => {
       const currentTrimestre = getTrimestreFromMonth(currentMonth);
       const numeroDossierUtilisateur = `${prefix} ${nouveauCompteur}/${currentTrimestre}/${userInfo.anneeEnCours || new Date().getFullYear()}`;
 
-      const finalData = {
-        type: 'OCC',
-        userId: currentUser.id,
-        prefix: prefix,
-        ...occData,
-        otherArtistsDetail: otherArtistsInputs,
-        hasOtherArtists,
-        dateAjout: new Date().toISOString().split('T')[0],
-        demandeur: occData.organisateurs || '',
-        representantNom: occData.organisateurs || '',
-        numeroDossierGlobal: numeroDossierGlobal,
-        numeroDossierUtilisateur: numeroDossierUtilisateur,
-        region: occData.region || '',
-        uniter: uniter,
-        typeKey: 'OCC'
-      };
+      const fraisVal = parseFloat(fraisDossier) || 0;
+      const montantVal = parseFloat(montant) || 0;
+      const retardVal = parseFloat(montantRetard) || 0;
+      const uniterVal = parseInt(uniter) || 1;
+      
+      let total = (montantVal * uniterVal) + fraisVal;
+      if (isRetard) {
+        total += retardVal;
+      }
+
+      // ✅ OCC : NE PAS envoyer montant_mensuel (la colonne n'existe pas)
+// ✅ OCC utilise montant (pas montant_total)
+// ✅ OCC utilise montant (pas montant_total, pas montant_mensuel)
+const finalData = {
+  type: 'OCC',
+  userId: currentUser.id,
+  prefix: prefix,
+  organisateurs: occData.organisateurs || '',
+  representant_par: occData.representantPar || '',
+  genre_manifestation: occData.genreManifestation || '',
+  artistes: occData.artistes || '',
+  date_evenement: occData.dateEvenement || '',
+  lieu_evenement: occData.lieuEvenement || '',
+  representant_cin: occData.representantCin || '',
+  representant_cin_delivree: occData.representantCinDelivree || '',
+  representant_cin_lieu: occData.representantCinLieu || '',
+  adresse: occData.adresse || '',
+  telephone: occData.telephone || '',
+  domicile: occData.domicile || '',
+  confirmation_nom: occData.confirmationNom || '',
+  date_signature: occData.dateSignature || '',
+  lieu_ajout: occData.lieuAjout || '',
+  region: occData.region || '',
+  otherArtistsDetail: otherArtistsInputs,
+  hasOtherArtists,
+  dateAjout: new Date().toISOString().split('T')[0],
+  demandeur: occData.organisateurs || '',
+  representantNom: occData.organisateurs || '',
+  numeroDossierGlobal: numeroDossierGlobal,
+  numeroDossierUtilisateur: numeroDossierUtilisateur,
+  uniter: uniterVal,
+  typeKey: 'OCC',
+  // ✅ OCC utilise montant (pas montant_total)
+  montant: montantVal,
+  frais_dossier: fraisVal,
+  montant_retard: isRetard ? retardVal : 0,
+  is_retard: isRetard,
+  soit_total: total
+};
+
+      console.log('📤 Données envoyées au backend (OCC):', finalData);
 
       const response = await fetch('http://localhost:3001/api/usagers', {
         method: 'POST',
@@ -375,6 +420,7 @@ const OccAjout = ({ onCancel }) => {
         body: JSON.stringify(finalData)
       });
       const result = await response.json();
+      
       if (result.success) {
         const updatedUser = getCurrentUser();
         if (updatedUser) {
@@ -394,6 +440,7 @@ const OccAjout = ({ onCancel }) => {
         }
         
         showToast('✅ Occasionnelle ajoutée avec succès !', 'success');
+        
         navigate('/confirme-paiement', {
           state: {
             usager: {
@@ -414,12 +461,12 @@ const OccAjout = ({ onCancel }) => {
               representant_cin_lieu: occData.representantCinLieu,
               numero_dossier_utilisateur: numeroDossierUtilisateur,
               numero_dossier_global: numeroDossierGlobal,
-              frais_dossier: parseFloat(fraisDossier) || 0,
-              montant_total: parseFloat(montant) || 0,
-              montant_retard: isRetard ? parseFloat(montantRetard) || 0 : 0,
+              frais_dossier: fraisVal,
+              montant_total: montantVal,
+              montant_retard: isRetard ? retardVal : 0,
               is_retard: isRetard,
-              soit_total: soitTotal,
-              uniter: uniter || 1,
+              soit_total: total,
+              uniter: uniterVal,
               confirmation_nom: occData.confirmationNom,
               lieu_ajout: occData.lieuAjout,
               date_signature: occData.dateSignature,
@@ -657,6 +704,7 @@ const OccAjout = ({ onCancel }) => {
         <div className="form-label"><h2><FileText size={18} strokeWidth={2} /> Frais de dossier :</h2></div>
         <div className="form-input">
           <input type="text" value={getDisplayValue(fraisDossier)} onChange={handleFraisDossierChange} className="input-style" placeholder="Frais de dossier en Ar" />
+          <span style={{ marginLeft: '10px', fontSize: '12px', color: '#6c757d' }}>(fixe, non multiplié par Uniter)</span>
         </div>
       </div>
 
@@ -664,6 +712,14 @@ const OccAjout = ({ onCancel }) => {
         <div className="form-label"><h2><DollarSign size={18} strokeWidth={2} /> Montant à payer :</h2></div>
         <div className="form-input">
           <input type="text" value={getDisplayValue(montant)} onChange={handleMontantChange} className="input-style" placeholder="Montant total en Ar" />
+        </div>
+      </div>
+
+      <div className="form-row">
+        <div className="form-label"><h2><Hash size={18} strokeWidth={2} /> Uniter :</h2></div>
+        <div className="form-input">
+          <input type="number" min="1" max="9" value={uniter} onChange={(e) => setUniter(Math.min(9, Math.max(1, parseInt(e.target.value) || 1)))} className="input-style" style={{ width: '80px' }} placeholder="1" />
+          <span style={{ marginLeft: '10px', fontSize: '14px', color: '#6c757d' }}>(1 à 9 unités)</span>
         </div>
       </div>
 
@@ -691,17 +747,12 @@ const OccAjout = ({ onCancel }) => {
       </div>
 
       <div className="form-row">
-        <div className="form-label"><h2><Hash size={18} strokeWidth={2} /> Uniter :</h2></div>
-        <div className="form-input">
-          <input type="number" min="1" max="9" value={uniter} onChange={(e) => setUniter(Math.min(9, Math.max(1, parseInt(e.target.value) || 1)))} className="input-style" style={{ width: '80px' }} placeholder="1" />
-          <span style={{ marginLeft: '10px', fontSize: '14px', color: '#6c757d' }}>(1 à 9 unités)</span>
-        </div>
-      </div>
-
-      <div className="form-row">
         <div className="form-label"><h2><DollarSign size={18} strokeWidth={2} /> Soit Total :</h2></div>
         <div className="form-input">
           <input type="text" value={getSoitTotalDisplay()} readOnly className="input-style total-field" />
+          <span style={{ marginLeft: '10px', fontSize: '12px', color: '#6c757d' }}>
+            (Montant × Uniter + Frais + Retard)
+          </span>
         </div>
       </div>
 
@@ -741,6 +792,16 @@ const OccAjout = ({ onCancel }) => {
     const currentTrimestre = getTrimestreFromMonth(currentMonth);
     const userDossierDisplay = `${prefix} ${nextCompteur}/${currentTrimestre}/${userInfo.anneeEnCours || new Date().getFullYear()}`;
 
+    const fraisVal = parseFloat(fraisDossier) || 0;
+    const montantVal = parseFloat(montant) || 0;
+    const retardVal = parseFloat(montantRetard) || 0;
+    const uniterVal = parseInt(uniter) || 1;
+    
+    let total = (montantVal * uniterVal) + fraisVal;
+    if (isRetard) {
+      total += retardVal;
+    }
+
     return (
       <div className="recap-container">
         <h3><CheckCircle size={20} strokeWidth={2} /> RÉCAPITULATIF - OCCASIONNELLE</h3>
@@ -760,11 +821,11 @@ const OccAjout = ({ onCancel }) => {
           <tr><td><MapPin size={16} strokeWidth={2} /> Lieu</td><td>{occData.lieuEvenement || '-'}</td></tr>
           <tr><td><CreditCard size={16} strokeWidth={2} /> CIN</td><td>{occData.representantCin || '-'}</td></tr>
           <tr><td><MapPin size={16} strokeWidth={2} /> Région</td><td>{occData.region || '-'}</td></tr>
-          <tr><td><FileText size={16} strokeWidth={2} /> Frais de dossier</td><td>{formatNumber(fraisDossier || 0)} Ar</td></tr>
-          <tr><td><DollarSign size={16} strokeWidth={2} /> Montant à payer</td><td>{formatNumber(montant || 0)} Ar</td></tr>
-          <tr><td><Hash size={16} strokeWidth={2} /> Uniter</td><td>{uniter}</td></tr>
-          <tr><td><Clock size={16} strokeWidth={2} /> Pénalité retard</td><td>{isRetard ? formatNumber(montantRetard) + ' Ar' : '-'}</td></tr>
-          <tr><td><DollarSign size={16} strokeWidth={2} /> Soit Total</td><td><strong style={{ color: '#28a745' }}>{getSoitTotalDisplay()}</strong></td></tr>
+          <tr><td><FileText size={16} strokeWidth={2} /> Frais de dossier</td><td>{formatNumber(fraisVal)} Ar</td></tr>
+          <tr><td><DollarSign size={16} strokeWidth={2} /> Montant à payer</td><td>{formatNumber(montantVal)} Ar</td></tr>
+          <tr><td><Hash size={16} strokeWidth={2} /> Uniter</td><td>{uniterVal}</td></tr>
+          <tr><td><Clock size={16} strokeWidth={2} /> Pénalité retard</td><td>{isRetard ? formatNumber(retardVal) + ' Ar' : '-'}</td></tr>
+          <tr><td><DollarSign size={16} strokeWidth={2} /> Soit Total</td><td><strong style={{ color: '#28a745' }}>{formatNumber(total)} Ar</strong></td></tr>
           <tr><td><Edit size={16} strokeWidth={2} /> Signataire</td><td>{occData.confirmationNom || '-'}</td></tr>
         </tbody></table>
       </div>

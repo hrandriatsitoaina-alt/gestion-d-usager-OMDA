@@ -63,6 +63,40 @@ const HotelAjout = ({ onCancel }) => {
   };
 
   const getDisplayValue = (rawValue) => formatNumber(rawValue);
+  
+  // ✅ FONCTION DE CALCUL CORRIGÉE
+  const calculateSoitTotal = () => {
+    let totalMoyens = 0;
+    if (hotelData.moyensCommunication.radio.actif) {
+      totalMoyens += parseInt(hotelData.moyensCommunication.radio.taux) || 0;
+    }
+    if (hotelData.moyensCommunication.lecteur.actif) {
+      totalMoyens += parseInt(hotelData.moyensCommunication.lecteur.taux) || 0;
+    }
+    if (hotelData.moyensCommunication.tv.actif) {
+      totalMoyens += parseInt(hotelData.moyensCommunication.tv.taux) || 0;
+    }
+    if (hotelData.moyensCommunication.autres.actif) {
+      let taux = parseInt(hotelData.moyensCommunication.autres.taux) || 0;
+      totalMoyens += taux;
+    }
+    const fraisVal = parseFloat(fraisDossier) || 0;
+    const montantVal = parseFloat(montant) || 0;
+    const uniterVal = parseInt(uniter) || 1;
+    
+    // ✅ RÈGLE: (Montant + Somme des taux) × Uniter + Frais de dossier
+    const totalCalcule = (montantVal + totalMoyens) * uniterVal;
+    const totalFinal = totalCalcule + fraisVal;
+    
+    setHotelData(prev => ({ ...prev, total: totalFinal.toString() }));
+    return totalFinal;
+  };
+
+  // ✅ Mise à jour du calcul
+  useEffect(() => {
+    setSoitTotal(calculateSoitTotal());
+  }, [hotelData.moyensCommunication, fraisDossier, montant, uniter]);
+
   const getSoitTotalDisplay = () => formatNumber(soitTotal) + ' Ar';
 
   const getTrimestreFromMonth = (month) => {
@@ -154,30 +188,6 @@ const HotelAjout = ({ onCancel }) => {
   };
 
   useEffect(() => {
-    let totalMoyens = 0;
-    if (hotelData.moyensCommunication.radio.actif) {
-      totalMoyens += parseInt(hotelData.moyensCommunication.radio.taux) || 0;
-    }
-    if (hotelData.moyensCommunication.lecteur.actif) {
-      totalMoyens += parseInt(hotelData.moyensCommunication.lecteur.taux) || 0;
-    }
-    if (hotelData.moyensCommunication.tv.actif) {
-      totalMoyens += parseInt(hotelData.moyensCommunication.tv.taux) || 0;
-    }
-    if (hotelData.moyensCommunication.autres.actif) {
-      let taux = parseInt(hotelData.moyensCommunication.autres.taux) || 0;
-      totalMoyens += taux;
-    }
-    const fraisVal = parseFloat(fraisDossier) || 0;
-    const montantVal = parseFloat(montant) || 0;
-    totalMoyens = totalMoyens + fraisVal + montantVal;
-    
-    setHotelData(prev => ({ ...prev, total: totalMoyens.toString() }));
-    const finalTotal = totalMoyens * uniter;
-    setSoitTotal(finalTotal);
-  }, [hotelData.moyensCommunication, fraisDossier, montant, uniter]);
-
-  useEffect(() => {
     const currentUser = getCurrentUser();
     if (currentUser) {
       setUserInfo(prev => ({ 
@@ -248,6 +258,7 @@ const HotelAjout = ({ onCancel }) => {
     }
   };
 
+  // ✅ HANDLE FINAL SUBMIT CORRIGÉ AVEC LES BONS NOMS DE CHAMPS
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
     const currentUser = getCurrentUser();
@@ -257,16 +268,44 @@ const HotelAjout = ({ onCancel }) => {
       return;
     }
 
+    // ✅ Récupérer les valeurs pour l'envoi
+    const fraisVal = parseFloat(fraisDossier) || 0;
+    const montantVal = parseFloat(montant) || 0;
+    const uniterVal = parseInt(uniter) || 1;
+    
+    // ✅ Recalcul du total (Montant + Taux) × Uniter + Frais
+    let totalMoyens = 0;
+    if (hotelData.moyensCommunication.radio.actif) {
+      totalMoyens += parseInt(hotelData.moyensCommunication.radio.taux) || 0;
+    }
+    if (hotelData.moyensCommunication.lecteur.actif) {
+      totalMoyens += parseInt(hotelData.moyensCommunication.lecteur.taux) || 0;
+    }
+    if (hotelData.moyensCommunication.tv.actif) {
+      totalMoyens += parseInt(hotelData.moyensCommunication.tv.taux) || 0;
+    }
+    if (hotelData.moyensCommunication.autres.actif) {
+      totalMoyens += parseInt(hotelData.moyensCommunication.autres.taux) || 0;
+    }
+    
+    const totalCalcule = (montantVal + totalMoyens) * uniterVal;
+    const totalFinal = totalCalcule + fraisVal;
+
+    // ✅ CORRECTION: utiliser les bons noms de champs avec underscores
     const finalData = {
       type: 'Hôtel',
       userId: currentUser.id,
       prefix: userInfo.prefix || currentUser.prefix || '',
       ...hotelData,
-      fraisDossier: parseFloat(fraisDossier) || 0,
-      montantMensuel: parseFloat(montant) || 0,
-      soitTotal: soitTotal,
-      uniter: uniter
+      // ✅ NOMS CORRECTS POUR LE BACKEND
+      frais_dossier: fraisVal,
+      montant_mensuel: montantVal,
+      montant_total: montantVal,
+      soit_total: totalFinal,
+      uniter: uniterVal
     };
+
+    console.log('📤 Données envoyées au backend:', finalData);
 
     try {
       const response = await fetch('http://localhost:3001/api/usagers', {
@@ -296,6 +335,7 @@ const HotelAjout = ({ onCancel }) => {
         }
         
         showToast('✅ Hôtel ajouté avec succès !', 'success');
+        
         navigate('/confirme-paiement', { 
           state: { 
             usager: { 
@@ -323,10 +363,12 @@ const HotelAjout = ({ onCancel }) => {
               confirmation_nom: hotelData.confirmationNom,
               lieu_signature: hotelData.lieuSignature,
               date_signature: hotelData.dateSignature,
-              montant_mensuel: parseFloat(montant) || 0,
-              frais_dossier: parseFloat(fraisDossier) || 0,
-              soit_total: soitTotal,
-              uniter: uniter,
+              // ✅ ENVOYER AVEC LES BONS NOMS
+              montant_mensuel: montantVal,
+              frais_dossier: fraisVal,
+              montant_total: montantVal,
+              soit_total: totalFinal,
+              uniter: uniterVal,
               numero_dossier_utilisateur: `${userInfo.prefix || ''} ${(userInfo.compteurs?.['Hôtel'] || 0) + 1}/${getTrimestreFromMonth(new Date().getMonth() + 1)}/${userInfo.anneeEnCours || new Date().getFullYear()}`
             }, 
             type: 'hotel' 
@@ -586,6 +628,7 @@ const HotelAjout = ({ onCancel }) => {
         <div className="form-label"><h2><FileText size={18} strokeWidth={2} /> Frais de dossier :</h2></div>
         <div className="form-input">
           <input type="text" value={getDisplayValue(fraisDossier)} onChange={handleFraisDossierChange} className="input-style" placeholder="Frais de dossier en Ar" />
+          <span style={{ marginLeft: '10px', fontSize: '12px', color: '#6c757d' }}>(fixe, non multiplié par Uniter)</span>
         </div>
       </div>
 
@@ -608,6 +651,9 @@ const HotelAjout = ({ onCancel }) => {
         <div className="form-label"><h2><DollarSign size={18} strokeWidth={2} /> Soit au Total :</h2></div>
         <div className="form-input">
           <input type="text" value={getSoitTotalDisplay()} readOnly className="input-style total-field" />
+          <span style={{ marginLeft: '10px', fontSize: '12px', color: '#6c757d' }}>
+            (Montant × Uniter + Frais de dossier)
+          </span>
         </div>
       </div>
 
@@ -654,6 +700,27 @@ const HotelAjout = ({ onCancel }) => {
     const currentTrimestre = getTrimestreFromMonth(currentMonth);
     const userDossierDisplay = `${userInfo.prefix || ''} ${nextCompteur}/${currentTrimestre}/${userInfo.anneeEnCours || new Date().getFullYear()}`;
 
+    const fraisVal = parseFloat(fraisDossier) || 0;
+    const montantVal = parseFloat(montant) || 0;
+    const uniterVal = parseInt(uniter) || 1;
+    
+    let totalMoyens = 0;
+    if (hotelData.moyensCommunication.radio.actif) {
+      totalMoyens += parseInt(hotelData.moyensCommunication.radio.taux) || 0;
+    }
+    if (hotelData.moyensCommunication.lecteur.actif) {
+      totalMoyens += parseInt(hotelData.moyensCommunication.lecteur.taux) || 0;
+    }
+    if (hotelData.moyensCommunication.tv.actif) {
+      totalMoyens += parseInt(hotelData.moyensCommunication.tv.taux) || 0;
+    }
+    if (hotelData.moyensCommunication.autres.actif) {
+      totalMoyens += parseInt(hotelData.moyensCommunication.autres.taux) || 0;
+    }
+    
+    const totalCalcule = (montantVal + totalMoyens) * uniterVal;
+    const totalFinal = totalCalcule + fraisVal;
+
     return (
       <div className="recap-container">
         <h3><CheckCircle size={20} strokeWidth={2} /> RÉCAPITULATIF - HÔTEL / RESTAURANT</h3>
@@ -667,14 +734,14 @@ const HotelAjout = ({ onCancel }) => {
             <tr><td><Building2 size={16} strokeWidth={2} /> Dénomination</td><td>{hotelData.denomination || '-'}</td></tr>
             <tr><td><MapPin size={16} strokeWidth={2} /> Région</td><td>{hotelData.region || '-'}</td></tr>
             <tr><td><Briefcase size={16} strokeWidth={2} /> Activité</td><td>{hotelData.activite === 'hotellerie' ? 'Hôtellerie' : hotelData.activite === 'restauration' ? 'Restauration' : hotelData.activite === 'hotellerie_restauration' ? 'Hôtellerie et restauration' : '-'}</td></tr>
-            <tr><td><FileText size={16} strokeWidth={2} /> Frais de dossier</td><td>{formatNumber(fraisDossier || 0)} Ar</td></tr>
-            <tr><td><DollarSign size={16} strokeWidth={2} /> Montant mensuel</td><td>{formatNumber(montant || 0)} Ar/mois</td></tr>
+            <tr><td><FileText size={16} strokeWidth={2} /> Frais de dossier</td><td>{formatNumber(fraisVal)} Ar <span style={{ color: '#6c757d', fontSize: '12px' }}>(fixe)</span></td></tr>
+            <tr><td><DollarSign size={16} strokeWidth={2} /> Montant mensuel</td><td>{formatNumber(montantVal)} Ar/mois</td></tr>
             <tr><td><Radio size={16} strokeWidth={2} /> Radio - Poste TSF</td><td>{hotelData.moyensCommunication.radio.actif ? formatNumber(hotelData.moyensCommunication.radio.taux || 0) + ' Ar/an' : 'Non actif'}</td></tr>
             <tr><td><Headphones size={16} strokeWidth={2} /> Lecteur</td><td>{hotelData.moyensCommunication.lecteur.actif ? formatNumber(hotelData.moyensCommunication.lecteur.taux || 0) + ' Ar/an' : 'Non actif'}</td></tr>
             <tr><td><Tv size={16} strokeWidth={2} /> TV</td><td>{hotelData.moyensCommunication.tv.actif ? formatNumber(hotelData.moyensCommunication.tv.taux || 0) + ' Ar/an' : 'Non actif'}</td></tr>
             <tr><td><MoreHorizontal size={16} strokeWidth={2} /> Autres</td><td>{hotelData.moyensCommunication.autres.actif ? formatNumber(hotelData.moyensCommunication.autres.taux || 0) + ' Ar/an' : 'Non actif'}</td></tr>
-            <tr><td><Hash size={16} strokeWidth={2} /> Uniter</td><td>{uniter}</td></tr>
-            <tr><td><DollarSign size={16} strokeWidth={2} /> Soit Total</td><td><strong style={{ color: '#28a745' }}>{getSoitTotalDisplay()}</strong></td></tr>
+            <tr><td><Hash size={16} strokeWidth={2} /> Uniter</td><td>{uniterVal}</td></tr>
+            <tr><td><DollarSign size={16} strokeWidth={2} /> Soit Total</td><td><strong style={{ color: '#28a745' }}>{formatNumber(totalFinal)} Ar</strong></td></tr>
           </tbody>
         </table>
       </div>
