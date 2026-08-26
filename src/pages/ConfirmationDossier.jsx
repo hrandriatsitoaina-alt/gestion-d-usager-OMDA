@@ -7,7 +7,7 @@ import {
   FileText, Receipt, QrCode, Download, Printer, CheckCircle, XCircle,
   Info, AlertCircle, Building2, User, Phone, MapPin, Calendar, Star,
   Hotel, Store, Bus, PartyPopper, Tv2, Ticket, File, ArrowLeft,
-  Clock, CreditCard, FileCheck, Loader2
+  Clock, CreditCard, FileCheck, Loader2, FileSignature
 } from 'lucide-react';
 import '../styles/confirmation-dossier.css';
 import MiniSidebar from '../components/MiniSidebar';
@@ -77,29 +77,156 @@ const ConfirmationDossier = () => {
     occ: '#E0F7F4'
   };
 
+  // ✅ Fonction pour récupérer TOUS les artistes depuis la base de données
+  const fetchArtistesForEvent = async (eventId) => {
+    try {
+      console.log('🔍 Récupération des artistes pour l\'événement ID:', eventId);
+      const response = await fetch(`http://localhost:3001/api/occ/artistes/details/${eventId}`);
+      const data = await response.json();
+      if (data.success && data.artistes) {
+        console.log('✅ Artistes récupérés:', data.artistes);
+        return data;
+      }
+      return { artistes: [], artistesNames: [], artistesString: '', count: 0 };
+    } catch (error) {
+      console.error('❌ Erreur récupération artistes:', error);
+      return { artistes: [], artistesNames: [], artistesString: '', count: 0 };
+    }
+  };
+
+  // ✅ Fonction pour récupérer TOUS les artistes depuis différentes sources
+  const getArtistes = (usager) => {
+    let artistesList = [];
+    
+    console.log('🔍 RECHERCHE DES ARTISTES DANS USAGER:', {
+      hasArtistesDetail: !!usager?.artistes_detail,
+      hasOtherArtistsDetail: !!usager?.otherArtistsDetail,
+      hasArtistesList: !!usager?.artistesList,
+      hasArtistes: !!usager?.artistes
+    });
+    
+    // 1. Vérifier artistes_detail (de la base via event_artistes)
+    if (usager?.artistes_detail && Array.isArray(usager.artistes_detail) && usager.artistes_detail.length > 0) {
+      console.log('✅ artistes_detail trouvé:', usager.artistes_detail);
+      artistesList = usager.artistes_detail.map(a => {
+        if (a.nom && a.prenom) return `${a.prenom} ${a.nom}`;
+        if (a.nom) return a.nom;
+        return a;
+      }).filter(Boolean);
+    }
+    
+    // 2. Vérifier otherArtistsDetail (de OccAjout)
+    if (artistesList.length === 0 && usager?.otherArtistsDetail && Array.isArray(usager.otherArtistsDetail) && usager.otherArtistsDetail.length > 0) {
+      console.log('✅ otherArtistsDetail trouvé:', usager.otherArtistsDetail);
+      artistesList = usager.otherArtistsDetail.map(a => {
+        if (a.nom && a.prenom) return `${a.prenom} ${a.nom}`;
+        if (a.nom) return a.nom;
+        return a;
+      }).filter(Boolean);
+    }
+    
+    // 3. Vérifier artistesList
+    if (artistesList.length === 0 && usager?.artistesList && Array.isArray(usager.artistesList) && usager.artistesList.length > 0) {
+      console.log('✅ artistesList trouvé:', usager.artistesList);
+      artistesList = usager.artistesList.map(a => {
+        if (a.nom && a.prenom) return `${a.prenom} ${a.nom}`;
+        if (a.nom) return a.nom;
+        return a;
+      }).filter(Boolean);
+    }
+    
+    // 4. Vérifier artistes (champ texte simple)
+    if (artistesList.length === 0 && usager?.artistes && usager.artistes !== '' && usager.artistes !== 'Non spécifié') {
+      console.log('✅ artistes (texte) trouvé:', usager.artistes);
+      const artistesStr = usager.artistes;
+      if (artistesStr.includes(',')) {
+        artistesList = artistesStr.split(',').map(a => a.trim()).filter(Boolean);
+      } else if (artistesStr.includes(' et ')) {
+        artistesList = artistesStr.split(' et ').map(a => a.trim()).filter(Boolean);
+      } else {
+        artistesList = [artistesStr];
+      }
+    }
+    
+    console.log('🎵 Artistes finaux:', artistesList);
+    return artistesList;
+  };
+
+  // ✅ Fonction pour obtenir les artistes formatés pour le QR Code
+  const getArtistesForQR = (usager) => {
+    const artistesList = getArtistes(usager);
+    if (artistesList.length === 0) return 'Aucun artiste spécifié';
+    return artistesList.join(', ');
+  };
+
   // Effet pour récupérer l'usager
   useEffect(() => {
-    const state = location.state;
-    console.log('📍 State reçu dans ConfirmationDossier:', state);
+    const loadUsager = async () => {
+      const state = location.state;
+      console.log('📍 State reçu dans ConfirmationDossier:', state);
 
-    if (state && state.usager) {
-      setUsager(state.usager);
-      setUsagerType(state.type || 'hotel');
-      setLoading(false);
-    } else {
-      const savedUsager = sessionStorage.getItem('lastUsager');
-      if (savedUsager) {
-        try {
-          const parsed = JSON.parse(savedUsager);
-          setUsager(parsed.usager);
-          setUsagerType(parsed.type || 'hotel');
-          setLoading(false);
-          return;
-        } catch (e) {}
+      if (state && state.usager) {
+        let usagerData = state.usager;
+        
+        // ✅ Si c'est un OCC, récupérer les artistes depuis la base
+        if (state.type === 'occ' && usagerData.id) {
+          try {
+            console.log('🔍 Récupération des artistes pour OCC ID:', usagerData.id);
+            const artistesData = await fetchArtistesForEvent(usagerData.id);
+            if (artistesData.artistes && artistesData.artistes.length > 0) {
+              usagerData = {
+                ...usagerData,
+                artistes_detail: artistesData.artistes,
+                artistesList: artistesData.artistes,
+                artistesString: artistesData.artistesString
+              };
+              console.log('🎵 Artistes ajoutés à l\'usager:', artistesData.artistes);
+            } else {
+              console.log('⚠️ Aucun artiste trouvé pour cet événement');
+            }
+          } catch (error) {
+            console.error('❌ Erreur récupération artistes:', error);
+          }
+        }
+        
+        setUsager(usagerData);
+        setUsagerType(state.type || 'hotel');
+        setLoading(false);
+      } else {
+        const savedUsager = sessionStorage.getItem('lastUsager');
+        if (savedUsager) {
+          try {
+            const parsed = JSON.parse(savedUsager);
+            let usagerData = parsed.usager;
+            
+            if (parsed.type === 'occ' && usagerData.id) {
+              try {
+                const artistesData = await fetchArtistesForEvent(usagerData.id);
+                if (artistesData.artistes && artistesData.artistes.length > 0) {
+                  usagerData = {
+                    ...usagerData,
+                    artistes_detail: artistesData.artistes,
+                    artistesList: artistesData.artistes,
+                    artistesString: artistesData.artistesString
+                  };
+                }
+              } catch (error) {
+                console.error('❌ Erreur récupération artistes:', error);
+              }
+            }
+            
+            setUsager(usagerData);
+            setUsagerType(parsed.type || 'hotel');
+            setLoading(false);
+            return;
+          } catch (e) {}
+        }
+        console.warn('⚠️ Aucune donnée usager trouvée, redirection vers dashboard');
+        navigate('/dashboard');
       }
-      console.warn('⚠️ Aucune donnée usager trouvée, redirection vers dashboard');
-      navigate('/dashboard');
-    }
+    };
+    
+    loadUsager();
   }, [location]);
 
   // Récupérer l'utilisateur courant
@@ -123,14 +250,14 @@ const ConfirmationDossier = () => {
 
   // Fonctions utilitaires
   const formatDateForQR = (dateString) => {
-    if (!dateString) return 'Date non spécifiée';
+    if (!dateString) return 'Date non specifiee';
     try {
       const date = new Date(dateString);
-      if (isNaN(date.getTime())) return 'Date invalide';
+      if (isNaN(date.getTime())) return 'Date non specifiee';
       return date.toLocaleDateString('fr-FR', {
         day: 'numeric', month: 'long', year: 'numeric'
       });
-    } catch { return 'Date invalide'; }
+    } catch { return 'Date non specifiee'; }
   };
 
   const formatDateForReference = () => {
@@ -141,84 +268,314 @@ const ConfirmationDossier = () => {
     return `${day}/${month}/${year}`;
   };
 
+  // ✅ QR CODE avec TOUS les artistes
   const generateQRTextContent = (usager, type) => {
-    if (!usager) return '© OMDA - Document officiel';
+    if (!usager) return 'OMDA - Document officiel';
+    
     const dateStr = formatDateForReference();
     const compteurValue = usager.id || 1;
     const andReference = `AND ${dateStr}-${compteurValue}`;
+    const omdaPhone = '034 05 533 88';
+    const omdaRegion = 'Analamanga';
+    
+    let lines = [];
     let typePrefix = '';
+    let nomPrincipal = '';
 
     switch(type) {
       case 'occ':
         typePrefix = 'OCC';
-        const organisateurs = usager.organisateurs || usager.demandeur || 'Non spécifié';
-        let artistesStr = 'Non spécifié';
-        if (usager.artistes_detail && usager.artistes_detail.length > 0) {
-          artistesStr = usager.artistes_detail.map(a => a.nom).join(', ');
-        } else if (usager.artistesList && usager.artistesList.length > 0) {
-          artistesStr = usager.artistesList.map(a => a.nom).join(', ');
-        } else if (usager.artistes && usager.artistes !== '' && usager.artistes !== 'Non spécifié') {
-          artistesStr = usager.artistes;
+        nomPrincipal = usager.organisateurs || usager.demandeur || 'Non specifie';
+        const dateEvent = usager.date_evenement ? formatDateForQR(usager.date_evenement) : '';
+        const lieu = usager.lieu_evenement || usager.adresse || '';
+        const evenement = usager.genreManifestation || usager.nom_evenement || '';
+        const region = usager.region || 'Non specifiee';
+        
+        // ✅ Récupérer TOUS les artistes (priorité à artistes_detail de la base)
+        let artistesStr = 'Aucun artiste spécifié';
+        if (usager.artistes_detail && Array.isArray(usager.artistes_detail) && usager.artistes_detail.length > 0) {
+          artistesStr = usager.artistes_detail.map(a => {
+            if (a.nom && a.prenom) return `${a.prenom} ${a.nom}`;
+            if (a.nom) return a.nom;
+            return a;
+          }).join(', ');
+        } else {
+          // Fallback: chercher dans d'autres sources
+          const fallbackArtistes = getArtistes(usager);
+          if (fallbackArtistes.length > 0) {
+            artistesStr = fallbackArtistes.join(', ');
+          }
         }
-        const lieu = usager.lieu_evenement || usager.adresse || 'Lieu non spécifié';
-        const dateEvent = usager.date_evenement ? formatDateForQR(usager.date_evenement) : 'Date non spécifiée';
-        return `© OMDA affirme un événement : ${typePrefix} : Organisateurs: ${organisateurs}, Artistes: ${artistesStr}, Lieu: ${lieu}, Date événement: ${dateEvent}, ${andReference}`;
+        
+        lines = [
+          `OMDA affirme un evenement ${typePrefix}`,
+          `Organisateur : ${nomPrincipal}`,
+        ];
+        if (evenement) {
+          lines.push(`Evenement : ${evenement}`);
+        }
+        if (artistesStr && artistesStr !== 'Aucun artiste spécifié') {
+          lines.push(`Artistes : ${artistesStr}`);
+        }
+        if (lieu) {
+          lines.push(`Lieu : ${lieu}`);
+        }
+        if (dateEvent) {
+          lines.push(`Date : ${dateEvent}`);
+        }
+        lines.push(
+          `Region : ${region}`,
+          `Ref : ${andReference}`,
+          `© OMDA ${omdaRegion} - Tel : ${omdaPhone}`
+        );
+        break;
 
       case 'hotel':
-        typePrefix = 'Hôtel';
-        const nomHotel = usager.denomination || usager.nom || 'HÔTEL';
-        const adresseHotel = usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
-        const etoiles = usager.etoiles || 'Non spécifié';
-        let anneePaiementHotel = new Date().getFullYear();
-        if (usager.annee_dernier_paiement) { anneePaiementHotel = usager.annee_dernier_paiement; }
-        return `${typePrefix} : ${nomHotel}, Adresse: ${adresseHotel}, Étoiles: ${etoiles}, Validation année: ${anneePaiementHotel}, ${andReference}`;
+        typePrefix = 'HOTEL';
+        nomPrincipal = usager.denomination || usager.nom || 'Non specifie';
+        const adresseHotel = usager.adresse_siege || usager.ville || usager.adresse || '';
+        const etoiles = usager.etoiles ? `⭐`.repeat(parseInt(usager.etoiles) || 0) : '';
+        const demandeurH = usager.demandeur || '';
+        const regionH = usager.region || 'Non specifiee';
+        
+        lines = [
+          `OMDA affirme un etablissement ${typePrefix}`,
+          `Nom : ${nomPrincipal}`,
+        ];
+        if (adresseHotel) {
+          lines.push(`Adresse : ${adresseHotel}`);
+        }
+        if (etoiles) {
+          lines.push(`Etoiles : ${etoiles}`);
+        }
+        if (demandeurH) {
+          lines.push(`Demandeur : ${demandeurH}`);
+        }
+        lines.push(
+          `Region : ${regionH}`,
+          `Ref : ${andReference}`,
+          `© OMDA ${omdaRegion} - Tel : ${omdaPhone}`
+        );
+        break;
 
       case 'grand-surface':
-        typePrefix = 'Grande Surface';
-        const nomGS = usager.denomination || usager.nom || 'GRANDE SURFACE';
-        const adresseGS = usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
+        typePrefix = 'MAGASIN';
+        nomPrincipal = usager.denomination || usager.nom || 'Non specifie';
+        const adresseGS = usager.adresse_siege || usager.ville || usager.adresse || '';
         const nbMagasins = usager.nombre_magasins || 0;
-        let anneePaiementGS = new Date().getFullYear();
-        if (usager.annee_dernier_paiement) { anneePaiementGS = usager.annee_dernier_paiement; }
-        return `${typePrefix} : ${nomGS}, Adresse: ${adresseGS}, Nb magasins: ${nbMagasins}, Validation année: ${anneePaiementGS}, ${andReference}`;
+        const demandeurGS = usager.demandeur || '';
+        const regionGS = usager.region || 'Non specifiee';
+        
+        lines = [
+          `OMDA affirme un etablissement ${typePrefix}`,
+          `Nom : ${nomPrincipal}`,
+        ];
+        if (adresseGS) {
+          lines.push(`Adresse : ${adresseGS}`);
+        }
+        if (nbMagasins > 0) {
+          lines.push(`Nb magasins : ${nbMagasins}`);
+        }
+        if (demandeurGS) {
+          lines.push(`Demandeur : ${demandeurGS}`);
+        }
+        lines.push(
+          `Region : ${regionGS}`,
+          `Ref : ${andReference}`,
+          `© OMDA ${omdaRegion} - Tel : ${omdaPhone}`
+        );
+        break;
 
       case 'bus':
-        typePrefix = 'Bus';
-        const nomBus = usager.denomination || usager.nom || 'ENTREPRISE DE BUS';
-        const adresseBus = usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
-        const typeBus = usager.type_bus || 'Non spécifié';
-        const nbBus = usager.nombre_vehicules || 0;
-        const lignes = usager.lignes || 'Non spécifiées';
-        let anneePaiementBus = new Date().getFullYear();
-        if (usager.annee_dernier_paiement) { anneePaiementBus = usager.annee_dernier_paiement; }
-        return `${typePrefix} : ${nomBus}, type: ${typeBus}, Nb bus: ${nbBus}, Lignes: ${lignes}, Validation année: ${anneePaiementBus}, ${andReference}`;
+        typePrefix = 'BUS';
+        nomPrincipal = usager.denomination || usager.nom || 'Non specifie';
+        const adresseBus = usager.adresse_siege || usager.ville || usager.adresse || '';
+        const lignes = usager.lignes || '';
+        const nbVehicules = usager.nombre_vehicules || 0;
+        const demandeurB = usager.demandeur || '';
+        const regionB = usager.region || 'Non specifiee';
+        
+        lines = [
+          `OMDA affirme une societe ${typePrefix}`,
+          `Nom : ${nomPrincipal}`,
+        ];
+        if (adresseBus) {
+          lines.push(`Adresse : ${adresseBus}`);
+        }
+        if (lignes) {
+          lines.push(`Lignes : ${lignes}`);
+        }
+        if (nbVehicules > 0) {
+          lines.push(`Vehicules : ${nbVehicules}`);
+        }
+        if (demandeurB) {
+          lines.push(`Demandeur : ${demandeurB}`);
+        }
+        lines.push(
+          `Region : ${regionB}`,
+          `Ref : ${andReference}`,
+          `© OMDA ${omdaRegion} - Tel : ${omdaPhone}`
+        );
+        break;
 
       case 'nightclub':
-        typePrefix = 'Night Club';
-        const nomNC = usager.denomination || usager.nom || 'NIGHT CLUB';
-        const adresseNC = usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
+        typePrefix = 'NIGHT CLUB';
+        nomPrincipal = usager.denomination || usager.nom || 'Non specifie';
+        const adresseNC = usager.adresse_siege || usager.ville || usager.adresse || '';
         const jauge = usager.jauge_max || 0;
-        const horaires = usager.horaires || 'Non spécifiés';
-        let anneePaiementNC = new Date().getFullYear();
-        if (usager.annee_dernier_paiement) { anneePaiementNC = usager.annee_dernier_paiement; }
-        return `${typePrefix} : ${nomNC}, Adresse: ${adresseNC}, Jauge: ${jauge}, Horaires: ${horaires}, Validation année: ${anneePaiementNC}, ${andReference}`;
+        const horaires = usager.horaires || '';
+        const demandeurN = usager.demandeur || '';
+        const regionN = usager.region || 'Non specifiee';
+        
+        lines = [
+          `OMDA affirme un etablissement ${typePrefix}`,
+          `Nom : ${nomPrincipal}`,
+        ];
+        if (adresseNC) {
+          lines.push(`Adresse : ${adresseNC}`);
+        }
+        if (jauge > 0) {
+          lines.push(`Jauge : ${jauge} pers.`);
+        }
+        if (horaires) {
+          lines.push(`Horaires : ${horaires}`);
+        }
+        if (demandeurN) {
+          lines.push(`Demandeur : ${demandeurN}`);
+        }
+        lines.push(
+          `Region : ${regionN}`,
+          `Ref : ${andReference}`,
+          `© OMDA ${omdaRegion} - Tel : ${omdaPhone}`
+        );
+        break;
 
       case 'media':
-        typePrefix = 'Média';
-        const nomMedia = usager.denomination || usager.nom || 'MÉDIA';
-        const adresseMedia = usager.siege || usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
-        const canal = usager.canal || usager.frequence || 'Non spécifié';
-        let anneePaiementMedia = new Date().getFullYear();
-        if (usager.annee_dernier_paiement) { anneePaiementMedia = usager.annee_dernier_paiement; }
-        return `${typePrefix} : ${nomMedia}, Adresse: ${adresseMedia}, Canal/Fréquence: ${canal}, Validation année: ${anneePaiementMedia}, ${andReference}`;
+        typePrefix = 'MEDIA';
+        nomPrincipal = usager.denomination || usager.nom || 'Non specifie';
+        const adresseMedia = usager.siege || usager.adresse_siege || usager.ville || usager.adresse || '';
+        const frequence = usager.frequence || '';
+        const canal = usager.canal || '';
+        const demandeurM = usager.demandeur || usager.proprietaire_nom || '';
+        const regionM = usager.region || 'Non specifiee';
+        
+        lines = [
+          `OMDA affirme une station ${typePrefix}`,
+          `Nom : ${nomPrincipal}`,
+        ];
+        if (adresseMedia) {
+          lines.push(`Siege : ${adresseMedia}`);
+        }
+        if (frequence) {
+          lines.push(`Frequence : ${frequence}`);
+        }
+        if (canal) {
+          lines.push(`Canal : ${canal}`);
+        }
+        if (demandeurM) {
+          lines.push(`Proprietaire : ${demandeurM}`);
+        }
+        lines.push(
+          `Region : ${regionM}`,
+          `Ref : ${andReference}`,
+          `© OMDA ${omdaRegion} - Tel : ${omdaPhone}`
+        );
+        break;
 
       default:
-        return `© OMDA - Document officiel, ${andReference}`;
+        typePrefix = type || 'Inconnu';
+        nomPrincipal = usager.denomination || usager.demandeur || 'Non specifie';
+        const regionD = usager.region || 'Non specifiee';
+        lines = [
+          `OMDA affirme un document ${typePrefix}`,
+          `Nom : ${nomPrincipal}`,
+          `Region : ${regionD}`,
+          `Ref : ${andReference}`,
+          `© OMDA ${omdaRegion} - Tel : ${omdaPhone}`
+        ];
+    }
+    
+    return lines.join('\n');
+  };
+
+  // ✅ Génération du QR Code avec récupération des artistes depuis la base
+  const handleGenerateQR = async () => {
+    if (!usager) return;
+    
+    setIsGenerating(true);
+    setNotification({ type: 'info', message: '🔄 Génération du QR Code...' });
+    
+    try {
+      // ✅ Si c'est un OCC, récupérer les artistes depuis la base
+      let usagerComplet = { ...usager };
+      
+      if (usagerType === 'occ' && usager.id) {
+        console.log('🔍 Récupération des artistes pour l\'événement OCC ID:', usager.id);
+        const artistesData = await fetchArtistesForEvent(usager.id);
+        if (artistesData.artistes && artistesData.artistes.length > 0) {
+          usagerComplet.artistes_detail = artistesData.artistes;
+          usagerComplet.artistesList = artistesData.artistes;
+          usagerComplet.artistesString = artistesData.artistesString;
+          console.log('🎵 Artistes récupérés depuis la base:', artistesData.artistes);
+        } else {
+          console.log('⚠️ Aucun artiste trouvé pour cet événement');
+        }
+      }
+      
+      const qrText = generateQRTextContent(usagerComplet, usagerType);
+      setQrCodeData({ usager: usagerComplet, type: usagerType, qrText });
+      setShowQrModal(true);
+      setNotification({ type: 'success', message: '✅ QR Code généré avec succès' });
+      setTimeout(() => setNotification(null), 3000);
+    } catch (error) {
+      console.error('❌ Erreur génération QR Code:', error);
+      setNotification({ type: 'error', message: '❌ Erreur génération du QR Code' });
+      setTimeout(() => setNotification(null), 3000);
+    } finally {
+      setIsGenerating(false);
     }
   };
 
-  // ✅ Génération des documents
-  const generateDocument = async (docType) => {
+  // Génération du contrat
+  const handleGenerateContrat = async () => {
+    if (!usager) return;
+    setIsGenerating(true);
+    
+    const pdfData = {
+      date: usager.created_at || new Date().toISOString().split('T')[0],
+      annee: new Date().getFullYear(),
+      montant: usager.montant_mensuel || usager.montant_total || 0,
+      nombreMois: 1,
+      montantMensuel: usager.montant_mensuel || 0
+    };
+
+    try {
+      setNotification({ type: 'info', message: '🔄 Génération du contrat...' });
+
+      switch(usagerType) {
+        case 'hotel': generateHotelPDF(usager, pdfData); break;
+        case 'grand-surface': generateMagasinPDF(usager, pdfData); break;
+        case 'media': generateMediaPDF(usager, pdfData); break;
+        case 'nightclub': generateNightPDF(usager, pdfData); break;
+        case 'bus': generateBusPDF(usager, pdfData); break;
+        case 'occ': await generateOccPDF(usager, pdfData); break;
+        default: generateHotelPDF(usager, pdfData);
+      }
+
+      setValidatedDossiers(prev => ({ ...prev, 'Contrat': true }));
+      setNotification({ type: 'success', message: '✅ Contrat généré avec succès' });
+      setTimeout(() => setNotification(null), 3000);
+    } catch (error) {
+      console.error('Erreur:', error);
+      setNotification({ type: 'error', message: '❌ Erreur génération du contrat' });
+      setTimeout(() => setNotification(null), 3000);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // Génération de la facture simple
+  const handleGenerateFacture = async () => {
     if (!usager) return;
     setIsGenerating(true);
 
@@ -231,96 +588,138 @@ const ConfirmationDossier = () => {
     };
 
     try {
-      setNotification({ type: 'info', message: `🔄 Génération du ${docType}...` });
-
-      switch(docType) {
-        case 'Contrat':
-          switch(usagerType) {
-            case 'hotel': generateHotelPDF(usager, pdfData); break;
-            case 'grand-surface': generateMagasinPDF(usager, pdfData); break;
-            case 'media': generateMediaPDF(usager, pdfData); break;
-            case 'nightclub': generateNightPDF(usager, pdfData); break;
-            case 'bus': generateBusPDF(usager, pdfData); break;
-            case 'occ': await generateOccPDF(usager, pdfData); break;
-            default: generateHotelPDF(usager, pdfData);
-          }
-          break;
-        case 'Facture':
-          await generateFacturePDF(usager, pdfData, usagerType);
-          break;
-        case 'QR Code':
-          const qrText = generateQRTextContent(usager, usagerType);
-          setQrCodeData({ usager, type: usagerType, qrText });
-          setShowQrModal(true);
-          setIsGenerating(false);
-          return;
-        default: break;
-      }
-
-      setValidatedDossiers(prev => ({ ...prev, [docType]: true }));
-      setNotification({ type: 'success', message: `✅ ${docType} généré avec succès` });
+      setNotification({ type: 'info', message: '🔄 Génération de la facture...' });
+      await generateFacturePDF(usager, pdfData, usagerType);
+      
+      setValidatedDossiers(prev => ({ ...prev, 'Facture': true }));
+      setNotification({ type: 'success', message: '✅ Facture générée avec succès' });
       setTimeout(() => setNotification(null), 3000);
     } catch (error) {
       console.error('Erreur:', error);
-      setNotification({ type: 'error', message: `❌ Erreur génération ${docType}` });
+      setNotification({ type: 'error', message: '❌ Erreur génération de la facture' });
       setTimeout(() => setNotification(null), 3000);
     } finally {
       setIsGenerating(false);
     }
   };
 
-  // ✅ Générer tout
-  const handleGenerateAll = async () => {
-    await generateDocument('Contrat');
-    setTimeout(() => generateDocument('Facture'), 500);
-    setTimeout(() => generateDocument('QR Code'), 1000);
-  };
+  // CRÉER LA FACTURE AVANCÉE
+// Dans ConfirmationDossier.jsx - handleGenerateFactureAvancee
+const handleGenerateFactureAvancee = async () => {
+  if (!usager || !currentUser) {
+    showToast('Utilisateur non identifié', 'error');
+    return;
+  }
+  
+  setIsCreatingFacture(true);
+  
+  try {
+    setNotification({ type: 'info', message: '🔄 Création de la facture avancée...' });
+    
+    let montantMensuel = 0;
+    let fraisDossier = 5000;
+    let montantRetard = 0;
+    let isRetard = false;
+    let uniter = 1;
+    let soitTotal = 0;
 
-  // ✅ CRÉER LA FACTURE ET REDIRIGER VERS GENERATION_FACTURE
-  const handleGenerateFacture = async () => {
-    if (!usager || !currentUser) {
-      showToast('Utilisateur non identifié', 'error');
-      return;
+    // ✅ RÉCUPÉRER LES MONTANTS SELON LE TYPE
+    switch(usagerType) {
+      case 'hotel':
+      case 'grand-surface':
+      case 'nightclub':
+        montantMensuel = parseFloat(usager.montant_mensuel) || 0;
+        fraisDossier = parseFloat(usager.frais_dossier) || 5000;
+        uniter = parseInt(usager.uniter) || 1;
+        soitTotal = (montantMensuel * uniter) + fraisDossier;
+        break;
+
+      case 'media':
+        montantMensuel = parseFloat(usager.taux) || 0;
+        fraisDossier = parseFloat(usager.frais_dossier) || 5000;
+        uniter = parseInt(usager.uniter) || 1;
+        soitTotal = (montantMensuel * uniter) + fraisDossier;
+        break;
+
+      case 'bus':
+        montantMensuel = parseFloat(usager.montant_mensuel) || 0;
+        fraisDossier = parseFloat(usager.frais_dossier) || 5000;
+        uniter = parseInt(usager.uniter) || 1;
+        soitTotal = (montantMensuel * uniter) + fraisDossier;
+        break;
+
+      case 'occ':
+        montantMensuel = parseFloat(usager.montant) || parseFloat(usager.montant_total) || 0;
+        fraisDossier = parseFloat(usager.frais_dossier) || 5000;
+        montantRetard = parseFloat(usager.montant_retard) || 0;
+        isRetard = usager.is_retard || false;
+        uniter = parseInt(usager.uniter) || 1;
+        const baseTotal = (montantMensuel * uniter) + fraisDossier;
+        soitTotal = isRetard ? baseTotal + montantRetard : baseTotal;
+        break;
+
+      default:
+        montantMensuel = parseFloat(usager.montant_mensuel) || 0;
+        fraisDossier = parseFloat(usager.frais_dossier) || 5000;
+        uniter = parseInt(usager.uniter) || 1;
+        soitTotal = (montantMensuel * uniter) + fraisDossier;
     }
+
+    console.log('📊 MONTANTS POUR FACTURE:', {
+      usagerType,
+      montantMensuel,
+      fraisDossier,
+      montantRetard,
+      isRetard,
+      uniter,
+      soitTotal
+    });
+
+    const response = await fetch('http://localhost:3001/api/factures/creer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        usagerId: usager.id,
+        usagerType: usagerType,
+        userId: currentUser.id,
+        typeFacture: 'Redevances',
+        regionUsager: usager.region || '',
+        montantMensuel: montantMensuel,
+        fraisDossier: fraisDossier,
+        montantRetard: montantRetard,
+        isRetard: isRetard,
+        uniter: uniter,
+        soitTotal: soitTotal
+      })
+    });
     
-    setIsCreatingFacture(true);
-    
-    try {
-      setNotification({ type: 'info', message: '🔄 Création de la facture...' });
+    const data = await response.json();
+    if (data.success) {
+      setNotification({ type: 'success', message: '✅ Facture avancée créée avec succès' });
+      setValidatedDossiers(prev => ({ ...prev, 'Facture': true }));
       
-      const response = await fetch('http://localhost:3001/api/factures/creer', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          usagerId: usager.id,
-          usagerType: usagerType,
-          userId: currentUser.id,
-          typeFacture: 'Redevances',
-          regionUsager: usager.region || ''
-        })
-      });
-      
-      const data = await response.json();
-      if (data.success) {
-        setNotification({ type: 'success', message: '✅ Facture créée avec succès' });
-        
-        // Rediriger vers la page de génération
-        setTimeout(() => {
-          navigate('/generation-facture', {
-            state: { factureId: data.factureId }
-          });
-        }, 500);
-      } else {
-        setNotification({ type: 'error', message: '❌ ' + data.message });
-        showToast('❌ ' + data.message, 'error');
-      }
-    } catch (error) {
-      console.error('Erreur:', error);
-      setNotification({ type: 'error', message: '❌ Erreur de création de la facture' });
-      showToast('❌ Erreur de connexion', 'error');
-    } finally {
-      setIsCreatingFacture(false);
+      setTimeout(() => {
+        navigate('/generation-facture', {
+          state: { factureId: data.factureId }
+        });
+      }, 500);
+    } else {
+      setNotification({ type: 'error', message: '❌ ' + data.message });
+      showToast('❌ ' + data.message, 'error');
     }
+  } catch (error) {
+    console.error('Erreur:', error);
+    setNotification({ type: 'error', message: '❌ Erreur de création de la facture' });
+    showToast('❌ Erreur de connexion', 'error');
+  } finally {
+    setIsCreatingFacture(false);
+  }
+};
+
+  // Tout générer
+  const handleGenerateAll = async () => {
+    await handleGenerateContrat();
+    setTimeout(() => handleGenerateQR(), 500);
   };
 
   const handleDownloadQR = async () => {
@@ -469,6 +868,20 @@ const ConfirmationDossier = () => {
                     <span className="info-label"><MapPin size={16} strokeWidth={1.5} /> Lieu</span>
                     <span className="info-value">{usager.lieu_evenement || '-'}</span>
                   </div>
+                  {/* ✅ Affichage des artistes dans la carte info */}
+                  {usager.artistes_detail && usager.artistes_detail.length > 0 && (
+                    <div className="info-item" style={{ gridColumn: '1 / -1' }}>
+                      <span className="info-label"><User size={16} strokeWidth={1.5} /> Artistes</span>
+                      <span className="info-value" style={{ fontSize: '14px' }}>
+                        {usager.artistes_detail.map((a, i) => (
+                          <span key={i}>
+                            {a.prenom ? `${a.prenom} ${a.nom}` : a.nom}
+                            {i < usager.artistes_detail.length - 1 ? ', ' : ''}
+                          </span>
+                        ))}
+                      </span>
+                    </div>
+                  )}
                 </>
               )}
               {usager.etoiles && (
@@ -487,8 +900,8 @@ const ConfirmationDossier = () => {
 
             <div className="documents-grid">
               {/* Contrat */}
-              <div className="doc-item" onClick={() => generateDocument('Contrat')}>
-                <div className="doc-icon"><FileText size={24} strokeWidth={1.5} color={color} /></div>
+              <div className="doc-item" onClick={handleGenerateContrat}>
+                <div className="doc-icon"><FileSignature size={24} strokeWidth={1.5} color={color} /></div>
                 <div className="doc-info">
                   <span className="doc-name">Contrat de représentation</span>
                   <span className="doc-size">PDF • Cliquer pour générer</span>
@@ -497,29 +910,37 @@ const ConfirmationDossier = () => {
                   {validatedDossiers['Contrat'] ? (
                     <span className="badge-success"><CheckCircle size={18} color="#27ae60" /></span>
                   ) : (
-                    <button className="btn-generate">Générer</button>
+                    <button className="btn-generate">
+                      <FileSignature size={16} strokeWidth={2} /> Générer contrat
+                    </button>
                   )}
                 </div>
               </div>
 
               {/* Facture */}
-              <div className="doc-item" onClick={() => generateDocument('Facture')}>
+              <div className="doc-item">
                 <div className="doc-icon"><Receipt size={24} strokeWidth={1.5} color={color} /></div>
                 <div className="doc-info">
                   <span className="doc-name">Facture officielle</span>
                   <span className="doc-size">PDF • Cliquer pour générer</span>
                 </div>
                 <div className="doc-status">
-                  {validatedDossiers['Facture'] ? (
-                    <span className="badge-success"><CheckCircle size={18} color="#27ae60" /></span>
-                  ) : (
-                    <button className="btn-generate">Générer</button>
-                  )}
+                  <button
+                    className="btn-facture-avancee"
+                    onClick={handleGenerateFactureAvancee}
+                    disabled={isCreatingFacture}
+                  >
+                    {isCreatingFacture ? (
+                      <><Loader2 size={18} className="spinner" strokeWidth={2} /> Création...</>
+                    ) : (
+                      <><Receipt size={18} strokeWidth={2} /> Facture Avancée</>
+                    )}
+                  </button>
                 </div>
               </div>
 
               {/* QR Code */}
-              <div className="doc-item" onClick={() => generateDocument('QR Code')}>
+              <div className="doc-item" onClick={handleGenerateQR}>
                 <div className="doc-icon"><QrCode size={24} strokeWidth={1.5} color={color} /></div>
                 <div className="doc-info">
                   <span className="doc-name">QR Code sécurisé</span>
@@ -529,26 +950,16 @@ const ConfirmationDossier = () => {
                   {validatedDossiers['QR Code'] ? (
                     <span className="badge-success"><CheckCircle size={18} color="#27ae60" /></span>
                   ) : (
-                    <button className="btn-generate">Générer</button>
+                    <button className="btn-generate">
+                      <QrCode size={16} strokeWidth={2} /> Générer code qr
+                    </button>
                   )}
                 </div>
               </div>
             </div>
 
+            {/* Boutons en bas */}
             <div className="documents-actions">
-              {/* ✅ Bouton Facture */}
-              <button
-                className="btn-facture"
-                onClick={handleGenerateFacture}
-                disabled={isCreatingFacture}
-              >
-                {isCreatingFacture ? (
-                  <><Loader2 size={18} className="spinner" strokeWidth={2} /> Création...</>
-                ) : (
-                  <><Receipt size={18} strokeWidth={2} /> Facture</>
-                )}
-              </button>
-
               <button
                 className="btn-generate-all"
                 onClick={handleGenerateAll}
@@ -557,7 +968,7 @@ const ConfirmationDossier = () => {
                 {isGenerating ? (
                   <><Loader2 size={18} className="spinner" strokeWidth={2} /> Génération...</>
                 ) : (
-                  <><FileCheck size={18} strokeWidth={2} /> Tout générer et télécharger</>
+                  <><FileCheck size={18} strokeWidth={2} /> Tout générer</>
                 )}
               </button>
 
@@ -573,7 +984,7 @@ const ConfirmationDossier = () => {
           <div className="modal-overlay qr-modal-overlay" onClick={() => setShowQrModal(false)}>
             <div className="modal-content qr-modal-content" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header qr-modal-header">
-                <h3><QrCode size={20} strokeWidth={1.5} /> QR Code</h3>
+                <h3><QrCode size={20} strokeWidth={1.5} /> QR Code OMDA</h3>
                 <button className="modal-close" onClick={() => setShowQrModal(false)}>×</button>
               </div>
 
@@ -584,10 +995,10 @@ const ConfirmationDossier = () => {
                       <div className="qr-code-container">
                         <QRCodeCanvas
                           value={qrCodeData.qrText}
-                          size={220}
+                          size={240}
                           bgColor="#ffffff"
                           fgColor="#dc2626"
-                          level="H"
+                          level="L"
                           includeMargin={true}
                         />
                         <div className="qr-logo-styled">
@@ -601,11 +1012,26 @@ const ConfirmationDossier = () => {
                   </div>
                 </div>
 
+                {/* ✅ Affichage du contenu avec TOUS les artistes */}
+                <div className="qr-data-preview">
+                  <p className="qr-data-title">📋 Contenu :</p>
+                  <div className="qr-data-content">
+                    {qrCodeData.qrText.split('\n').map((line, index) => {
+                      if (!line.trim()) return null;
+                      // Mettre en évidence la ligne des artistes
+                      if (line.toLowerCase().includes('artistes')) {
+                        return <div key={index} className="qr-artist-line"><strong>{line}</strong></div>;
+                      }
+                      return <div key={index}>{line}</div>;
+                    })}
+                  </div>
+                </div>
+
                 <div className="qr-actions-only">
                   <button className="btn-cancel" onClick={() => setShowQrModal(false)}>Fermer</button>
-                  <button className="btn-print-qr-only" onClick={handlePrintQR}>
+                  {/* <button className="btn-print-qr-only" onClick={handlePrintQR}>
                     <Printer size={18} strokeWidth={2} /> Imprimer
-                  </button>
+                  </button> */}
                   <button
                     className="btn-download-qr-only"
                     onClick={handleDownloadQR}
@@ -614,7 +1040,7 @@ const ConfirmationDossier = () => {
                     {isDownloading ? (
                       <><Loader2 size={18} className="spinner" strokeWidth={2} /> Téléchargement...</>
                     ) : (
-                      <><Download size={18} strokeWidth={2} /> Télécharger</>
+                      <><Download size={18} strokeWidth={2} /> Téléchargers</>
                     )}
                   </button>
                 </div>

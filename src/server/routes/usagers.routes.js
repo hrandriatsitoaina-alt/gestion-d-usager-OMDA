@@ -76,6 +76,26 @@ router.get('/usagers/paiements/:type', async (req, res) => {
         }
         resumeAnnees.push({ annee, nbMois: nbMoisValides, moisTotalAttendus, moisDebut: moisDebutAnnee, estComplete, affichage, moisCreation: annee===anneeCreation ? moisCreation : null, anneeCreation: annee===anneeCreation ? anneeCreation : null });
       }
+      
+      // Pour OCC, récupérer les artistes
+      let artistes_detail = [];
+      if (type === 'occ') {
+        try {
+          const artistesResult = await pool.query(
+            `SELECT a.id, a.nom, a.prenom, a.role
+             FROM event_artistes ea
+             JOIN artistes a ON ea.artiste_id = a.id
+             WHERE ea.event_id = $1
+             ORDER BY a.id`,
+            [usager.id]
+          );
+          artistes_detail = artistesResult.rows;
+          console.log(`🎵 ${artistes_detail.length} artistes récupérés pour OCC ${usager.id}`);
+        } catch (err) {
+          console.error('❌ Erreur récupération artistes OCC:', err);
+        }
+      }
+      
       result.push({
         id: usager.id,
         denomination: usager.denomination || usager.genre_manifestation || usager.nom_evenement || 'Sans nom',
@@ -107,6 +127,7 @@ router.get('/usagers/paiements/:type', async (req, res) => {
         date_evenement: usager.date_evenement || null,
         lieu_evenement: usager.lieu_evenement || null,
         artistes: usager.artistes || null,
+        artistes_detail: artistes_detail,
         organisateurs: usager.organisateurs || null,
         representant_nom: usager.representant_nom || null,
         representant_par: usager.representant_par || null,
@@ -267,46 +288,60 @@ router.get('/usagers/occasionnels', async (req, res) => {
         o.adresse, o.domicile, o.artistes,
         o.numero_dossier_global, o.numero_dossier_utilisateur,
         o.confirmation_nom, o.representant_cin, o.representant_cin_delivree,
-        o.representant_cin_lieu, o.region, o.uniter,
-        COALESCE(
-          (SELECT json_agg(json_build_object('id', a.id, 'nom', a.nom, 'prenom', a.prenom, 'role', a.role))
-           FROM event_artistes ea
-           JOIN artistes a ON ea.artiste_id = a.id
-           WHERE ea.event_id = o.id),
-          '[]'::json
-        ) as artistes_detail
+        o.representant_cin_lieu, o.region, o.uniter
       FROM usagers_occasionnel o
       ORDER BY o.date_evenement DESC, o.created_at DESC
     `;
     const result = await pool.query(query);
-    const events = result.rows.map(row => ({
-      id: row.id,
-      demandeur: row.demandeur,
-      denomination: row.denomination,
-      nom_evenement: row.nom_evenement,
-      genre_manifestation: row.genre_manifestation,
-      date_evenement: row.date_evenement,
-      lieu_evenement: row.lieu_evenement,
-      telephone: row.telephone,
-      email: row.email,
-      organisateurs: row.organisateurs,
-      representant_par: row.representant_par,
-      lieu_ajout: row.lieu_ajout,
-      date_ajout: row.date_ajout,
-      adresse: row.adresse,
-      domicile: row.domicile,
-      artistes: row.artistes,
-      created_at: row.created_at,
-      artistesList: row.artistes_detail,
-      numero_dossier_global: row.numero_dossier_global,
-      numero_dossier_utilisateur: row.numero_dossier_utilisateur,
-      confirmation_nom: row.confirmation_nom,
-      representant_cin: row.representant_cin,
-      representant_cin_delivree: row.representant_cin_delivree,
-      representant_cin_lieu: row.representant_cin_lieu,
-      region: row.region,
-      uniter: row.uniter || 1
-    }));
+    
+    const events = [];
+    for (const row of result.rows) {
+      let artistes_detail = [];
+      try {
+        const artistesResult = await pool.query(
+          `SELECT a.id, a.nom, a.prenom, a.role
+           FROM event_artistes ea
+           JOIN artistes a ON ea.artiste_id = a.id
+           WHERE ea.event_id = $1
+           ORDER BY a.id`,
+          [row.id]
+        );
+        artistes_detail = artistesResult.rows;
+      } catch (err) {
+        console.error('❌ Erreur récupération artistes:', err);
+      }
+      
+      events.push({
+        id: row.id,
+        demandeur: row.demandeur,
+        denomination: row.denomination,
+        nom_evenement: row.nom_evenement,
+        genre_manifestation: row.genre_manifestation,
+        date_evenement: row.date_evenement,
+        lieu_evenement: row.lieu_evenement,
+        telephone: row.telephone,
+        email: row.email,
+        organisateurs: row.organisateurs,
+        representant_par: row.representant_par,
+        lieu_ajout: row.lieu_ajout,
+        date_ajout: row.date_ajout,
+        adresse: row.adresse,
+        domicile: row.domicile,
+        artistes: row.artistes,
+        created_at: row.created_at,
+        artistes_detail: artistes_detail,
+        artistesList: artistes_detail.map(a => ({ nom: a.nom, prenom: a.prenom, role: a.role })),
+        numero_dossier_global: row.numero_dossier_global,
+        numero_dossier_utilisateur: row.numero_dossier_utilisateur,
+        confirmation_nom: row.confirmation_nom,
+        representant_cin: row.representant_cin,
+        representant_cin_delivree: row.representant_cin_delivree,
+        representant_cin_lieu: row.representant_cin_lieu,
+        region: row.region,
+        uniter: row.uniter || 1
+      });
+    }
+    
     res.json({ success: true, events });
   } catch (error) {
     console.error('❌ Erreur récupération occasionnels:', error);
@@ -531,12 +566,24 @@ router.get('/occ/dossier-number', async (req, res) => {
 });
 
 // ============================================================
-// POST - Ajouter un usager (AVEC INCRÉMENTATION COMPTEUR)
+// POST - Ajouter un usager (CORRIGÉ)
 // ============================================================
 router.post('/usagers', async (req, res) => {
   const { type, userId, ...data } = req.body;
   console.log(`📝 Ajout usager - Type: ${type}, Utilisateur ID: ${userId}`);
   if (!type) return res.status(400).json({ success: false, message: 'Type d\'usager non spécifié' });
+
+  const toNumber = (v) => {
+    if (v === undefined || v === null || v === '') return 0;
+    const cleaned = typeof v === 'string' ? v.replace(/\s/g, '') : v;
+    const n = parseFloat(cleaned);
+    return isNaN(n) ? 0 : n;
+  };
+  const montantMensuelInput = data.montant_mensuel !== undefined ? data.montant_mensuel : data.montantMensuel;
+  const fraisDossierInput = data.frais_dossier !== undefined ? data.frais_dossier : data.fraisDossier;
+  const montantMensuelVal = toNumber(montantMensuelInput);
+  const fraisDossierVal = toNumber(fraisDossierInput);
+
   try {
     let tableName = '', insertData = {}, uniter = data.uniter || 1;
     const typeMapping = {
@@ -561,13 +608,13 @@ router.post('/usagers', async (req, res) => {
           representant_tel: data.representantTel || '', representant_cin: data.representantCin || '', 
           representant_cin_delivree: data.representantCinDelivree || null, 
           representant_cin_lieu: data.representantCinLieu || '', 
-          representant_fonction: data.representantFonktion || '', activite: data.activite || '', 
+          representant_fonction: data.representantFonction || '', activite: data.activite || '', 
           moyens_communication: JSON.stringify(data.moyensCommunication || {}), 
           total: data.total || '', a_compter_du: data.aCompterDu || null, 
           echeance: data.echeance || null, confirmation_nom: data.confirmationNom || '', 
           date_signature: data.dateSignature || null, lieu_signature: data.lieuSignature || '', 
-          type_paiement: 'mensuel', montant_mensuel: parseFloat(data.montantMensuel) || 0, 
-          frais_dossier: parseFloat(data.fraisDossier) || 0,
+          type_paiement: 'mensuel', montant_mensuel: montantMensuelVal, 
+          frais_dossier: fraisDossierVal,
           region: data.region || '', uniter: uniter, created_by: userId
         };
         break;
@@ -586,8 +633,8 @@ router.post('/usagers', async (req, res) => {
           total: data.total || '', a_compter_du: data.aCompterDu || null, 
           echeance: data.echeance || null, confirmation_nom: data.confirmationNom || '', 
           date_signature: data.dateSignature || null, lieu_signature: data.lieuSignature || '', 
-          type_paiement: 'mensuel', montant_mensuel: parseFloat(data.montantMensuel) || 0, 
-          frais_dossier: parseFloat(data.fraisDossier) || 0,
+          type_paiement: 'mensuel', montant_mensuel: montantMensuelVal, 
+          frais_dossier: fraisDossierVal,
           region: data.region || '', uniter: uniter, created_by: userId
         };
         break;
@@ -604,8 +651,8 @@ router.post('/usagers', async (req, res) => {
           nombre_vehicules: data.nombreVehicules ? parseInt(data.nombreVehicules) : 0, 
           lignes: data.lignes || '', type_bus: data.typeBus || '', trajet: data.trajet || '', 
           horaires: data.horaires || '', zones_desservies: data.zonesDesservies || '', 
-          type_paiement: 'mensuel', montant_mensuel: parseFloat(data.montantMensuel) || 0, 
-          frais_dossier: parseFloat(data.fraisDossier) || 0,
+          type_paiement: 'mensuel', montant_mensuel: montantMensuelVal, 
+          frais_dossier: fraisDossierVal,
           region: data.region || '', confirmation_nom: data.confirmationNom || '',
           date_signature: data.dateSignature || null, lieu_signature: data.lieuSignature || '',
           uniter: uniter, created_by: userId
@@ -625,7 +672,7 @@ router.post('/usagers', async (req, res) => {
           horaires: data.horaires || '', moyens_communication: JSON.stringify(data.moyensCommunication || {}),
           total: data.total || '', a_compter_du: data.aCompterDu || null,
           echeance: data.echeance || null, type_paiement: 'mensuel', 
-          montant_mensuel: parseFloat(data.montantMensuel) || 0, frais_dossier: parseFloat(data.fraisDossier) || 0,
+          montant_mensuel: montantMensuelVal, frais_dossier: fraisDossierVal,
           region: data.region || '', confirmation_nom: data.confirmationNom || '',
           date_signature: data.dateSignature || null, lieu_signature: data.lieuSignature || '',
           uniter: uniter, created_by: userId
@@ -653,13 +700,16 @@ router.post('/usagers', async (req, res) => {
           couverture_district: data.couvertureDistrict || false, 
           horaires_jusqua12: data.horairesJusqua12 || false, horaires_13a24: data.horaires13a24 || false, 
           has_regions: data.hasRegions || false, regions_detail: JSON.stringify(data.regionsDetail || []), 
-          type_paiement: 'mensuel', montant_mensuel: parseFloat(data.montantMensuel) || 0, 
-          frais_dossier: parseFloat(data.fraisDossier) || 0,
+          type_paiement: 'mensuel', montant_mensuel: montantMensuelVal, 
+          frais_dossier: fraisDossierVal,
           region: data.region || '', confirmation_nom: data.confirmationNom || '',
           date_signature: data.dateSignature || null, lieu_signature: data.lieuSignature || '',
           uniter: uniter, created_by: userId
         };
         break;
+      // ============================================================
+      // ✅ OCC - SANS montant_mensuel (utilise montant)
+      // ============================================================
       case 'OCC':
         insertData = { 
           organisateurs: data.organisateurs || '', 
@@ -683,6 +733,12 @@ router.post('/usagers', async (req, res) => {
           denomination: data.genreManifestation || '', 
           numero_dossier_global: data.numeroDossierGlobal || '',
           numero_dossier_utilisateur: data.numeroDossierUtilisateur || '',
+          // ✅ OCC utilise montant (PAS montant_mensuel)
+          montant: toNumber(data.montant || data.montant_total || 0),
+          frais_dossier: fraisDossierVal,
+          montant_retard: toNumber(data.montant_retard || 0),
+          is_retard: data.is_retard || false,
+          soit_total: toNumber(data.soit_total || 0),
           uniter: data.uniter || 1,
           created_by: userId
         };
@@ -697,13 +753,12 @@ router.post('/usagers', async (req, res) => {
     const newId = result.rows[0].id;
     
     // ============================================================
-    // ✅ INCRÉMENTATION DU COMPTEUR POUR TOUS LES TYPES
+    // INCRÉMENTATION DU COMPTEUR
     // ============================================================
     if (userId) {
       const currentYear = new Date().getFullYear();
       const userIdInt = parseInt(userId);
       
-      // Vérifier si le compteur existe
       let counterResult = await pool.query(
         `SELECT compteur, id FROM compteurs_dossiers_utilisateurs 
          WHERE utilisateur_id = $1 AND annee = $2 AND type_usager = $3`,
@@ -712,7 +767,6 @@ router.post('/usagers', async (req, res) => {
       
       let nouveauCompteur = 0;
       if (counterResult.rows.length > 0) {
-        // Incrémenter le compteur existant
         nouveauCompteur = counterResult.rows[0].compteur + 1;
         await pool.query(
           `UPDATE compteurs_dossiers_utilisateurs 
@@ -722,7 +776,6 @@ router.post('/usagers', async (req, res) => {
         );
         console.log(`✅ Compteur ${type} incrémenté à ${nouveauCompteur} pour l'utilisateur ${userId}`);
       } else {
-        // Créer un nouveau compteur
         nouveauCompteur = 1;
         await pool.query(
           `INSERT INTO compteurs_dossiers_utilisateurs 
@@ -733,7 +786,6 @@ router.post('/usagers', async (req, res) => {
         console.log(`✅ Nouveau compteur ${type} créé pour l'utilisateur ${userId}`);
       }
       
-      // Mettre à jour le numéro de dossier utilisateur
       const prefix = data.prefix || '';
       const trimestre = Math.ceil((new Date().getMonth() + 1) / 4);
       const numeroDossierUtilisateur = `${prefix} ${nouveauCompteur}/${trimestre}/${currentYear}`;
@@ -856,6 +908,7 @@ router.put('/usagers/:id', async (req, res) => {
       genre_manifestation, artistes, date_evenement, lieu_evenement, lieu_ajout,
       domicile
     };
+    // ✅ CORRECTION : pour OCC, ne pas ajouter montant_mensuel
     if (typeValue !== 'OCC') {
       commonFields.montant_mensuel = montant_mensuel;
     }
@@ -893,7 +946,7 @@ router.put('/usagers/:id', async (req, res) => {
 });
 
 // ============================================================
-// DELETE - Supprimer un usager (avec cascade paiements)
+// DELETE - Supprimer un usager
 // ============================================================
 router.delete('/usagers/:id', async (req, res) => {
   const { id } = req.params;

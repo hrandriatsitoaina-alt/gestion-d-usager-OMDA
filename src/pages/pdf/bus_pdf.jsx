@@ -187,9 +187,10 @@ export const generateBusPDF = (usager, paymentDetails) => {
     const fraisDossier = parseFloat(usager?.frais_dossier) || 0;
     const uniter = parseInt(usager?.uniter) || 1;
     
-    // ✅ Soit au Total = (Montant mensuel + Frais de dossier) × Uniter
-    const baseTotal = montantMensuel + fraisDossier;
-    const soitTotal = baseTotal * uniter;
+    // ✅ BONNE RÈGLE DE CALCUL : (Montant × Uniter) + Frais de dossier
+    // Le frais de dossier est FIXE et N'EST PAS multiplié par Uniter
+    const baseTotal = montantMensuel * uniter;
+    const soitTotal = baseTotal + fraisDossier;
     const totalEnLettres = nombreEnLettres(Math.round(soitTotal));
     
     const aCompterDu = usager?.a_compter_du ? formatDate(usager.a_compter_du) : '';
@@ -298,7 +299,6 @@ export const generateBusPDF = (usager, paymentDetails) => {
     doc.text(`Horaires : ${horaires || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
-  
     // SECTION 4 - REDEVANCES
     doc.setFont('times', 'bold');
     doc.setFontSize(13);
@@ -314,19 +314,20 @@ export const generateBusPDF = (usager, paymentDetails) => {
     doc.text(`Montant mensuel : ${formatNumber(montantMensuel)} Ariary`, marginX + 5, yPos);
     yPos += lineSpacing;
     
-    doc.text(`Frais de dossier : ${formatNumber(fraisDossier)} Ariary`, marginX + 5, yPos);
+    doc.text(`Frais de dossier : ${formatNumber(fraisDossier)} Ariary (fixe, non multiplié par Uniter)`, marginX + 5, yPos);
     yPos += lineSpacing;
     
-    // ✅ Soit au Total = (Montant mensuel + Frais de dossier) × Uniter
+    // ✅ Soit au Total corrigé : (Montant × Uniter) + Frais de dossier
     doc.setFont('times', 'bold');
     doc.text(`Soit au Total : ${formatNumber(soitTotal)} Ariary (${totalEnLettres})`, marginX + 5, yPos);
-    yPos += lineSpacing + 2;
+    doc.text(`( ${formatNumber(montantMensuel)} × ${uniter} + ${formatNumber(fraisDossier)} )`, marginX + 5, yPos + 5);
+    yPos += lineSpacing + 5;
     
     doc.setFont('times', 'normal');
     doc.text(`A compter du : ${aCompterDu || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     doc.text(`Echéance : ${echeance || '……………………………………'}`, marginX + 5, yPos);
-    yPos += lineSpacing ;
+    yPos += lineSpacing;
     
     // Signature
     doc.text(`Je soussigné(e) Mr/Mme ${confirmationNom || '……………………………………'}`, marginX + 5, yPos);
@@ -337,13 +338,13 @@ export const generateBusPDF = (usager, paymentDetails) => {
     doc.text('confirme sous ma responsabilité la sincérité et l\'exactitude des renseignements ci-dessus et', marginX + 5, yPos);
     yPos += lineSpacing;
     doc.text('m\'engage à respecter les obligations prévues par le contrat général de représentation.', marginX + 5, yPos);
-    yPos += lineSpacing ;
+    yPos += lineSpacing;
     
     // Fait à et Signature
     doc.setFont('times', 'normal');
     doc.setFontSize(13);
     doc.text(`Fait à ${lieuSignature}, le ${dateSignature}`, pageWidth - marginX - 5, yPos, { align: 'right' });
-    yPos += lineSpacing ;
+    yPos += lineSpacing;
     
     doc.setFont('times', 'italic');
     doc.setFontSize(13);

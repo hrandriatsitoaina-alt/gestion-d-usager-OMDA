@@ -144,12 +144,14 @@ const MediaAjout = ({ onCancel }) => {
     }
   };
 
+  // ✅ CALCUL CORRIGÉ - (Taux × Uniter) + Frais de dossier
   useEffect(() => {
     const tauxVal = parseFloat(mediaData.taux) || 0;
     const fraisVal = parseFloat(fraisDossier) || 0;
-    const totalCalcule = tauxVal + fraisVal;
-    const finalTotal = totalCalcule * uniter;
-    setSoitTotal(finalTotal);
+    const uniterVal = parseInt(uniter) || 1;
+    
+    const totalFinal = (tauxVal * uniterVal) + fraisVal;
+    setSoitTotal(totalFinal);
   }, [mediaData.taux, fraisDossier, uniter]);
 
   useEffect(() => {
@@ -213,6 +215,7 @@ const MediaAjout = ({ onCancel }) => {
     }
   };
 
+  // ✅ HANDLE FINAL SUBMIT CORRIGÉ - comme Hotel et OCC
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
     const currentUser = getCurrentUser();
@@ -222,15 +225,25 @@ const MediaAjout = ({ onCancel }) => {
       return;
     }
 
+    const fraisVal = parseFloat(fraisDossier) || 0;
+    const tauxVal = parseFloat(mediaData.taux) || 0;
+    const uniterVal = parseInt(uniter) || 1;
+    
+    const totalFinal = (tauxVal * uniterVal) + fraisVal;
+
     const finalData = {
       type: 'Télé/Radio',
       userId: currentUser.id,
       prefix: userInfo.prefix || currentUser.prefix || '',
       ...mediaData,
-      fraisDossier: parseFloat(fraisDossier) || 0,
-      soitTotal: soitTotal,
-      uniter: uniter
+      frais_dossier: fraisVal,
+      montant_mensuel: tauxVal,
+      montant_total: tauxVal,
+      soit_total: totalFinal,
+      uniter: uniterVal
     };
+
+    console.log('📤 Données envoyées au backend (Média):', finalData);
 
     try {
       const response = await fetch('http://localhost:3001/api/usagers', {
@@ -239,6 +252,7 @@ const MediaAjout = ({ onCancel }) => {
         body: JSON.stringify(finalData)
       });
       const result = await response.json();
+      
       if (result.success) {
         const updatedUser = getCurrentUser();
         if (updatedUser) {
@@ -246,7 +260,7 @@ const MediaAjout = ({ onCancel }) => {
           const nouveauCompteur = (updatedUser.compteurs['Télé/Radio'] || 0) + 1;
           updatedUser.compteurs['Télé/Radio'] = nouveauCompteur;
           localStorage.setItem('user', JSON.stringify(updatedUser));
-
+          
           setUserInfo(prev => ({
             ...prev,
             compteurs: {
@@ -254,14 +268,15 @@ const MediaAjout = ({ onCancel }) => {
               'Télé/Radio': nouveauCompteur
             }
           }));
-
+          
           console.log(`✅ Compteur Télé/Radio incrémenté à ${nouveauCompteur}`);
         }
-
+        
         showToast('✅ Télé/Radio ajouté avec succès !', 'success');
-        navigate('/confirme-paiement', {
-          state: {
-            usager: {
+        
+        navigate('/confirme-paiement', { 
+          state: { 
+            usager: { 
               id: result.id,
               denomination: mediaData.denomination,
               demandeur: mediaData.proprietaireNom,
@@ -289,7 +304,7 @@ const MediaAjout = ({ onCancel }) => {
               siege: mediaData.siege,
               nif: mediaData.nif,
               stat: mediaData.stat,
-              taux: mediaData.taux,
+              taux: tauxVal,
               couverture_capitale: mediaData.couvertureCapitale,
               couverture_chef_lieu_province: mediaData.couvertureChefLieuProvince,
               couverture_chef_lieu_region: mediaData.couvertureChefLieuRegion,
@@ -299,15 +314,15 @@ const MediaAjout = ({ onCancel }) => {
               confirmation_nom: mediaData.confirmationNom,
               lieu_signature: mediaData.lieuSignature,
               date_signature: mediaData.dateSignature,
-              montant_mensuel: 0,
-              frais_dossier: parseFloat(fraisDossier) || 0,
-              montant_total: parseFloat(mediaData.taux) || 0,
-              soit_total: soitTotal,
-              uniter: uniter || 1,
+              montant_mensuel: tauxVal,
+              frais_dossier: fraisVal,
+              montant_total: tauxVal,
+              soit_total: totalFinal,
+              uniter: uniterVal,
               numero_dossier_utilisateur: `${userInfo.prefix || ''} ${(userInfo.compteurs?.['Télé/Radio'] || 0) + 1}/${getTrimestreFromMonth(new Date().getMonth() + 1)}/${userInfo.anneeEnCours || new Date().getFullYear()}`
-            },
+            }, 
             type: 'media'
-          }
+          } 
         });
       } else {
         showToast('❌ Erreur: ' + result.message, 'error');
@@ -612,6 +627,7 @@ const MediaAjout = ({ onCancel }) => {
         <div className="form-label"><h2><FileText size={18} strokeWidth={2} /> Frais de dossier :</h2></div>
         <div className="form-input">
           <input type="text" value={getDisplayValue(fraisDossier)} onChange={handleFraisDossierChange} className="input-style" placeholder="Frais de dossier en Ar" />
+          <span style={{ marginLeft: '10px', fontSize: '12px', color: '#6c757d' }}>(fixe, non multiplié par Uniter)</span>
         </div>
       </div>
 
@@ -627,6 +643,9 @@ const MediaAjout = ({ onCancel }) => {
         <div className="form-label"><h2><DollarSign size={18} strokeWidth={2} /> Soit Total :</h2></div>
         <div className="form-input">
           <input type="text" value={getSoitTotalDisplay()} readOnly className="input-style total-field" />
+          <span style={{ marginLeft: '10px', fontSize: '12px', color: '#6c757d' }}>
+            (Taux × Uniter + Frais de dossier)
+          </span>
         </div>
       </div>
 
@@ -692,7 +711,7 @@ const MediaAjout = ({ onCancel }) => {
             <tr><td><Radio size={16} strokeWidth={2} /> Fréquence</td><td>{mediaData.frequence || '-'}</td></tr>
             <tr><td><MapPin size={16} strokeWidth={2} /> Siège</td><td>{mediaData.siege || '-'}</td></tr>
             <tr><td><DollarSign size={16} strokeWidth={2} /> Taux</td><td>{formatNumber(mediaData.taux || 0)} Ar</td></tr>
-            <tr><td><FileText size={16} strokeWidth={2} /> Frais de dossier</td><td>{formatNumber(fraisDossier || 0)} Ar</td></tr>
+            <tr><td><FileText size={16} strokeWidth={2} /> Frais de dossier</td><td>{formatNumber(fraisDossier || 0)} Ar <span style={{ color: '#6c757d', fontSize: '12px' }}>(fixe)</span></td></tr>
             <tr><td><Hash size={16} strokeWidth={2} /> Uniter</td><td>{uniter}</td></tr>
             <tr><td><DollarSign size={16} strokeWidth={2} /> Soit Total</td><td><strong style={{ color: '#28a745' }}>{getSoitTotalDisplay()}</strong></td></tr>
           </tbody></table>

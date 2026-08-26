@@ -83,13 +83,13 @@ async function initDB() {
     // TABLE REGIONS
     // ============================================================
     await pool.query(`
-    CREATE TABLE IF NOT EXISTS regions (
-      id SERIAL PRIMARY KEY,
-      nom VARCHAR(100) NOT NULL UNIQUE,
-      telephone VARCHAR(50),
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
+      CREATE TABLE IF NOT EXISTS regions (
+        id SERIAL PRIMARY KEY,
+        nom VARCHAR(100) NOT NULL UNIQUE,
+        telephone VARCHAR(50),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
     console.log('✅ Table regions prête');
 
     // ============================================================
@@ -267,7 +267,7 @@ async function initDB() {
     console.log('✅ Table backup_annuel prête');
 
     // ============================================================
-    // TABLES DES USAGERS (6 types) AVEC created_by
+    // TABLES DES USAGERS (6 types)
     // ============================================================
     const tablesUsagers = [
       {
@@ -283,7 +283,6 @@ async function initDB() {
         columns: `proprietaire_nom VARCHAR(255), proprietaire_adresse VARCHAR(255), proprietaire_tel VARCHAR(50), proprietaire_cin VARCHAR(100), proprietaire_cin_delivree DATE, proprietaire_cin_lieu VARCHAR(255), representant_nom VARCHAR(255), representant_adresse VARCHAR(255), representant_tel VARCHAR(50), representant_cin VARCHAR(100), representant_cin_delivree DATE, representant_cin_lieu VARCHAR(255), representant_pouvoir_date DATE, representant_pouvoir_par VARCHAR(255), representant_fonction VARCHAR(255), denomination VARCHAR(255), frequence VARCHAR(50), canal VARCHAR(50), siege VARCHAR(255), telephone VARCHAR(50), email VARCHAR(255), nif VARCHAR(100), stat VARCHAR(100), taux DECIMAL(15,2), couverture_capitale BOOLEAN DEFAULT FALSE, couverture_chef_lieu_province BOOLEAN DEFAULT FALSE, couverture_chef_lieu_region BOOLEAN DEFAULT FALSE, couverture_district BOOLEAN DEFAULT FALSE, horaires_jusqua12 BOOLEAN DEFAULT FALSE, horaires_13a24 BOOLEAN DEFAULT FALSE, has_regions BOOLEAN DEFAULT FALSE, regions_detail JSONB, type_paiement VARCHAR(50) DEFAULT 'mensuel', montant_mensuel DECIMAL(15,2) DEFAULT 0, frais_dossier DECIMAL(15,2) DEFAULT 0, region VARCHAR(100), confirmation_nom VARCHAR(255), date_signature DATE, lieu_signature VARCHAR(255), uniter INTEGER DEFAULT 1, numero_dossier_utilisateur VARCHAR(50), created_by INTEGER REFERENCES utilisateurs(id), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
       },
       {
-        // ✅ BUS - Avec a_compter_du ET echeance
         name: 'usagers_bus',
         columns: `demandeur VARCHAR(255), denomination VARCHAR(255), adresse_siege VARCHAR(255), nif_stat VARCHAR(100), telephone VARCHAR(50), email VARCHAR(255), representant_nom VARCHAR(255), representant_adresse VARCHAR(255), representant_tel VARCHAR(50), representant_cin VARCHAR(100), representant_cin_delivree DATE, representant_cin_lieu VARCHAR(255), representant_fonction VARCHAR(255), nombre_vehicules INTEGER DEFAULT 0, lignes VARCHAR(255), type_bus VARCHAR(50), trajet VARCHAR(255), horaires VARCHAR(255), zones_desservies VARCHAR(255), a_compter_du DATE, echeance DATE, type_paiement VARCHAR(50) DEFAULT 'mensuel', montant_mensuel DECIMAL(15,2) DEFAULT 0, frais_dossier DECIMAL(15,2) DEFAULT 0, region VARCHAR(100), confirmation_nom VARCHAR(255), date_signature DATE, lieu_signature VARCHAR(255), uniter INTEGER DEFAULT 1, numero_dossier_utilisateur VARCHAR(50), created_by INTEGER REFERENCES utilisateurs(id), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
       },
@@ -291,13 +290,20 @@ async function initDB() {
         name: 'usagers_nightclub',
         columns: `demandeur VARCHAR(255), denomination VARCHAR(255), adresse_siege VARCHAR(255), nif_stat VARCHAR(100), telephone VARCHAR(50), email VARCHAR(255), representant_nom VARCHAR(255), representant_adresse VARCHAR(255), representant_tel VARCHAR(50), representant_cin VARCHAR(100), representant_cin_delivree DATE, representant_cin_lieu VARCHAR(255), representant_fonction VARCHAR(255), jauge_max INTEGER DEFAULT 0, horaires VARCHAR(255), moyens_communication JSONB, total VARCHAR(50), a_compter_du DATE, echeance DATE, type_paiement VARCHAR(50) DEFAULT 'mensuel', montant_mensuel DECIMAL(15,2) DEFAULT 0, frais_dossier DECIMAL(15,2) DEFAULT 0, region VARCHAR(100), confirmation_nom VARCHAR(255), date_signature DATE, lieu_signature VARCHAR(255), uniter INTEGER DEFAULT 1, numero_dossier_utilisateur VARCHAR(50), created_by INTEGER REFERENCES utilisateurs(id), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
       },
+      // ============================================================
+      // ✅ TABLE OCC - SANS montant_mensuel
+      // ============================================================
       {
         name: 'usagers_occasionnel',
-        columns: `demandeur VARCHAR(255), denomination VARCHAR(255), adresse_siege VARCHAR(255), nif_stat VARCHAR(100), telephone VARCHAR(50), email VARCHAR(255), representant_nom VARCHAR(255), representant_adresse VARCHAR(255), representant_tel VARCHAR(50), representant_cin VARCHAR(100), representant_cin_delivree DATE, representant_cin_lieu VARCHAR(255), representant_fonction VARCHAR(255), organisateurs VARCHAR(255), representant_par VARCHAR(255), genre_manifestation VARCHAR(255), artistes VARCHAR(255), date_evenement DATE, lieu_evenement VARCHAR(255), adresse VARCHAR(255), domicile VARCHAR(255), confirmation_nom VARCHAR(255), date_signature DATE, lieu_ajout VARCHAR(255), frais_dossier DECIMAL(15,2) DEFAULT 0, date_ajout DATE, nom_evenement VARCHAR(255), numero_dossier_global VARCHAR(50), numero_dossier_utilisateur VARCHAR(50), region VARCHAR(100), uniter INTEGER DEFAULT 1, created_by INTEGER REFERENCES utilisateurs(id), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
+        columns: `demandeur VARCHAR(255), denomination VARCHAR(255), adresse_siege VARCHAR(255), nif_stat VARCHAR(100), telephone VARCHAR(50), email VARCHAR(255), representant_nom VARCHAR(255), representant_adresse VARCHAR(255), representant_tel VARCHAR(50), representant_cin VARCHAR(100), representant_cin_delivree DATE, representant_cin_lieu VARCHAR(255), representant_fonction VARCHAR(255), organisateurs VARCHAR(255), representant_par VARCHAR(255), genre_manifestation VARCHAR(255), artistes VARCHAR(255), date_evenement DATE, lieu_evenement VARCHAR(255), adresse VARCHAR(255), domicile VARCHAR(255), confirmation_nom VARCHAR(255), date_signature DATE, lieu_ajout VARCHAR(255), 
+        frais_dossier DECIMAL(15,2) DEFAULT 0, 
+        montant DECIMAL(15,2) DEFAULT 0, 
+        montant_retard DECIMAL(15,2) DEFAULT 0, 
+        is_retard BOOLEAN DEFAULT FALSE, 
+        soit_total DECIMAL(15,2) DEFAULT 0, 
+        date_ajout DATE, nom_evenement VARCHAR(255), numero_dossier_global VARCHAR(50), numero_dossier_utilisateur VARCHAR(50), region VARCHAR(100), uniter INTEGER DEFAULT 1, created_by INTEGER REFERENCES utilisateurs(id), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
       }
     ];
-
-    // ❌ PAS DE DROP TABLE ICI - Suppression manuelle via SQL Shell
 
     for (const table of tablesUsagers) {
       await pool.query(`
@@ -347,12 +353,11 @@ async function initDB() {
     `);
     console.log('✅ Table usagers prête');
 
-// src/server/database.js
-// ... (le reste du code existant)
-
     // ============================================================
-    // TABLE FACTURE_USAGER
+    // ⭐ TABLE FACTURE_USAGER
     // ============================================================
+    console.log('📝 Création de la table facture_usager...');
+    
     await pool.query(`
       CREATE TABLE IF NOT EXISTS facture_usager (
         id SERIAL PRIMARY KEY,
@@ -365,14 +370,12 @@ async function initDB() {
         region_usager VARCHAR(100),
         date_ajout DATE DEFAULT CURRENT_DATE,
         
-  
         denomination VARCHAR(255),
         demandeur VARCHAR(255),
         telephone VARCHAR(50),
         email VARCHAR(255),
         adresse TEXT,
         
-      
         representant_nom VARCHAR(255),
         representant_adresse VARCHAR(255),
         representant_tel VARCHAR(50),
@@ -381,7 +384,6 @@ async function initDB() {
         representant_cin_lieu VARCHAR(255),
         representant_fonction VARCHAR(255),
         
-     
         activite VARCHAR(255),
         etoiles VARCHAR(10),
         ravinala BOOLEAN DEFAULT FALSE,
@@ -400,7 +402,6 @@ async function initDB() {
         stat VARCHAR(100),
         taux DECIMAL(15,2),
         
-     
         organisateurs VARCHAR(255),
         representant_par VARCHAR(255),
         genre_manifestation VARCHAR(255),
@@ -412,14 +413,15 @@ async function initDB() {
         date_signature DATE,
         confirmation_nom VARCHAR(255),
         
-   
+        personne_recu VARCHAR(255),
+        quittance VARCHAR(50),
+        quittance_validee BOOLEAN DEFAULT FALSE,
+        
         moyens_communication JSONB,
         
-    
         a_compter_du DATE,
         echeance DATE,
         
-     
         montant_mensuel DECIMAL(15,2) DEFAULT 0,
         frais_dossier DECIMAL(15,2) DEFAULT 0,
         montant_retard DECIMAL(15,2) DEFAULT 0,
@@ -427,26 +429,42 @@ async function initDB() {
         soit_total DECIMAL(15,2) DEFAULT 0,
         uniter INTEGER DEFAULT 1,
         
-  
         numero_dossier_utilisateur VARCHAR(50),
         numero_dossier_global VARCHAR(50),
         
-    
+        daf_nom VARCHAR(255),
+        
         statut VARCHAR(20) DEFAULT 'brouillon',
         created_by INTEGER REFERENCES utilisateurs(id),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    console.log('✅ Table facture_usager créée avec succès');
+
+    // Vérifier et ajouter les colonnes manquantes
+    const columnsToCheck = ['daf_nom', 'quittance', 'quittance_validee'];
+    for (const col of columnsToCheck) {
+      const check = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'facture_usager' AND column_name = $1
+      `, [col]);
+      if (check.rows.length === 0) {
+        console.log(`📝 Ajout de la colonne ${col}...`);
+        await pool.query(`ALTER TABLE facture_usager ADD COLUMN ${col} VARCHAR(255);`);
+        console.log(`✅ Colonne ${col} ajoutée`);
+      }
+    }
+
+    // Créer les index
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_facture_ref_omda ON facture_usager(ref_omda);
       CREATE INDEX IF NOT EXISTS idx_facture_ref_client_type ON facture_usager(ref_client_type);
       CREATE INDEX IF NOT EXISTS idx_facture_ref_usager ON facture_usager(ref_usager);
       CREATE INDEX IF NOT EXISTS idx_facture_statut ON facture_usager(statut);
     `);
-    console.log('✅ Table facture_usager prête');
-
-// ... (fin du fichier)
+    console.log('✅ Index de facture_usager créés');
 
     // ============================================================
     // CRÉATION DES UTILISATEURS PAR DÉFAUT

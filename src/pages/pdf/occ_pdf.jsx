@@ -192,10 +192,10 @@ export const generateOccPDF = (usager, paymentDetails) => {
     const estRetard = usager?.is_retard || false;
     const uniter = parseInt(usager?.uniter) || 1;
     
-    // ✅ Soit Total = (Frais de dossier + Montant à payer) × Uniter (Cas normal)
-    // ✅ Soit Total = ((Frais de dossier + Montant à payer) × Uniter) + Retard (Cas retard)
-    const baseTotal = fraisDossier + montantPaye;
-    let soitTotal = baseTotal * uniter;
+    // ✅ BONNE RÈGLE DE CALCUL : (Montant × Uniter) + Frais de dossier + Retard
+    // Le frais de dossier est FIXE et N'EST PAS multiplié par Uniter
+    const baseTotal = montantPaye * uniter;
+    let soitTotal = baseTotal + fraisDossier;
     if (estRetard) {
       soitTotal += montantRetard;
     }
@@ -625,7 +625,7 @@ export const generateOccPDF = (usager, paymentDetails) => {
       yPos += 2;
     }
     
-    // ✅ Soit Total = ((Frais de dossier + Montant à payer) × Uniter) + Retard
+    // ✅ SOIT TOTAL corrigé : (Montant × Uniter) + Frais de dossier + Retard
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
     doc.text('SOIT TOTAL :', marginX, yPos);

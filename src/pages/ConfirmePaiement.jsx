@@ -74,6 +74,11 @@ const ConfirmePaiement = () => {
     }
   }, [location]);
 
+  // ✅ Lit soit_total en priorité (calculé côté OccAjout), avec fallback
+  // sur montant_total / montant_mensuel si soit_total est absent ou à 0.
+  // Ces valeurs proviennent de l'objet "usager" transmis via navigate(),
+  // qui contient désormais frais_dossier / montant_total / montant_retard /
+  // is_retard / soit_total correctement remplis depuis OccAjout.jsx.
   const initializePayment = (usager, type) => {
     setLoading(true);
     fetchAnneesDisponibles(type);
@@ -120,58 +125,75 @@ const ConfirmePaiement = () => {
     } catch { return dateString; }
   };
 
-  const submitPayment = async () => {
-    if (isSubmitting || !usager) return;
-    setIsSubmitting(true);
+// Dans ConfirmePaiement.jsx - submitPayment
+const submitPayment = async () => {
+  if (isSubmitting || !usager) return;
+  setIsSubmitting(true);
 
-    try {
-      const token = localStorage.getItem('adminToken') || '';
-      const payload = {
-        usagerId: usager.id,
-        usagerType: usagerType,
-        montant: montantTotal,
-        datePaiement: paymentDate,
-        nombreMois: usagerType !== 'occ' ? nombreMois : 1,
-        anneeDebut: selectedYear,
-        fraisDossier: usager.frais_dossier || 0,
-        montantRetard: usager.montant_retard || 0,
-        estRetard: usager.is_retard || false,
-        reference: usager.numero_dossier_utilisateur || null
-      };
+  try {
+    const token = localStorage.getItem('adminToken') || '';
+    const payload = {
+      usagerId: usager.id,
+      usagerType: usagerType,
+      montant: montantTotal,
+      datePaiement: paymentDate,
+      nombreMois: usagerType !== 'occ' ? nombreMois : 1,
+      anneeDebut: selectedYear,
+      fraisDossier: usager.frais_dossier || 0,
+      montantRetard: usager.montant_retard || 0,
+      estRetard: usager.is_retard || false,
+      reference: usager.numero_dossier_utilisateur || null,
+      // ✅ AJOUTER CES CHAMPS POUR LA FACTURE
+      uniter: usager.uniter || 1,
+      montantMensuel: usager.montant_mensuel || usager.montant || usager.taux || 0,
+      soitTotal: usager.soit_total || montantTotal || 0
+    };
 
-      console.log('📝 Envoi paiement:', payload);
+    console.log('📝 Envoi paiement:', payload);
 
-      const response = await fetch('http://localhost:3001/api/paiements/enregistrer', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          adminToken: token
-        },
-        body: JSON.stringify(payload)
-      });
+    const response = await fetch('http://localhost:3001/api/paiements/enregistrer', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        adminToken: token
+      },
+      body: JSON.stringify(payload)
+    });
 
-      const data = await response.json();
-      if (data.success) {
-        setNotification({ type: 'success', message: '✅ Paiement enregistré avec succès !' });
-        setTimeout(() => {
-          navigate('/confirmation-dossier', {
-            state: {
-              usager: usager,
-              type: usagerType,
-              payment: { montant: montantTotal, date: paymentDate, nombreMois, annee: selectedYear }
+    const data = await response.json();
+    if (data.success) {
+      setNotification({ type: 'success', message: '✅ Paiement enregistré avec succès !' });
+      setTimeout(() => {
+        navigate('/confirmation-dossier', {
+          state: {
+            usager: usager,
+            type: usagerType,
+            payment: { 
+              montant: montantTotal, 
+              date: paymentDate, 
+              nombreMois, 
+              annee: selectedYear,
+              // ✅ AJOUTER POUR LA FACTURE
+              fraisDossier: usager.frais_dossier || 0,
+              uniter: usager.uniter || 1,
+              montantMensuel: usager.montant_mensuel || usager.montant || usager.taux || 0,
+              soitTotal: usager.soit_total || montantTotal || 0,
+              montantRetard: usager.montant_retard || 0,
+              isRetard: usager.is_retard || false
             }
-          });
-        }, 1500);
-      } else {
-        setNotification({ type: 'error', message: '❌ ' + data.message });
-        setIsSubmitting(false);
-      }
-    } catch (error) {
-      console.error('❌ Erreur:', error);
-      setNotification({ type: 'error', message: '❌ Erreur lors de l\'enregistrement' });
+          }
+        });
+      }, 1500);
+    } else {
+      setNotification({ type: 'error', message: '❌ ' + data.message });
       setIsSubmitting(false);
     }
-  };
+  } catch (error) {
+    console.error('❌ Erreur:', error);
+    setNotification({ type: 'error', message: '❌ Erreur lors de l\'enregistrement' });
+    setIsSubmitting(false);
+  }
+};
 
   const handleSkipToConfirmation = () => {
     navigate('/confirmation-dossier', { state: { usager, type: usagerType } });

@@ -230,9 +230,10 @@ export const generateHotelPDF = (usager, paymentDetails) => {
     const fraisDossier = parseFloat(usager?.frais_dossier) || 0;
     const uniter = parseInt(usager?.uniter) || 1;
     
-    // ✅ Soit au Total = (Montant mensuel + Frais de dossier + Somme des taux) × Uniter
-    const baseTotal = montantMensuel + fraisDossier + sommeTaux;
-    const soitTotal = baseTotal * uniter;
+    // ✅ BONNE RÈGLE DE CALCUL : (Montant + Somme des taux) × Uniter + Frais de dossier
+    // Le frais de dossier est FIXE et N'EST PAS multiplié par Uniter
+    const baseTotal = (montantMensuel + sommeTaux) * uniter;
+    const soitTotal = baseTotal + fraisDossier;
     const totalEnLettres = nombreEnLettres(Math.round(soitTotal));
     
     const aCompterDu = usager?.a_compter_du ? formatDate(usager.a_compter_du) : '';
@@ -287,7 +288,7 @@ export const generateHotelPDF = (usager, paymentDetails) => {
       drawCheckbox(doc, marginX + 80, yPos, false);
       doc.text('Ravinala', marginX + 87, yPos);
     }
-    doc.text(`E-mail : ${email || '……………………………………'}`, marginX + 130, yPos);
+    doc.text(`E-mail : ${email || '……………………………………'}`, marginX + 110, yPos);
     yPos += lineSpacing + 5;
     
     // SECTION 2
@@ -380,8 +381,9 @@ export const generateHotelPDF = (usager, paymentDetails) => {
     // ✅ Soit au Total corrigé
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text(`Soit au Total : ${formatNumber(soitTotal)} Ariary (${totalEnLettres} )`, marginX + 5, yPos);
-    yPos += lineSpacing + 2;
+    doc.text(`Soit au Total : ${formatNumber(soitTotal)} Ariary (${totalEnLettres})`, marginX + 5, yPos);
+    // doc.text(`( ${formatNumber(montantMensuel)} + ${formatNumber(sommeTaux)} ) × ${uniter} + ${formatNumber(fraisDossier)}`, marginX + 5, yPos + 5);
+    yPos += lineSpacing + 5;
     
     doc.setFont('times', 'normal');
     doc.text(`A compter du : ${aCompterDu || '……………………………………'}`, marginX + 5, yPos);
