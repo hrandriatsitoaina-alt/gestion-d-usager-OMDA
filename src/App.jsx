@@ -28,7 +28,8 @@ import GestionRegionCrud from './pages/gestion_region_crud';
 import NotificationAdmin from './pages/notification_admin';
 import ConfirmePaiement from './pages/ConfirmePaiement';
 import ConfirmationDossier from './pages/ConfirmationDossier';
-import GenerationFacture from './pages/GenerationFacture'; //  Nouvel import
+import GenerationFacture from './pages/GenerationFacture';
+import PaiementMensuel from './pages/PaiementMensuel'; // Import de la nouvelle page
 
 function App() {
   return (
@@ -51,6 +52,7 @@ function App() {
       <Route path="/tele-radio" element={<Tele />} />
       <Route path="/Hotel_occ" element={<Hotel />} />
       <Route path="/gere-payer" element={<Gerepaiement />} />
+      <Route path="/paiement-mensuel" element={<PaiementMensuel />} /> {/* Nouvelle route */}
       <Route path="/gere-contra" element={<Gestioncontra />} />
       <Route path="/gere-dossier" element={<Gestiondossier />} />
       <Route path="/gestion_crud" element={<Gestusagercrud />} />
@@ -58,7 +60,7 @@ function App() {
       <Route path="/notification_admin" element={<NotificationAdmin />} />
       <Route path="/confirme-paiement" element={<ConfirmePaiement />} />
       <Route path="/confirmation-dossier" element={<ConfirmationDossier />} />
-      <Route path="/generation-facture" element={<GenerationFacture />} /> {/*  Nouvelle route */}
+      <Route path="/generation-facture" element={<GenerationFacture />} />
     </Routes>
   );
 }

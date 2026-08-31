@@ -1,20 +1,204 @@
-// server/routes/paiements.routes.js
+// server/routes/paiements.routes.js - Ajout de la route pour récupérer les paiements d'un usager
 const express = require('express');
 const router = express.Router();
 const pool = require('../database');
 const { verifyAnyUser } = require('../middleware');
 
 // ============================================================
-// ROUTE DE TEST
+// GET - Paiements d'un usager (NOUVEAU)
 // ============================================================
-router.get('/paiements/test', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Route paiements fonctionne !',
-    token: req.headers.adminToken || 'Aucun token'
-  });
+router.get('/paiements/usager/:id/:type', async (req, res) => {
+  try {
+    const { id, type } = req.params;
+    
+    console.log(`📊 Récupération des paiements pour usager ${id} (${type})`);
+    
+    const result = await pool.query(
+      `SELECT * FROM omda_app.paiements 
+       WHERE usager_id = $1 AND usager_type = $2 AND statut = 'paye'
+       ORDER BY annee DESC, mois DESC`,
+      [id, type]
+    );
+    
+    res.json({
+      success: true,
+      paiements: result.rows
+    });
+  } catch (error) {
+    console.error('❌ Erreur récupération paiements usager:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+      paiements: []
+    });
+  }
 });
 
+// server/routes/paiements.routes.js - Route POST /paiements/enregistrer corrigée
+
+// ============================================================
+// POST - Enregistrer un paiement (VERSION CORRIGÉE FINALE)
+// ============================================================
+router.post('/paiements/enregistrer', async (req, res) => {
+  console.log('🔥 ROUTE DIRECTE appelée');
+  console.log('📦 Body reçu:', req.body);
+
+  const { 
+    usagerId, 
+    usagerType, 
+    type_paiement,
+    montant, 
+    date_paiement, 
+    frais_dossier, 
+    montant_retard,
+    est_retard,
+    annee,
+    mois,
+    mois_payes,
+    nombre_mois,
+    reference,
+    statut
+  } = req.body;
+
+  if (!usagerId || !montant) {
+    return res.status(400).json({ success: false, message: 'usagerId et montant requis' });
+  }
+
+  try {
+    // Déterminer le type de paiement
+    const typePaiement = type_paiement || (usagerType === 'occ' ? 'unique' : 'mensuel');
+    
+    console.log(`📝 Type paiement: ${typePaiement}, usagerType: ${usagerType}`);
+
+    // ✅ Pour OCC, on enregistre un paiement unique sans année ni mois
+    if (usagerType === 'occ' || typePaiement === 'unique') {
+      const result = await pool.query(
+        `INSERT INTO omda_app.paiements 
+         (usager_id, usager_type, type_paiement, montant, date_paiement, statut, frais_dossier, montant_retard, est_retard, reference)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         RETURNING id`,
+        [
+          usagerId,
+          usagerType || 'hotel',
+          'unique',
+          montant,
+          date_paiement || new Date().toISOString().split('T')[0],
+          statut || 'paye',
+          frais_dossier || 0,
+          montant_retard || 0,
+          est_retard || false,
+          reference || null
+        ]
+      );
+
+      console.log('✅ Paiement unique enregistré, ID:', result.rows[0].id);
+      return res.json({
+        success: true,
+        message: 'Paiement unique enregistré avec succès',
+        id: result.rows[0].id
+      });
+    }
+
+    // ✅ Pour les paiements mensuels
+    // Déterminer l'année et le mois
+    let anneeFinale = annee || new Date().getFullYear();
+    let moisFinal = mois || new Date().getMonth() + 1;
+    
+    // Si plusieurs mois sont envoyés, on prend le premier
+    if (mois_payes && Array.isArray(mois_payes) && mois_payes.length > 0) {
+      moisFinal = mois_payes[0];
+    }
+
+    console.log(`📝 Enregistrement mensuel: annee=${anneeFinale}, mois=${moisFinal}`);
+
+    // ✅ Vérifier si le paiement existe déjà pour ce mois
+    const checkResult = await pool.query(
+      `SELECT id FROM omda_app.paiements 
+       WHERE usager_id = $1 AND usager_type = $2 AND annee = $3 AND mois = $4 AND statut = 'paye'`,
+      [usagerId, usagerType || 'hotel', anneeFinale, moisFinal]
+    );
+    
+    if (checkResult.rows.length > 0) {
+      console.log(`⚠️ Paiement déjà existant pour mois ${moisFinal}/${anneeFinale}`);
+      return res.json({
+        success: true,
+        message: 'Paiement déjà enregistré pour ce mois',
+        id: checkResult.rows[0].id,
+        dejaExistant: true
+      });
+    }
+
+    // ✅ Insérer le paiement mensuel
+    const result = await pool.query(
+      `INSERT INTO omda_app.paiements 
+       (usager_id, usager_type, type_paiement, annee, mois, montant, date_paiement, statut, frais_dossier, montant_retard, est_retard, reference)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       RETURNING id`,
+      [
+        usagerId,
+        usagerType || 'hotel',
+        'mensuel',
+        anneeFinale,
+        moisFinal,
+        montant,
+        date_paiement || new Date().toISOString().split('T')[0],
+        statut || 'paye',
+        frais_dossier || 0,
+        montant_retard || 0,
+        est_retard || false,
+        reference || null
+      ]
+    );
+
+    console.log('✅ Paiement mensuel enregistré, ID:', result.rows[0].id);
+    
+    // ✅ Si plusieurs mois sont payés, enregistrer chaque mois séparément
+    if (mois_payes && Array.isArray(mois_payes) && mois_payes.length > 1) {
+      for (const m of mois_payes) {
+        if (m === moisFinal) continue; // Déjà enregistré
+        
+        const checkAutre = await pool.query(
+          `SELECT id FROM omda_app.paiements 
+           WHERE usager_id = $1 AND usager_type = $2 AND annee = $3 AND mois = $4 AND statut = 'paye'`,
+          [usagerId, usagerType || 'hotel', anneeFinale, m]
+        );
+        
+        if (checkAutre.rows.length === 0) {
+          await pool.query(
+            `INSERT INTO omda_app.paiements 
+             (usager_id, usager_type, type_paiement, annee, mois, montant, date_paiement, statut, frais_dossier, montant_retard, est_retard, reference)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+            [
+              usagerId,
+              usagerType || 'hotel',
+              'mensuel',
+              anneeFinale,
+              m,
+              montant,
+              date_paiement || new Date().toISOString().split('T')[0],
+              statut || 'paye',
+              frais_dossier || 0,
+              montant_retard || 0,
+              est_retard || false,
+              reference || null
+            ]
+          );
+          console.log(`✅ Paiement mensuel supplémentaire enregistré pour mois ${m}`);
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `Paiement enregistré avec succès (${mois_payes ? mois_payes.length : 1} mois)`,
+      id: result.rows[0].id
+    });
+
+  } catch (error) {
+    console.error('❌ ERREUR SQL:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
 // ============================================================
 // GET - Statistiques des paiements
 // ============================================================
@@ -69,61 +253,91 @@ router.get('/paiements/stats', async (req, res) => {
 });
 
 // ============================================================
-// POST - Enregistrer un paiement (CORRIGÉ POUR OCC)
+// GET - Années disponibles
 // ============================================================
-router.post('/paiements/enregistrer', async (req, res) => {
-  console.log('🔥 ROUTE DIRECTE appelée');
-  console.log('📦 Body reçu:', req.body);
-
-  const { usagerId, usagerType, montant, datePaiement, fraisDossier, nombreMois, anneeDebut } = req.body;
-
-  if (!usagerId || !montant) {
-    return res.status(400).json({ success: false, message: 'usagerId et montant requis' });
-  }
-
+router.get('/paiements/annees-disponibles/:type', async (req, res) => {
+  const currentYear = new Date().getFullYear();
   try {
-    const typePaiement = (usagerType === 'occ') ? 'unique' : 'mensuel';
-    let annee = null;
-    let mois = null;
-    if (typePaiement === 'mensuel') {
-      const dateObj = new Date(datePaiement || new Date());
-      annee = anneeDebut || dateObj.getFullYear();
-      mois = dateObj.getMonth() + 1;
-    }
-    // Pour 'unique', annee et mois restent NULL
-
     const result = await pool.query(
-      `INSERT INTO omda_app.paiements 
-       (usager_id, usager_type, type_paiement, annee, mois, montant, date_paiement, statut, frais_dossier)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'paye', $8)
-       RETURNING id`,
-      [
-        usagerId,
-        usagerType || 'hotel',
-        typePaiement,
-        annee,
-        mois,
-        montant,
-        datePaiement || new Date().toISOString().split('T')[0],
-        fraisDossier || 0
-      ]
+      `SELECT DISTINCT annee FROM omda_app.paiements WHERE annee IS NOT NULL ORDER BY annee DESC`
     );
-
-    console.log('✅ Insertion réussie, ID:', result.rows[0].id);
-    return res.json({
-      success: true,
-      message: 'Paiement enregistré avec succès',
-      id: result.rows[0].id
-    });
-
+    
+    let annees = result.rows.map(r => r.annee);
+    
+    if (annees.length === 0) {
+      annees = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1, currentYear + 2];
+    }
+    
+    res.json({ success: true, annees });
   } catch (error) {
-    console.error('❌ ERREUR SQL:', error);
-    return res.status(500).json({ success: false, message: error.message });
+    console.error('❌ Erreur annees disponibles:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
 // ============================================================
-// GET - Historique des paiements (avec noms et régions)
+// GET - Tous les paiements
+// ============================================================
+router.get('/paiements/tous', async (req, res) => {
+  try {
+    console.log('📊 Récupération de tous les paiements...');
+    
+    const result = await pool.query(`
+      SELECT 
+        p.id,
+        p.usager_id,
+        p.usager_type,
+        p.type_paiement,
+        p.annee,
+        p.mois,
+        p.montant,
+        p.date_paiement,
+        p.frais_dossier,
+        p.montant_retard,
+        p.est_retard,
+        p.reference,
+        p.statut,
+        p.created_at,
+        CASE 
+          WHEN p.usager_type = 'hotel' THEN (SELECT denomination FROM omda_app.usagers_hotel WHERE id = p.usager_id)
+          WHEN p.usager_type = 'grand-surface' THEN (SELECT denomination FROM omda_app.usagers_magasin WHERE id = p.usager_id)
+          WHEN p.usager_type = 'bus' THEN (SELECT denomination FROM omda_app.usagers_bus WHERE id = p.usager_id)
+          WHEN p.usager_type = 'nightclub' THEN (SELECT denomination FROM omda_app.usagers_nightclub WHERE id = p.usager_id)
+          WHEN p.usager_type = 'media' THEN (SELECT denomination FROM omda_app.usagers_media WHERE id = p.usager_id)
+          WHEN p.usager_type = 'occ' THEN (SELECT denomination FROM omda_app.usagers_occasionnel WHERE id = p.usager_id)
+          ELSE NULL
+        END AS usager_nom,
+        CASE 
+          WHEN p.usager_type = 'hotel' THEN (SELECT region FROM omda_app.usagers_hotel WHERE id = p.usager_id)
+          WHEN p.usager_type = 'grand-surface' THEN (SELECT region FROM omda_app.usagers_magasin WHERE id = p.usager_id)
+          WHEN p.usager_type = 'bus' THEN (SELECT region FROM omda_app.usagers_bus WHERE id = p.usager_id)
+          WHEN p.usager_type = 'nightclub' THEN (SELECT region FROM omda_app.usagers_nightclub WHERE id = p.usager_id)
+          WHEN p.usager_type = 'media' THEN (SELECT region FROM omda_app.usagers_media WHERE id = p.usager_id)
+          WHEN p.usager_type = 'occ' THEN (SELECT region FROM omda_app.usagers_occasionnel WHERE id = p.usager_id)
+          ELSE NULL
+        END AS region
+      FROM omda_app.paiements p
+      ORDER BY p.created_at DESC
+    `);
+    
+    res.json({ 
+      success: true, 
+      paiements: result.rows,
+      total: result.rows.length
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur récupération tous les paiements:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message,
+      paiements: [] 
+    });
+  }
+});
+
+// ============================================================
+// GET - Historique des paiements
 // ============================================================
 router.get('/paiements/historique', async (req, res) => {
   try {
@@ -216,192 +430,6 @@ router.get('/paiements/historique', async (req, res) => {
       success: false, 
       message: error.message,
       historique: [] 
-    });
-  }
-});
-
-// ============================================================
-// GET - Années disponibles
-// ============================================================
-router.get('/paiements/annees-disponibles/:type', async (req, res) => {
-  const currentYear = new Date().getFullYear();
-  try {
-    const result = await pool.query(
-      `SELECT DISTINCT annee FROM omda_app.paiements WHERE annee IS NOT NULL ORDER BY annee DESC`
-    );
-    
-    let annees = result.rows.map(r => r.annee);
-    
-    if (annees.length === 0) {
-      annees = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1, currentYear + 2];
-    }
-    
-    res.json({ success: true, annees });
-  } catch (error) {
-    console.error('❌ Erreur annees disponibles:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// ============================================================
-// GET - Tous les paiements (pour le tableau de bord financier)
-// ============================================================
-router.get('/paiements/tous', async (req, res) => {
-  try {
-    console.log('📊 Récupération de tous les paiements...');
-    
-    const result = await pool.query(`
-      SELECT 
-        p.id,
-        p.usager_id,
-        p.usager_type,
-        p.type_paiement,
-        p.annee,
-        p.mois,
-        p.montant,
-        p.date_paiement,
-        p.frais_dossier,
-        p.montant_retard,
-        p.est_retard,
-        p.reference,
-        p.statut,
-        p.created_at,
-        CASE 
-          WHEN p.usager_type = 'hotel' THEN (SELECT denomination FROM omda_app.usagers_hotel WHERE id = p.usager_id)
-          WHEN p.usager_type = 'grand-surface' THEN (SELECT denomination FROM omda_app.usagers_magasin WHERE id = p.usager_id)
-          WHEN p.usager_type = 'bus' THEN (SELECT denomination FROM omda_app.usagers_bus WHERE id = p.usager_id)
-          WHEN p.usager_type = 'nightclub' THEN (SELECT denomination FROM omda_app.usagers_nightclub WHERE id = p.usager_id)
-          WHEN p.usager_type = 'media' THEN (SELECT denomination FROM omda_app.usagers_media WHERE id = p.usager_id)
-          WHEN p.usager_type = 'occ' THEN (SELECT denomination FROM omda_app.usagers_occasionnel WHERE id = p.usager_id)
-          ELSE NULL
-        END AS usager_nom,
-        CASE 
-          WHEN p.usager_type = 'hotel' THEN (SELECT region FROM omda_app.usagers_hotel WHERE id = p.usager_id)
-          WHEN p.usager_type = 'grand-surface' THEN (SELECT region FROM omda_app.usagers_magasin WHERE id = p.usager_id)
-          WHEN p.usager_type = 'bus' THEN (SELECT region FROM omda_app.usagers_bus WHERE id = p.usager_id)
-          WHEN p.usager_type = 'nightclub' THEN (SELECT region FROM omda_app.usagers_nightclub WHERE id = p.usager_id)
-          WHEN p.usager_type = 'media' THEN (SELECT region FROM omda_app.usagers_media WHERE id = p.usager_id)
-          WHEN p.usager_type = 'occ' THEN (SELECT region FROM omda_app.usagers_occasionnel WHERE id = p.usager_id)
-          ELSE NULL
-        END AS region
-      FROM omda_app.paiements p
-      ORDER BY p.created_at DESC
-    `);
-    
-    res.json({ 
-      success: true, 
-      paiements: result.rows,
-      total: result.rows.length
-    });
-    
-  } catch (error) {
-    console.error('❌ Erreur récupération tous les paiements:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: error.message,
-      paiements: [] 
-    });
-  }
-});
-
-// ============================================================
-// GET - Historique complet des paiements (avec noms et régions)
-// ============================================================
-router.get('/paiements/historique-complet', async (req, res) => {
-  try {
-    console.log('📄 Récupération de l\'historique complet des paiements...');
-    
-    const result = await pool.query(`
-      SELECT 
-        p.id,
-        p.usager_id,
-        p.usager_type,
-        p.type_paiement,
-        p.annee,
-        p.mois,
-        p.montant,
-        p.date_paiement,
-        p.frais_dossier,
-        p.montant_retard,
-        p.est_retard,
-        p.reference,
-        p.statut,
-        p.created_at,
-        CASE 
-          WHEN p.usager_type = 'hotel' THEN (SELECT denomination FROM omda_app.usagers_hotel WHERE id = p.usager_id)
-          WHEN p.usager_type = 'grand-surface' THEN (SELECT denomination FROM omda_app.usagers_magasin WHERE id = p.usager_id)
-          WHEN p.usager_type = 'bus' THEN (SELECT denomination FROM omda_app.usagers_bus WHERE id = p.usager_id)
-          WHEN p.usager_type = 'nightclub' THEN (SELECT denomination FROM omda_app.usagers_nightclub WHERE id = p.usager_id)
-          WHEN p.usager_type = 'media' THEN (SELECT denomination FROM omda_app.usagers_media WHERE id = p.usager_id)
-          WHEN p.usager_type = 'occ' THEN (SELECT denomination FROM omda_app.usagers_occasionnel WHERE id = p.usager_id)
-          ELSE NULL
-        END AS usager_nom,
-        CASE 
-          WHEN p.usager_type = 'hotel' THEN (SELECT region FROM omda_app.usagers_hotel WHERE id = p.usager_id)
-          WHEN p.usager_type = 'grand-surface' THEN (SELECT region FROM omda_app.usagers_magasin WHERE id = p.usager_id)
-          WHEN p.usager_type = 'bus' THEN (SELECT region FROM omda_app.usagers_bus WHERE id = p.usager_id)
-          WHEN p.usager_type = 'nightclub' THEN (SELECT region FROM omda_app.usagers_nightclub WHERE id = p.usager_id)
-          WHEN p.usager_type = 'media' THEN (SELECT region FROM omda_app.usagers_media WHERE id = p.usager_id)
-          WHEN p.usager_type = 'occ' THEN (SELECT region FROM omda_app.usagers_occasionnel WHERE id = p.usager_id)
-          ELSE NULL
-        END AS region
-      FROM omda_app.paiements p
-      WHERE p.statut = 'paye'
-      ORDER BY p.created_at DESC
-      LIMIT 100
-    `);
-    
-    res.json({ 
-      success: true, 
-      historique: result.rows,
-      total: result.rows.length
-    });
-    
-  } catch (error) {
-    console.error('❌ Erreur historique complet:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: error.message,
-      historique: [] 
-    });
-  }
-});
-
-// ============================================================
-// GET - Comptes d'usagers par type
-// ============================================================
-router.get('/usagers/comptes-par-type', async (req, res) => {
-  try {
-    console.log('📊 Comptage des usagers par type...');
-    
-    const types = [
-      { name: 'hotel', table: 'usagers_hotel' },
-      { name: 'grand-surface', table: 'usagers_magasin' },
-      { name: 'bus', table: 'usagers_bus' },
-      { name: 'nightclub', table: 'usagers_nightclub' },
-      { name: 'media', table: 'usagers_media' },
-      { name: 'occ', table: 'usagers_occasionnel' }
-    ];
-    
-    const resultats = {};
-    
-    for (const type of types) {
-      const result = await pool.query(`SELECT COUNT(*) as count FROM omda_app.${type.table}`);
-      resultats[type.name] = parseInt(result.rows[0].count) || 0;
-    }
-    
-    res.json({ 
-      success: true, 
-      types: resultats,
-      total: Object.values(resultats).reduce((a, b) => a + b, 0)
-    });
-    
-  } catch (error) {
-    console.error('❌ Erreur comptage usagers par type:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: error.message,
-      types: {} 
     });
   }
 });

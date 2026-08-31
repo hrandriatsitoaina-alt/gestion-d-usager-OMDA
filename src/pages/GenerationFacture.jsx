@@ -1,4 +1,5 @@
 // src/pages/GenerationFacture.jsx
+// MODIFIÉ - Utilise facture_pdf_g.jsx au lieu de facture_pdf.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '../components/Toast';
@@ -11,7 +12,8 @@ import {
 } from 'lucide-react';
 import '../styles/generation-facture.css';
 import MiniSidebar from '../components/MiniSidebar';
-import { generateFacturePDF } from './pdf/facture_pdf';
+// ✅ IMPORT DU NOUVEAU PDF AVEC FRAIS DE DOSSIER
+import { generateFacturePDF } from './pdf/facture_pdf_g';
 
 const GenerationFacture = () => {
   const navigate = useNavigate();
@@ -31,7 +33,7 @@ const GenerationFacture = () => {
   const [quittanceValidee, setQuittanceValidee] = useState(false);
   const [isSavingQuittance, setIsSavingQuittance] = useState(false);
 
-  // ✅ État pour les montants - CORRIGÉ
+  // États pour les montants - NON MODIFIABLES (lecture seule)
   const [montant, setMontant] = useState(0);
   const [fraisDossier, setFraisDossier] = useState(0);
   const [montantRetard, setMontantRetard] = useState(0);
@@ -80,7 +82,7 @@ const GenerationFacture = () => {
     }
   }, [location]);
 
-  // ✅ Récupération de la facture avec tous les montants
+  // Récupération de la facture avec tous les montants
   const fetchFacture = async (id) => {
     try {
       setLoading(true);
@@ -95,7 +97,7 @@ const GenerationFacture = () => {
         const factureData = data.facture;
         console.log('✅ Facture chargée:', factureData);
         
-        // ✅ Récupération des montants depuis la facture
+        // Récupération des montants depuis la facture
         let montantVal = parseFloat(factureData.montant_mensuel) || 0;
         let fraisDossierVal = parseFloat(factureData.frais_dossier) || 0;
         let montantRetardVal = parseFloat(factureData.montant_retard) || 0;
@@ -115,7 +117,7 @@ const GenerationFacture = () => {
           soitTotalVal
         });
 
-        // ✅ Récupération des moyens de communication
+        // Récupération des moyens de communication
         let moyensComm = {
           radio: { actif: false, taux: 0 },
           lecteur: { actif: false, taux: 0 },
@@ -135,7 +137,7 @@ const GenerationFacture = () => {
           }
         }
 
-        // ✅ Si les montants sont vides, essayer de les récupérer depuis l'usager
+        // Si les montants sont vides, essayer de les récupérer depuis l'usager
         if (montantVal === 0 && factureData.ref_usager) {
           try {
             const usagerResponse = await fetch(`http://localhost:3001/api/usagers/${factureData.ref_usager}`);
@@ -171,7 +173,7 @@ const GenerationFacture = () => {
           }
         }
 
-        // ✅ Recalculer soit_total si nécessaire
+        // Recalculer soit_total si nécessaire
         if (soitTotalVal === 0 && montantVal > 0) {
           const retard = isRetardVal ? montantRetardVal : 0;
           
@@ -198,10 +200,13 @@ const GenerationFacture = () => {
           soitTotal: soitTotalVal
         });
 
-        // ✅ Mettre à jour tous les états
+        // Mettre à jour tous les états
         setFacture(factureData);
         setEditedFacture(factureData);
-        setPersonneRecu(factureData.personne_recu || '');
+        
+        // ✅ IMPORTANT: Ne pas définir personneRecu par défaut
+        // La personne qui reçoit doit être saisie manuellement
+        setPersonneRecu(''); // Toujours vide initialement
         
         const quittanceRaw = factureData.quittance || '';
         const quittanceNumbers = getOnlyNumbers(quittanceRaw);
@@ -216,7 +221,7 @@ const GenerationFacture = () => {
         setMoyensCommunication(moyensComm);
         setSoitTotalCalcule(soitTotalVal);
         
-        // ✅ Si quittance est vide, récupérer le prochain numéro
+        // Si quittance est vide, récupérer le prochain numéro
         if (!quittanceNumbers || quittanceNumbers === '') {
           try {
             const quittanceResponse = await fetch('http://localhost:3001/api/quittance/last');
@@ -243,7 +248,7 @@ const GenerationFacture = () => {
     }
   };
 
-  // ✅ Recalculer le total quand les valeurs changent
+  // Recalculer le total quand les valeurs changent
   useEffect(() => {
     if (facture) {
       const totalMoyens = getTotalMoyens();
@@ -318,9 +323,18 @@ const GenerationFacture = () => {
     }
   };
 
+  // ✅ Fonction pour sauvegarder la personne qui reçoit
   const handleSavePersonneRecu = async () => {
+    // ✅ Vérifier que le nom n'est pas vide
     if (!personneRecu.trim()) {
       showToast('Veuillez saisir le nom de la personne qui reçoit', 'error');
+      return;
+    }
+    
+    // ✅ Vérifier que le nom n'est pas un nom par défaut
+    const defaultNames = ['FITAHIANTSOA Nemenjanahary', 'Administrateur', 'User', ''];
+    if (defaultNames.includes(personneRecu.trim())) {
+      showToast('Veuillez saisir un nom valide pour la personne qui reçoit', 'error');
       return;
     }
     
@@ -337,6 +351,8 @@ const GenerationFacture = () => {
         showToast('✅ Personne reçu enregistrée avec succès', 'success');
         setFacture(data.facture);
         setEditedFacture(data.facture);
+        // ✅ Garder le nom saisi
+        setPersonneRecu(personneRecu.trim());
       } else {
         showToast('❌ ' + data.message, 'error');
       }
@@ -383,14 +399,24 @@ const GenerationFacture = () => {
     }
   };
 
+  // ✅ Fonction de génération PDF avec validation de la personne reçu
   const handleGeneratePDF = async () => {
     if (!facture) {
       showToast('Aucune facture à générer', 'error');
       return;
     }
     
-    if (!facture.personne_recu && !personneRecu) {
+    // ✅ Vérifier que personne_recu est bien saisi et non vide
+    const personneName = facture.personne_recu || personneRecu;
+    if (!personneName || personneName.trim() === '') {
       showToast('Veuillez d\'abord enregistrer le nom de la personne qui reçoit', 'error');
+      return;
+    }
+    
+    // ✅ Vérifier que ce n'est pas un nom par défaut
+    const defaultNames = ['FITAHIANTSOA Nemenjanahary', 'Administrateur', 'User'];
+    if (defaultNames.includes(personneName.trim())) {
+      showToast('Veuillez saisir un nom valide pour la personne qui reçoit', 'error');
       return;
     }
     
@@ -425,9 +451,9 @@ const GenerationFacture = () => {
         factureData.personne_recu = personneRecu;
       }
       
-      console.log('📄 Données envoyées au PDF:', factureData);
+      console.log('📄 Données envoyées au PDF (AVEC FRAIS):', factureData);
       
-      const result = generateFacturePDF(factureData, false);
+      const result = await generateFacturePDF(factureData, false);
       
       if (result) {
         showToast('✅ PDF généré avec succès !', 'success');
@@ -439,28 +465,6 @@ const GenerationFacture = () => {
       showToast('❌ Erreur de génération PDF', 'error');
     } finally {
       setIsGenerating(false);
-    }
-  };
-
-  const handleMontantEdit = (field, value) => {
-    switch(field) {
-      case 'montant':
-        setMontant(parseFloat(value) || 0);
-        break;
-      case 'frais_dossier':
-        setFraisDossier(parseFloat(value) || 0);
-        break;
-      case 'montant_retard':
-        setMontantRetard(parseFloat(value) || 0);
-        break;
-      case 'is_retard':
-        setIsRetard(value);
-        break;
-      case 'uniter':
-        setUniter(parseInt(value) || 1);
-        break;
-      default:
-        break;
     }
   };
 
@@ -514,7 +518,12 @@ const GenerationFacture = () => {
       'soit_total', 'montant_total'
     ].includes(field);
     
-    const canEdit = isEditing && !isProtected;
+    const isMontantField = [
+      'montant_mensuel', 'frais_dossier', 'montant_retard', 'is_retard', 'uniter', 'soit_total'
+    ].includes(field);
+    
+    // Les champs de montant sont TOUJOURS en lecture seule
+    const canEdit = isEditing && !isProtected && !isMontantField;
     
     return (
       <div className="facture-field" key={field}>
@@ -562,8 +571,13 @@ const GenerationFacture = () => {
             />
           )
         ) : (
-          <span className={`field-value ${isProtected ? 'protected' : ''}`}>
+          <span className={`field-value ${isProtected || isMontantField ? 'protected' : ''}`}>
             {type === 'date' && displayValue ? new Date(displayValue).toLocaleDateString('fr-FR') : displayValue || '-'}
+          </span>
+        )}
+        {isMontantField && (
+          <span style={{ fontSize: '10px', color: '#6c757d', marginLeft: '5px' }}>
+            
           </span>
         )}
       </div>
@@ -794,7 +808,7 @@ const GenerationFacture = () => {
             </div>
           </div>
 
-          {/* Personne reçu */}
+          {/* ✅ SECTION PERSONNE QUI REÇOIT - CORRIGÉE */}
           <div className="facture-section personne-recu-section">
             <h3><UserPlus size={18} /> Personne qui reçoit</h3>
             <div className="personne-recu-container">
@@ -819,10 +833,20 @@ const GenerationFacture = () => {
                   )}
                 </button>
               </div>
-              {facture.personne_recu && (
-                <div className="personne-recu-info">
+              
+              {/* ✅ Affichage conditionnel */}
+              {facture.personne_recu && facture.personne_recu.trim() !== '' && (
+                <div className="personne-recu-info success">
                   <CheckCircle size={16} color="#27ae60" />
-                  <span>Personne reçu enregistrée : <strong>{facture.personne_recu}</strong></span>
+                  <span>Enregistrée  <strong></strong></span>
+                </div>
+              )}
+              
+              {/* ✅ Message d'avertissement si vide */}
+              {(!facture.personne_recu || facture.personne_recu.trim() === '') && (
+                <div className="personne-recu-info warning">
+                  <AlertCircle size={16} color="#f39c12" />
+                  <span>⚠️ Aucune personne enregistrée - Veuillez saisir le nom</span>
                 </div>
               )}
             </div>
@@ -901,7 +925,7 @@ const GenerationFacture = () => {
             </div>
           </div>
 
-          {/* SECTION MOYENS DE COMMUNICATION */}
+          {/* SECTION MOYENS DE COMMUNICATION - LECTURE SEULE */}
           {showMoyensComm && (
             <div className="facture-section moyens-comm-section">
               <h3><Radio size={18} /> Moyens de Communication</h3>
@@ -911,26 +935,15 @@ const GenerationFacture = () => {
                     <input
                       type="checkbox"
                       checked={moyensCommunication.radio?.actif || false}
-                      onChange={(e) => handleMoyenCommEdit('radio', 'actif', e.target.checked)}
-                      disabled={!isEditing}
+                      disabled={true}
                     />
                     Radio - Poste TSF
                   </label>
                   <div className="taux-display">
                     <span>Taux :</span>
-                    {isEditing ? (
-                      <input
-                        type="number"
-                        value={moyensCommunication.radio?.taux || 0}
-                        onChange={(e) => handleMoyenCommEdit('radio', 'taux', e.target.value)}
-                        className="field-input small"
-                        disabled={!moyensCommunication.radio?.actif}
-                      />
-                    ) : (
-                      <span className="field-value">
-                        {moyensCommunication.radio?.actif ? (moyensCommunication.radio?.taux || 0).toLocaleString('fr-FR') + ' Ar' : 'Non actif'}
-                      </span>
-                    )}
+                    <span className="field-value protected">
+                      {moyensCommunication.radio?.actif ? (moyensCommunication.radio?.taux || 0).toLocaleString('fr-FR') + ' Ar' : 'Non actif'}
+                    </span>
                   </div>
                 </div>
 
@@ -939,26 +952,15 @@ const GenerationFacture = () => {
                     <input
                       type="checkbox"
                       checked={moyensCommunication.lecteur?.actif || false}
-                      onChange={(e) => handleMoyenCommEdit('lecteur', 'actif', e.target.checked)}
-                      disabled={!isEditing}
+                      disabled={true}
                     />
                     Lecteur
                   </label>
                   <div className="taux-display">
                     <span>Taux :</span>
-                    {isEditing ? (
-                      <input
-                        type="number"
-                        value={moyensCommunication.lecteur?.taux || 0}
-                        onChange={(e) => handleMoyenCommEdit('lecteur', 'taux', e.target.value)}
-                        className="field-input small"
-                        disabled={!moyensCommunication.lecteur?.actif}
-                      />
-                    ) : (
-                      <span className="field-value">
-                        {moyensCommunication.lecteur?.actif ? (moyensCommunication.lecteur?.taux || 0).toLocaleString('fr-FR') + ' Ar' : 'Non actif'}
-                      </span>
-                    )}
+                    <span className="field-value protected">
+                      {moyensCommunication.lecteur?.actif ? (moyensCommunication.lecteur?.taux || 0).toLocaleString('fr-FR') + ' Ar' : 'Non actif'}
+                    </span>
                   </div>
                 </div>
 
@@ -967,26 +969,15 @@ const GenerationFacture = () => {
                     <input
                       type="checkbox"
                       checked={moyensCommunication.tv?.actif || false}
-                      onChange={(e) => handleMoyenCommEdit('tv', 'actif', e.target.checked)}
-                      disabled={!isEditing}
+                      disabled={true}
                     />
                     TV
                   </label>
                   <div className="taux-display">
                     <span>Taux :</span>
-                    {isEditing ? (
-                      <input
-                        type="number"
-                        value={moyensCommunication.tv?.taux || 0}
-                        onChange={(e) => handleMoyenCommEdit('tv', 'taux', e.target.value)}
-                        className="field-input small"
-                        disabled={!moyensCommunication.tv?.actif}
-                      />
-                    ) : (
-                      <span className="field-value">
-                        {moyensCommunication.tv?.actif ? (moyensCommunication.tv?.taux || 0).toLocaleString('fr-FR') + ' Ar' : 'Non actif'}
-                      </span>
-                    )}
+                    <span className="field-value protected">
+                      {moyensCommunication.tv?.actif ? (moyensCommunication.tv?.taux || 0).toLocaleString('fr-FR') + ' Ar' : 'Non actif'}
+                    </span>
                   </div>
                 </div>
 
@@ -995,26 +986,15 @@ const GenerationFacture = () => {
                     <input
                       type="checkbox"
                       checked={moyensCommunication.autres?.actif || false}
-                      onChange={(e) => handleMoyenCommEdit('autres', 'actif', e.target.checked)}
-                      disabled={!isEditing}
+                      disabled={true}
                     />
                     Autres
                   </label>
                   <div className="taux-display">
                     <span>Taux :</span>
-                    {isEditing ? (
-                      <input
-                        type="number"
-                        value={moyensCommunication.autres?.taux || 0}
-                        onChange={(e) => handleMoyenCommEdit('autres', 'taux', e.target.value)}
-                        className="field-input small"
-                        disabled={!moyensCommunication.autres?.actif}
-                      />
-                    ) : (
-                      <span className="field-value">
-                        {moyensCommunication.autres?.actif ? (moyensCommunication.autres?.taux || 0).toLocaleString('fr-FR') + ' Ar' : 'Non actif'}
-                      </span>
-                    )}
+                    <span className="field-value protected">
+                      {moyensCommunication.autres?.actif ? (moyensCommunication.autres?.taux || 0).toLocaleString('fr-FR') + ' Ar' : 'Non actif'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1028,7 +1008,7 @@ const GenerationFacture = () => {
             </div>
           )}
 
-          {/* MONTANTS - SECTION CORRIGÉE */}
+          {/* MONTANTS - EN LECTURE SEULE UNIQUEMENT */}
           <div className="facture-section montants">
             <h3><DollarSign size={18} /> Montants</h3>
             <div className="facture-grid montants-grid">
@@ -1039,34 +1019,16 @@ const GenerationFacture = () => {
                    facture.ref_client_type === 'RDP' ? 'Taux' : 
                    'Montant mensuel'}
                 </span>
-                <span className="field-value protected">
-                  {isEditing ? (
-                    <input
-                      type="number"
-                      value={montant}
-                      onChange={(e) => handleMontantEdit('montant', e.target.value)}
-                      className="field-input"
-                    />
-                  ) : (
-                    (montant || 0).toLocaleString('fr-FR') + ' Ar'
-                  )}
+                <span className="field-value protected" style={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                  {(montant || 0).toLocaleString('fr-FR')} Ar 
                 </span>
               </div>
 
               {/* Frais de dossier */}
               <div className="facture-field">
                 <span className="field-label">Frais de dossier</span>
-                <span className="field-value protected">
-                  {isEditing ? (
-                    <input
-                      type="number"
-                      value={fraisDossier}
-                      onChange={(e) => handleMontantEdit('frais_dossier', e.target.value)}
-                      className="field-input"
-                    />
-                  ) : (
-                    (fraisDossier || 0).toLocaleString('fr-FR') + ' Ar'
-                  )}
+                <span className="field-value protected" style={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                  {(fraisDossier || 0).toLocaleString('fr-FR')} Ar 
                   <span style={{ fontSize: '11px', color: '#6c757d', marginLeft: '8px' }}>
                     (fixe)
                   </span>
@@ -1077,18 +1039,8 @@ const GenerationFacture = () => {
               {showRetard && (
                 <div className="facture-field">
                   <span className="field-label">Montant retard</span>
-                  <span className="field-value protected">
-                    {isEditing ? (
-                      <input
-                        type="number"
-                        value={montantRetard}
-                        onChange={(e) => handleMontantEdit('montant_retard', e.target.value)}
-                        className="field-input"
-                        disabled={!isRetard}
-                      />
-                    ) : (
-                      (isRetard ? montantRetard : 0).toLocaleString('fr-FR') + ' Ar'
-                    )}
+                  <span className="field-value protected" style={{ fontWeight: 'bold', color: isRetard ? '#dc3545' : '#6c757d' }}>
+                    {(isRetard ? montantRetard : 0).toLocaleString('fr-FR')} Ar 
                   </span>
                 </div>
               )}
@@ -1097,17 +1049,8 @@ const GenerationFacture = () => {
               {showRetard && (
                 <div className="facture-field">
                   <span className="field-label">Retard</span>
-                  <span className="field-value protected">
-                    {isEditing ? (
-                      <input
-                        type="checkbox"
-                        checked={isRetard}
-                        onChange={(e) => handleMontantEdit('is_retard', e.target.checked)}
-                        className="field-checkbox"
-                      />
-                    ) : (
-                      isRetard ? 'Oui' : 'Non'
-                    )}
+                  <span className="field-value protected" style={{ fontWeight: 'bold', color: isRetard ? '#dc3545' : '#28a745' }}>
+                    {isRetard ? 'Oui' : 'Non'} 
                   </span>
                 </div>
               )}
@@ -1115,28 +1058,20 @@ const GenerationFacture = () => {
               {/* Uniter */}
               <div className="facture-field">
                 <span className="field-label">Uniter</span>
-                <span className="field-value protected">
-                  {isEditing ? (
-                    <input
-                      type="number"
-                      min="1"
-                      max="9"
-                      value={uniter}
-                      onChange={(e) => handleMontantEdit('uniter', e.target.value)}
-                      className="field-input"
-                      style={{ width: '60px' }}
-                    />
-                  ) : (
-                    uniter || '1'
-                  )}
+                <span className="field-value protected" style={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                  {uniter || '1'} 
                 </span>
               </div>
 
               {/* Soit Total */}
               <div className="facture-field total">
-                <span className="field-label">Soit Total</span>
-                <span className="field-value protected total-value">
-                  {soitTotalCalcule.toLocaleString('fr-FR')} Ar
+                <span className="field-label" style={{ fontSize: '16px', fontWeight: 'bold' }}>Soit Total</span>
+                <span className="field-value protected total-value" style={{ 
+                  fontSize: '24px', 
+                  fontWeight: 'bold', 
+                  color: '#28a745'
+                }}>
+                  {soitTotalCalcule.toLocaleString('fr-FR')} Ar 
                 </span>
                 <span style={{ fontSize: '11px', color: '#6c757d', marginLeft: '8px' }}>
                   (Montant × Uniter + Frais {showRetard ? '+ Retard' : ''})

@@ -418,7 +418,156 @@
     cursor: not-allowed;
     box-shadow: none;
   }
+  /* ============================================================
+   SÉLECTION DES MOIS
+   ============================================================ */
+.mois-selection-section {
+  margin: 20px 0;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 10px;
+  border: 1px solid #e9ecef;
+}
+
+.mois-selection-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.mois-selection-header label {
+  font-weight: 600;
+  font-size: 14px;
+  color: #2c3e50;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mois-selection-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.mois-selection-actions button {
+  padding: 4px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-select-all {
+  background: #27ae60;
+  color: white;
+}
+
+.btn-select-all:hover {
+  background: #219a52;
+}
+
+.btn-deselect-all {
+  background: #e74c3c;
+  color: white;
+}
+
+.btn-deselect-all:hover {
+  background: #c0392b;
+}
+
+.mois-selection-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.mois-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: white;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 13px;
+  position: relative;
+}
+
+.mois-item:hover {
+  border-color: #3498db;
+  background: #f0f7ff;
+}
+
+.mois-item.selected {
+  border-color: #27ae60;
+  background: #e8f8ed;
+  box-shadow: 0 0 0 2px rgba(39, 174, 96, 0.2);
+}
+
+.mois-item .mois-label {
+  font-weight: 500;
+  color: #2c3e50;
+}
+
+.mois-item .mois-num {
+  color: #999;
+  font-size: 11px;
+}
+
+.mois-item .mois-check {
+  color: #27ae60;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.mois-selection-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+  font-size: 13px;
+  color: #2c3e50;
+}
+
+.mois-selected-list {
+  color: #3498db;
+  font-weight: 500;
+}
+
+.mois-selected-total {
+  font-weight: 600;
+  color: #27ae60;
+  margin-left: auto;
+}
+
+@media (max-width: 768px) {
+  .mois-selection-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
   
+  .mois-selection-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .mois-selection-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
   /* =========================================================
      RESPONSIVE
      ========================================================= */
