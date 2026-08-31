@@ -1,5 +1,4 @@
 // src/pages/GenerationFacture.jsx
-// MODIFIÉ - Utilise facture_pdf_g.jsx au lieu de facture_pdf.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '../components/Toast';
@@ -12,8 +11,7 @@ import {
 } from 'lucide-react';
 import '../styles/generation-facture.css';
 import MiniSidebar from '../components/MiniSidebar';
-// ✅ IMPORT DU NOUVEAU PDF AVEC FRAIS DE DOSSIER
-import { generateFacturePDF } from './pdf/facture_pdf_g';
+import { generateFacturePDF } from './pdf/facture_pdf';
 
 const GenerationFacture = () => {
   const navigate = useNavigate();
@@ -451,9 +449,9 @@ const GenerationFacture = () => {
         factureData.personne_recu = personneRecu;
       }
       
-      console.log('📄 Données envoyées au PDF (AVEC FRAIS):', factureData);
+      console.log('📄 Données envoyées au PDF:', factureData);
       
-      const result = await generateFacturePDF(factureData, false);
+      const result = generateFacturePDF(factureData, false);
       
       if (result) {
         showToast('✅ PDF généré avec succès !', 'success');
