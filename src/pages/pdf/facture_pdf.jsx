@@ -93,7 +93,7 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     console.log('========== GÉNÉRATION FACTURE PDF ==========');
     console.log('📄 Données reçues:', factureData);
 
-    // Récupérer le nom du DAF depuis l'API
+    // ✅ Récupérer le nom du DAF depuis l'API
     let dafName = 'DAF';
 
     try {
@@ -125,11 +125,7 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     // ========================================================================
     const logoWidth = 65;
     const logoHeight = 20;
-    try {
-      doc.addImage(logoRepoblika, 'JPEG', (pageWidth / 2) - (logoWidth / 2), yPos, logoWidth, logoHeight);
-    } catch (e) {
-      console.warn('⚠️ Logo non trouvé, continuation sans logo');
-    }
+    doc.addImage(logoRepoblika, 'JPEG', (pageWidth / 2) - (logoWidth / 2), yPos, logoWidth, logoHeight);
     yPos += logoHeight + 6;
 
     // ========================================================================
@@ -196,7 +192,7 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     }
 
     const factureNum = `${currentYear} / ${numFactureFormatted} / ${typeFactureLabel}`;
-    doc.text(`FACTURE n° ${factureNum}`, marginX + 50, yPos + 4);
+    doc.text(`FACTURE n° ${factureNum}`, marginX, yPos + 4.5);
     yPos += 5;
 
     doc.setFont('times', 'normal');
@@ -259,7 +255,7 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     yPos += boxHeight + 8;
 
     // ========================================================================
-    // 5 - RÉCUPÉRATION DES MONTANTS
+    // 5 - RÉCUPÉRATION DES MONTANTS - CORRIGÉ
     // ========================================================================
     console.log('🔍 RECHERCHE DES MONTANTS...');
 
@@ -270,38 +266,43 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     let uniter = 1;
     let totalGeneral = 0;
 
-    // Vérifier si on a des montants par mois (Type A groupé)
-    let montantsParMois = factureData.montants_par_mois || {};
-    let moisList = factureData.mois_list || [];
-
+    // ✅ ÉTAPE 1: Récupérer depuis factureData
     console.log('📊 Données factureData reçues:', {
       montant_mensuel: factureData.montant_mensuel,
-      montant_mensuel_affiche: factureData.montant_mensuel_affiche,
-      uniter_affiche: factureData.uniter_affiche,
       frais_dossier: factureData.frais_dossier,
+      montant: factureData.montant,
+      taux: factureData.taux,
+      montant_total: factureData.montant_total,
       soit_total: factureData.soit_total,
-      uniter: factureData.uniter,
-      montants_par_mois: montantsParMois,
-      mois_list: moisList,
-      description_personnalisee: factureData.description_personnalisee
+      uniter: factureData.uniter
     });
 
-    // Récupérer le montant mensuel
-    if (factureData.montant_mensuel_affiche !== undefined && factureData.montant_mensuel_affiche !== null) {
-      montantMensuel = parseFloat(factureData.montant_mensuel_affiche) || 0;
-    } else if (factureData.montant_mensuel && factureData.montant_mensuel !== '') {
+    // ✅ Récupérer le montant mensuel
+    if (factureData.montant_mensuel && factureData.montant_mensuel !== '') {
       montantMensuel = parseFloat(factureData.montant_mensuel) || 0;
     }
+    if (montantMensuel === 0 && factureData.montant && factureData.montant !== '') {
+      montantMensuel = parseFloat(factureData.montant) || 0;
+    }
+    if (montantMensuel === 0 && factureData.taux && factureData.taux !== '') {
+      montantMensuel = parseFloat(factureData.taux) || 0;
+    }
+    if (montantMensuel === 0 && factureData.montant_total && factureData.montant_total !== '') {
+      montantMensuel = parseFloat(factureData.montant_total) || 0;
+    }
 
-    // Récupérer uniter
-    if (factureData.uniter_affiche !== undefined && factureData.uniter_affiche !== null) {
-      uniter = parseInt(factureData.uniter_affiche) || 1;
-    } else if (factureData.uniter && factureData.uniter !== '') {
+    // ✅ Récupérer les frais de dossier
+    if (factureData.frais_dossier && factureData.frais_dossier !== '') {
+      fraisDossier = parseFloat(factureData.frais_dossier) || 0;
+    }
+
+    // ✅ Récupérer uniter
+    if (factureData.uniter && factureData.uniter !== '') {
       uniter = parseInt(factureData.uniter) || 1;
     }
     if (!uniter || uniter <= 0) uniter = 1;
 
-    // Récupérer le retard
+    // ✅ Récupérer le retard
     if (factureData.montant_retard && factureData.montant_retard !== '') {
       montantRetard = parseFloat(factureData.montant_retard) || 0;
     }
@@ -309,27 +310,92 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
       isRetard = factureData.is_retard === true || factureData.is_retard === 'true' || factureData.is_retard === 1;
     }
 
-    // Calcul du total
-    if (Object.keys(montantsParMois).length > 0 && moisList.length > 0) {
-      totalGeneral = 0;
-      moisList.forEach(mois => {
-        totalGeneral += (montantsParMois[mois] || 0);
-      });
-      if (isRetard) totalGeneral += montantRetard;
-      
-      console.log('📊 Type A groupé - Total calculé:', totalGeneral);
-    } else {
-      if (factureData.soit_total && parseFloat(factureData.soit_total) > 0) {
-        totalGeneral = parseFloat(factureData.soit_total);
-      } else {
-        const montantAffiche = montantMensuel * uniter;
-        totalGeneral = montantAffiche + (isRetard ? montantRetard : 0);
+    console.log('📊 Après factureData:', {
+      montantMensuel,
+      fraisDossier,
+      uniter,
+      montantRetard,
+      isRetard
+    });
+
+    // ✅ ÉTAPE 2: Si montantMensuel = 0, récupérer depuis l'API usager
+    if (montantMensuel === 0 && factureData.ref_usager) {
+      try {
+        console.log('🔍 Récupération depuis API usager ID:', factureData.ref_usager);
+        const usagerResponse = await fetch(`http://localhost:3001/api/usagers/${factureData.ref_usager}`);
+        const usagerData = await usagerResponse.json();
+
+        if (usagerData.success && usagerData.usager) {
+          const usager = usagerData.usager;
+          console.log('📊 Données usager récupérées:', usager);
+
+          if (usager.montant_mensuel && usager.montant_mensuel !== '') {
+            montantMensuel = parseFloat(usager.montant_mensuel) || 0;
+          }
+          if (montantMensuel === 0 && usager.montant && usager.montant !== '') {
+            montantMensuel = parseFloat(usager.montant) || 0;
+          }
+          if (montantMensuel === 0 && usager.taux && usager.taux !== '') {
+            montantMensuel = parseFloat(usager.taux) || 0;
+          }
+
+          if (fraisDossier === 0 && usager.frais_dossier && usager.frais_dossier !== '') {
+            fraisDossier = parseFloat(usager.frais_dossier) || 0;
+          }
+
+          if (uniter === 1 && usager.uniter && usager.uniter !== '') {
+            uniter = parseInt(usager.uniter) || 1;
+          }
+
+          if (montantRetard === 0 && usager.montant_retard && usager.montant_retard !== '') {
+            montantRetard = parseFloat(usager.montant_retard) || 0;
+          }
+          if (!isRetard && usager.is_retard !== undefined && usager.is_retard !== null) {
+            isRetard = usager.is_retard === true || usager.is_retard === 'true' || usager.is_retard === 1;
+          }
+
+          console.log('📊 Après usager API:', {
+            montantMensuel,
+            fraisDossier,
+            uniter,
+            montantRetard,
+            isRetard
+          });
+        }
+      } catch (err) {
+        console.warn('⚠️ Erreur récupération usager:', err);
       }
+    }
+
+    // ✅ ÉTAPE 3: Si toujours 0, déduire de soit_total
+    // ⚠️ IMPORTANT: On soustrait les frais de dossier pour obtenir le montant mensuel
+    if (montantMensuel === 0 && factureData.soit_total && parseFloat(factureData.soit_total) > 0) {
+      const soitTotalValue = parseFloat(factureData.soit_total) || 0;
+      const retardValue = isRetard ? montantRetard : 0;
+      // On soustrait les frais de dossier et le retard pour obtenir le montant pur
+      const montantSansFraisNiRetard = soitTotalValue - fraisDossier - retardValue;
+
+      if (montantSansFraisNiRetard > 0 && uniter > 0) {
+        montantMensuel = montantSansFraisNiRetard / uniter;
+        console.log('🔄 Montant mensuel déduit de soit_total (frais déduits):', montantMensuel);
+      }
+    }
+
+    // ✅ CALCUL DU TOTAL
+    const montantAffiche = montantMensuel * uniter;
+    const baseTotal = montantAffiche + fraisDossier;
+    totalGeneral = isRetard ? baseTotal + montantRetard : baseTotal;
+
+    // Si un soit_total est présent, on l'utilise pour le total final
+    if (factureData.soit_total && parseFloat(factureData.soit_total) > 0) {
+      totalGeneral = parseFloat(factureData.soit_total);
     }
 
     console.log('📊 MONTANTS FINAUX:');
     console.log('  - montantMensuel:', montantMensuel);
+    console.log('  - fraisDossier:', fraisDossier);
     console.log('  - uniter:', uniter);
+    console.log('  - montantAffiche (montantMensuel × uniter):', montantAffiche);
     console.log('  - totalGeneral:', totalGeneral);
 
     // ========================================================================
@@ -369,16 +435,17 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     doc.setFont('times', 'normal');
     doc.setFontSize(10);
 
-    // CONSTRUCTION DE LA DESCRIPTION
+    // ✅ CONSTRUCTION DE LA DESCRIPTION
     let descLine = '';
 
+    // Priorité à la description personnalisée
     if (factureData.description_personnalisee && factureData.description_personnalisee.trim() !== '') {
       descLine = factureData.description_personnalisee.trim();
-      console.log('📝 Utilisation description personnalisée:', descLine);
     } else {
+      // Sinon utiliser la dénomination
       descLine = factureData.denomination || factureData.demandeur || factureData.organisateurs || 'Prestation OMDA';
-      console.log('📝 Utilisation dénomination usager:', descLine);
       
+      // Ajouter les mois si Type A (groupé)
       if (factureData.mois_groupes) {
         const moisLabels = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
         const moisList = factureData.mois_groupes.split(',').map(Number);
@@ -389,6 +456,7 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
         descLine += ` - ${moisLabels[factureData.mois_facture - 1]} ${factureData.annee_facture || ''}`;
       }
 
+      // Ajouter le nombre de mois si Type A
       if (factureData.type_groupe === 'A' && factureData.mois_groupes) {
         const moisList = factureData.mois_groupes.split(',').map(Number);
         if (moisList.length > 1) {
@@ -399,26 +467,18 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
 
     console.log('📝 DESCRIPTION FINALE:', descLine);
 
-    // Affichage des valeurs dans le tableau
-    let afficherUniter = uniter;
-    let afficherPU = montantMensuel;
-    let afficherMontant = montantMensuel * uniter;
-
-    if (factureData.type_groupe === 'A' && factureData.mois_groupes) {
-      const moisList = factureData.mois_groupes.split(',').map(Number);
-      if (moisList.length > 1) {
-        afficherUniter = 1;
-        afficherPU = totalGeneral;
-        afficherMontant = totalGeneral;
-      }
-    }
+    // ✅ AFFICHAGE DES VALEURS DANS LE TABLEAU
+    // ✅ CORRECTION: Utiliser montantMensuel comme prix unitaire
+    const puValue = montantMensuel > 0 ? montantMensuel : 0;
+    const montantValue = puValue * uniter;
 
     console.log('📊 Affichage tableau:');
     console.log('  - description:', descLine);
-    console.log('  - U (uniter):', afficherUniter);
-    console.log('  - P.U. (montant mensuel):', afficherPU);
-    console.log('  - MONTANT (PU × U):', afficherMontant);
+    console.log('  - uniter:', uniter);
+    console.log('  - pu (montantMensuel):', puValue);
+    console.log('  - montant (pu × uniter):', montantValue);
 
+    // GESTION DU TEXTE LONG
     const maxWidth = xU - xDesc - 6;
     const lines = doc.splitTextToSize(descLine, maxWidth);
     const lineHeight = 5.5;
@@ -428,15 +488,29 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
       doc.text(lines[i], xDesc + 3, currentY);
     }
 
-    doc.text(String(afficherUniter), xU + 5, yPos);
-    doc.text(formatNumber(afficherPU), xPu + 3, yPos);
-    doc.text(formatNumber(afficherMontant), xEnd - 3, yPos, { align: 'right' });
+    // Afficher U., P.U. et MONTANT sur la première ligne
+    doc.text(String(uniter), xU + 5, yPos);
+    doc.text(formatNumber(puValue), xPu + 3, yPos);
+    doc.text(formatNumber(montantValue), xEnd - 3, yPos, { align: 'right' });
 
+    // Ajuster yPos en fonction du nombre de lignes
     yPos += (lines.length * lineHeight) + 2;
 
     doc.setDrawColor(235, 235, 235);
     doc.line(xDesc, yPos, xEnd, yPos);
 
+    // ✅ FRAIS DE DOSSIER (affiché si > 0)
+    if (fraisDossier > 0) {
+      yPos += 6;
+      doc.setDrawColor(26, 26, 26);
+      doc.text('Frais de dossier', xDesc + 3, yPos);
+      doc.text('1', xU + 5, yPos);
+      doc.text(formatNumber(fraisDossier), xPu + 3, yPos);
+      doc.text(formatNumber(fraisDossier), xEnd - 3, yPos, { align: 'right' });
+      yPos += 4;
+    }
+
+    // ✅ PÉNALITÉ DE RETARD
     if (isRetard && montantRetard > 0) {
       yPos += 6;
       doc.text('Pénalité de retard', xDesc + 3, yPos);
@@ -446,6 +520,7 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
       yPos += 4;
     }
 
+    // ✅ LIGNES DE FERMETURE
     doc.line(xDesc, yPos, xEnd, yPos);
     doc.line(xDesc, tableStartHeight, xDesc, yPos);
     doc.line(xU, tableStartHeight, xU, yPos);
@@ -541,17 +616,11 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     // ========================================================================
     // 11 - SORTIE
     // ========================================================================
-    
-    // ✅ CORRECTION : Générer le blob correctement
-    const pdfOutput = doc.output('arraybuffer');
-    const pdfBlob = new Blob([pdfOutput], { type: 'application/pdf' });
-
     if (returnBlob) {
-      console.log('📤 Retour du blob PDF');
-      return pdfBlob;
+      return doc.output('blob');
     }
 
-    // Téléchargement du PDF
+    const pdfBlob = doc.output('blob');
     const pdfUrl = URL.createObjectURL(pdfBlob);
 
     const link = document.createElement('a');
