@@ -146,11 +146,11 @@
   }
   
   /* ============================================================
-     TYPES STATS
+     TYPES STATS - 5 colonnes alignées
      ============================================================ */
   .types-stats {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 12px;
     margin-bottom: 24px;
   }
@@ -166,6 +166,7 @@
     cursor: pointer;
     transition: all var(--transition);
     position: relative;
+    min-height: 70px;
   }
   .type-stat:hover {
     transform: translateY(-3px);
@@ -191,11 +192,13 @@
     display: flex;
     flex-direction: column;
     flex: 1;
+    min-width: 0;
   }
   .type-stat-name {
     font-size: 13px;
     font-weight: 600;
     color: var(--gray-800);
+    white-space: nowrap;
   }
   .type-stat-count {
     font-size: 22px;
@@ -285,7 +288,7 @@
     align-items: center;
   }
   
-  .btn-show,
+  .btn-secondary,
   .btn-refresh {
     display: inline-flex;
     align-items: center;
@@ -298,19 +301,19 @@
     cursor: pointer;
     transition: all var(--transition);
   }
-  .btn-show {
-    background: var(--primary);
-    color: #fff;
-  }
-  .btn-show:hover {
-    background: var(--primary-dark);
-  }
-  .btn-refresh {
+  .btn-secondary {
     background: var(--gray-200);
     color: var(--gray-800);
   }
-  .btn-refresh:hover {
+  .btn-secondary:hover {
     background: #d5dbe3;
+  }
+  .btn-refresh {
+    background: var(--primary);
+    color: #fff;
+  }
+  .btn-refresh:hover {
+    background: var(--primary-dark);
   }
   
   /* ============================================================
@@ -322,7 +325,7 @@
     border: 1px solid var(--gray-200);
   }
   
-  .loading {
+  .state-block {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -330,29 +333,20 @@
     padding: 60px 20px;
     gap: 16px;
     color: var(--gray-600);
+    text-align: center;
   }
-  .spinner {
+  .state-block .spinner {
     animation: spin 1s linear infinite;
     color: var(--primary);
+  }
+  .state-error {
+    color: var(--danger);
   }
   @keyframes spin {
     to { transform: rotate(360deg); }
   }
   .spinner-inline {
     animation: spin 0.8s linear infinite;
-  }
-  
-  .empty {
-    text-align: center;
-    padding: 40px 20px;
-    color: var(--gray-600);
-    font-size: 15px;
-  }
-  .empty.error {
-    color: var(--danger);
-  }
-  .empty .btn-refresh {
-    margin-top: 12px;
   }
   
   .paiement-table {
@@ -385,41 +379,112 @@
   .paiement-table tbody tr:hover {
     background: var(--gray-100);
   }
-  .paiement-table tbody tr.late {
+  .paiement-table tbody tr.row-late {
     border-left: 4px solid var(--danger);
   }
-  .paiement-table tbody tr.new {
+  .paiement-table tbody tr.row-new {
     background: #fff8e1;
   }
-  .paiement-table tbody tr.new:hover {
+  .paiement-table tbody tr.row-new:hover {
     background: #ffefc8;
   }
   
-  /* Badges */
-  .badge-new {
-    display: inline-block;
-    padding: 2px 10px;
-    background: var(--warning);
-    color: #fff;
+  /* ID Cell */
+  .id-cell {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    color: var(--gray-800);
+  }
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
     border-radius: 30px;
     font-size: 9px;
     font-weight: 700;
-    margin-left: 6px;
     text-transform: uppercase;
   }
-  .badge-late {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 20px;
+  .tag-new {
+    background: var(--warning);
+    color: #fff;
+  }
+  .tag-late {
     background: var(--danger);
     color: #fff;
-    border-radius: 50%;
-    font-size: 12px;
-    font-weight: 700;
-    margin-left: 4px;
   }
+  
+  /* Name cell */
+  .name strong {
+    color: var(--gray-900);
+  }
+  .usager-sub {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--gray-600);
+    margin-top: 2px;
+  }
+  
+  /* Demandeur */
+  .demandeur-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .demandeur-info strong {
+    color: var(--gray-800);
+  }
+  
+  /* Contact */
+  .contact-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .contact-info .usager-sub {
+    margin-top: 0;
+  }
+  
+  /* Infos */
+  .usager-infos {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .usager-info-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--gray-600);
+  }
+  .usager-info-item.montant-info {
+    font-weight: 600;
+    color: var(--gray-900);
+  }
+  .usager-info-empty {
+    font-size: 12px;
+    color: var(--gray-600);
+    font-style: italic;
+  }
+  
+  /* Pmt info */
+  .pmt-info {
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .pmt-montant {
+    font-weight: 600;
+    color: var(--gray-800);
+  }
+  
+  /* Badges */
   .badge-success,
   .badge-warning,
   .badge-danger {
@@ -440,42 +505,9 @@
     opacity: 0.8;
   }
   
-  /* Cells */
-  .name strong { color: var(--gray-900); }
-  .usager-region,
-  .usager-adresse,
-  .usager-creation,
-  .usager-phone,
-  .usager-email,
-  .usager-detail,
-  .usager-info-item {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 12px;
-    color: var(--gray-600);
-    margin-top: 2px;
-  }
-  .usager-info-item.montant-info {
-    font-weight: 600;
-    color: var(--gray-900);
-  }
-  .contact-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .pmt-info {
-    font-size: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .usager-montant-mensuel {
-    font-weight: 600;
-    color: var(--gray-800);
-  }
-  
+  /* ============================================================
+     BOUTON PAYER
+     ============================================================ */
   .btn-pay {
     display: inline-flex;
     align-items: center;
@@ -555,7 +587,7 @@
   .modal-body {
     padding: 24px;
   }
-  .usager-info {
+  .usager-recap {
     background: var(--gray-100);
     border-radius: 10px;
     padding: 16px 20px;
@@ -602,6 +634,7 @@
     font-size: 14px;
     outline: none;
     transition: border-color var(--transition);
+    background: #fff;
   }
   .form-group input:focus,
   .form-group select:focus {
@@ -671,17 +704,19 @@
   }
   
   /* ============================================================
-     RESPONSIVE
+     RESPONSIVE - 5 colonnes sur tous les écrans
      ============================================================ */
   @media (max-width: 1200px) {
-    .types-stats { grid-template-columns: repeat(3, 1fr); }
+    .types-stats { grid-template-columns: repeat(5, 1fr); gap: 10px; }
   }
+  
   @media (max-width: 992px) {
     .types-stats { grid-template-columns: repeat(3, 1fr); }
     .paiement-table { font-size: 13px; }
     .paiement-table th,
     .paiement-table td { padding: 10px 12px; }
   }
+  
   @media (max-width: 768px) {
     .contenu-paiement { padding: 12px 16px; }
     .paiement-container { padding: 16px 18px; }
@@ -689,23 +724,81 @@
     .header-left { flex-wrap: wrap; }
     .header-title h1 { font-size: 20px; }
     .header-subtitle { font-size: 14px; }
+    
+    /* ✅ 2 colonnes sur mobile */
     .types-stats { grid-template-columns: repeat(2, 1fr); gap: 8px; }
-    .type-stat { padding: 10px 12px; }
+    
+    .type-stat { padding: 10px 12px; min-height: 60px; }
     .type-stat-icon { width: 34px; height: 34px; }
     .type-stat-name { font-size: 12px; }
     .type-stat-count { font-size: 18px; }
+    
     .filters { flex-direction: column; align-items: stretch; }
     .filters-left { flex-direction: column; }
     .filter-group { width: 100%; }
     .filter-group input { min-width: unset; }
-    .filters-right { justify-content: flex-start; }
+    .filters-right { justify-content: flex-start; flex-wrap: wrap; }
+    
     .paiement-table { font-size: 12px; }
     .paiement-table th,
     .paiement-table td { padding: 8px 10px; }
+    
+    /* ✅ Tableau responsive en carte sur mobile */
+    .paiement-table thead { display: none; }
+    .paiement-table tbody tr {
+      display: block;
+      border: 1px solid var(--gray-200);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      padding: 12px;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .paiement-table tbody tr.row-late {
+      border-left: 4px solid var(--danger);
+    }
+    .paiement-table tbody tr.row-new {
+      background: #fff8e1;
+    }
+    .paiement-table td {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      border: none;
+      border-bottom: 1px solid var(--gray-200);
+      font-size: 13px;
+    }
+    .paiement-table td:last-child {
+      border-bottom: none;
+    }
+    .paiement-table td::before {
+      content: attr(data-label);
+      font-weight: 600;
+      color: var(--gray-600);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      margin-right: 12px;
+      flex-shrink: 0;
+    }
+    .paiement-table td .id-cell {
+      flex-wrap: wrap;
+    }
+    .paiement-table td .usager-sub {
+      font-size: 11px;
+    }
+    .paiement-table td .badge-success,
+    .paiement-table td .badge-warning,
+    .paiement-table td .badge-danger {
+      font-size: 11px;
+    }
+    
     .btn-pay { font-size: 12px; padding: 4px 12px; }
+    
     .modal-container { max-width: 95%; }
     .modal-body { padding: 16px; }
-    .usager-info { padding: 12px 16px; }
+    .usager-recap { padding: 12px 16px; }
     .info-row { flex-direction: column; gap: 2px; font-size: 13px; }
     .total-payment { flex-direction: column; gap: 4px; font-size: 14px; }
     .total-payment strong { font-size: 18px; }
@@ -713,13 +806,13 @@
     .btn-cancel,
     .btn-validate { width: 100%; justify-content: center; }
   }
+  
   @media (max-width: 480px) {
     .types-stats { grid-template-columns: 1fr 1fr; gap: 6px; }
-    .type-stat { padding: 8px 10px; }
+    .type-stat { padding: 8px 10px; min-height: 50px; }
     .type-stat-icon { width: 28px; height: 28px; }
     .type-stat-name { font-size: 11px; }
     .type-stat-count { font-size: 16px; }
-    .paiement-table { font-size: 11px; }
-    .paiement-table th,
-    .paiement-table td { padding: 6px 8px; }
+    .paiement-table td { font-size: 12px; padding: 4px 0; }
+    .paiement-table td::before { font-size: 10px; }
   }

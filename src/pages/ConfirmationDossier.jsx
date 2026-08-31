@@ -603,8 +603,9 @@ const ConfirmationDossier = () => {
     }
   };
 
-  // CRÉER LA FACTURE AVANCÉE
-// Dans ConfirmationDossier.jsx - handleGenerateFactureAvancee
+// Dans ConfirmationDossier.jsx - remplacer handleGenerateFactureAvancee par ceci
+
+// CRÉER LA FACTURE AVANCÉE - VERSION CORRIGÉE
 const handleGenerateFactureAvancee = async () => {
   if (!usager || !currentUser) {
     showToast('Utilisateur non identifié', 'error');
@@ -677,13 +678,17 @@ const handleGenerateFactureAvancee = async () => {
 
     const response = await fetch('http://localhost:3001/api/factures/creer', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'adminToken': localStorage.getItem('adminToken') || ''
+      },
       body: JSON.stringify({
         usagerId: usager.id,
         usagerType: usagerType,
         userId: currentUser.id,
         typeFacture: 'Redevances',
         regionUsager: usager.region || '',
+        personneRecu: currentUser.nom || 'DAF',
         montantMensuel: montantMensuel,
         fraisDossier: fraisDossier,
         montantRetard: montantRetard,
@@ -693,10 +698,19 @@ const handleGenerateFactureAvancee = async () => {
       })
     });
     
+    // ✅ Vérifier si la réponse est OK
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Réponse serveur non OK:', errorText);
+      throw new Error(`Erreur ${response.status}: ${response.statusText}`);
+    }
+    
     const data = await response.json();
+    
     if (data.success) {
       setNotification({ type: 'success', message: '✅ Facture avancée créée avec succès' });
       setValidatedDossiers(prev => ({ ...prev, 'Facture': true }));
+      showToast('✅ Facture avancée créée avec succès', 'success');
       
       setTimeout(() => {
         navigate('/generation-facture', {
@@ -708,9 +722,21 @@ const handleGenerateFactureAvancee = async () => {
       showToast('❌ ' + data.message, 'error');
     }
   } catch (error) {
-    console.error('Erreur:', error);
-    setNotification({ type: 'error', message: '❌ Erreur de création de la facture' });
-    showToast('❌ Erreur de connexion', 'error');
+    console.error('❌ Erreur création facture avancée:', error);
+    
+    let errorMessage = 'Erreur de création de la facture';
+    if (error.message.includes('404')) {
+      errorMessage = 'Route API non trouvée. Vérifiez que le serveur est démarré.';
+    } else if (error.message.includes('500')) {
+      errorMessage = 'Erreur interne du serveur. Vérifiez les logs.';
+    } else if (error.message.includes('ECONNREFUSED')) {
+      errorMessage = 'Impossible de se connecter au serveur. Vérifiez que le serveur est démarré sur le port 3001.';
+    } else if (error.message.includes('colonne')) {
+      errorMessage = 'Erreur de base de données. Vérifiez la structure de la table facture_usager.';
+    }
+    
+    setNotification({ type: 'error', message: '❌ ' + errorMessage });
+    showToast('❌ ' + errorMessage, 'error');
   } finally {
     setIsCreatingFacture(false);
   }

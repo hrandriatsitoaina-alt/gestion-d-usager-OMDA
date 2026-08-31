@@ -82,7 +82,7 @@ const RegionListe = () => {
           Répartition géographique
         </h2>
         <p className="bilan-sub">
-          {loading ? 'Chargement...' : `${totalRegions} régions · ${totalUsagers} usagers`}
+          {loading ? '' : `${totalRegions} régions · ${totalUsagers} usagers`}
         </p>
       </div>
 

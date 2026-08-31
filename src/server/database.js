@@ -1,4 +1,4 @@
-// src/server/database.js
+// server/database.js
 const { Pool } = require('pg');
 
 // ============================================================
@@ -15,7 +15,6 @@ const pool = new Pool({
   connectionTimeoutMillis: 5000,
 });
 
-// ✅ Définir le schéma par défaut pour TOUTES les connexions
 pool.on('connect', (client) => {
   client.query('SET search_path TO omda_app, public;')
     .catch(err => console.warn('⚠️ Erreur SET search_path:', err.message));
@@ -28,8 +27,6 @@ pool.on('error', (err) => {
 pool.connect((err, client, release) => {
   if (err) {
     console.error('❌ Erreur de connexion à PostgreSQL:', err.message);
-    console.error('📌 Vérifiez que PostgreSQL est en cours d\'exécution');
-    console.error('📌 Vérifiez les identifiants dans la configuration');
     process.exit(1);
   } else {
     console.log('✅ Connecté à PostgreSQL');
@@ -44,7 +41,6 @@ async function initDB() {
   try {
     console.log('🔍 Initialisation de la base de données...');
 
-    // Créer le schéma omda_app s'il n'existe pas
     try {
       await pool.query('CREATE SCHEMA IF NOT EXISTS omda_app AUTHORIZATION omda_user;');
       console.log('✅ Schéma "omda_app" prêt.');
@@ -52,7 +48,6 @@ async function initDB() {
       console.warn('⚠️ Le schéma omda_app existe déjà ou ne peut pas être créé.');
     }
 
-    // Forcer le search_path pour cette session
     await pool.query('SET search_path TO omda_app, public;');
     console.log('📁 Utilisation du schéma : omda_app');
 
@@ -290,18 +285,9 @@ async function initDB() {
         name: 'usagers_nightclub',
         columns: `demandeur VARCHAR(255), denomination VARCHAR(255), adresse_siege VARCHAR(255), nif_stat VARCHAR(100), telephone VARCHAR(50), email VARCHAR(255), representant_nom VARCHAR(255), representant_adresse VARCHAR(255), representant_tel VARCHAR(50), representant_cin VARCHAR(100), representant_cin_delivree DATE, representant_cin_lieu VARCHAR(255), representant_fonction VARCHAR(255), jauge_max INTEGER DEFAULT 0, horaires VARCHAR(255), moyens_communication JSONB, total VARCHAR(50), a_compter_du DATE, echeance DATE, type_paiement VARCHAR(50) DEFAULT 'mensuel', montant_mensuel DECIMAL(15,2) DEFAULT 0, frais_dossier DECIMAL(15,2) DEFAULT 0, region VARCHAR(100), confirmation_nom VARCHAR(255), date_signature DATE, lieu_signature VARCHAR(255), uniter INTEGER DEFAULT 1, numero_dossier_utilisateur VARCHAR(50), created_by INTEGER REFERENCES utilisateurs(id), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
       },
-      // ============================================================
-      // ✅ TABLE OCC - SANS montant_mensuel
-      // ============================================================
       {
         name: 'usagers_occasionnel',
-        columns: `demandeur VARCHAR(255), denomination VARCHAR(255), adresse_siege VARCHAR(255), nif_stat VARCHAR(100), telephone VARCHAR(50), email VARCHAR(255), representant_nom VARCHAR(255), representant_adresse VARCHAR(255), representant_tel VARCHAR(50), representant_cin VARCHAR(100), representant_cin_delivree DATE, representant_cin_lieu VARCHAR(255), representant_fonction VARCHAR(255), organisateurs VARCHAR(255), representant_par VARCHAR(255), genre_manifestation VARCHAR(255), artistes VARCHAR(255), date_evenement DATE, lieu_evenement VARCHAR(255), adresse VARCHAR(255), domicile VARCHAR(255), confirmation_nom VARCHAR(255), date_signature DATE, lieu_ajout VARCHAR(255), 
-        frais_dossier DECIMAL(15,2) DEFAULT 0, 
-        montant DECIMAL(15,2) DEFAULT 0, 
-        montant_retard DECIMAL(15,2) DEFAULT 0, 
-        is_retard BOOLEAN DEFAULT FALSE, 
-        soit_total DECIMAL(15,2) DEFAULT 0, 
-        date_ajout DATE, nom_evenement VARCHAR(255), numero_dossier_global VARCHAR(50), numero_dossier_utilisateur VARCHAR(50), region VARCHAR(100), uniter INTEGER DEFAULT 1, created_by INTEGER REFERENCES utilisateurs(id), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
+        columns: `demandeur VARCHAR(255), denomination VARCHAR(255), adresse_siege VARCHAR(255), nif_stat VARCHAR(100), telephone VARCHAR(50), email VARCHAR(255), representant_nom VARCHAR(255), representant_adresse VARCHAR(255), representant_tel VARCHAR(50), representant_cin VARCHAR(100), representant_cin_delivree DATE, representant_cin_lieu VARCHAR(255), representant_fonction VARCHAR(255), organisateurs VARCHAR(255), representant_par VARCHAR(255), genre_manifestation VARCHAR(255), artistes VARCHAR(255), date_evenement DATE, lieu_evenement VARCHAR(255), adresse VARCHAR(255), domicile VARCHAR(255), confirmation_nom VARCHAR(255), date_signature DATE, lieu_ajout VARCHAR(255), frais_dossier DECIMAL(15,2) DEFAULT 0, montant DECIMAL(15,2) DEFAULT 0, montant_retard DECIMAL(15,2) DEFAULT 0, is_retard BOOLEAN DEFAULT FALSE, soit_total DECIMAL(15,2) DEFAULT 0, date_ajout DATE, nom_evenement VARCHAR(255), numero_dossier_global VARCHAR(50), numero_dossier_utilisateur VARCHAR(50), region VARCHAR(100), uniter INTEGER DEFAULT 1, created_by INTEGER REFERENCES utilisateurs(id), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
       }
     ];
 
@@ -354,12 +340,16 @@ async function initDB() {
     console.log('✅ Table usagers prête');
 
     // ============================================================
-    // ⭐ TABLE FACTURE_USAGER
+    // ⭐ TABLE FACTURE_USAGER - VERSION COMPLÈTE
     // ============================================================
-    console.log('📝 Création de la table facture_usager...');
+    console.log('📝 Suppression et recréation de la table facture_usager...');
     
+    // Supprimer l'ancienne table si elle existe
+    await pool.query(`DROP TABLE IF EXISTS omda_app.facture_usager CASCADE;`);
+    console.log('✅ Ancienne table facture_usager supprimée');
+
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS facture_usager (
+      CREATE TABLE facture_usager (
         id SERIAL PRIMARY KEY,
         ref_omda INTEGER NOT NULL UNIQUE,
         num_facture VARCHAR(20) NOT NULL,
@@ -429,6 +419,16 @@ async function initDB() {
         soit_total DECIMAL(15,2) DEFAULT 0,
         uniter INTEGER DEFAULT 1,
         
+        mois_facture INTEGER CHECK (mois_facture BETWEEN 1 AND 12),
+        annee_facture INTEGER,
+        mois_groupes TEXT,
+        type_groupe VARCHAR(10) DEFAULT 'A',
+        suffixe VARCHAR(5),
+        
+        description_personnalisee TEXT,
+        annee_paiement INTEGER,
+        mois_groupes_json JSONB,
+        
         numero_dossier_utilisateur VARCHAR(50),
         numero_dossier_global VARCHAR(50),
         
@@ -442,27 +442,18 @@ async function initDB() {
     `);
     console.log('✅ Table facture_usager créée avec succès');
 
-    // Vérifier et ajouter les colonnes manquantes
-    const columnsToCheck = ['daf_nom', 'quittance', 'quittance_validee'];
-    for (const col of columnsToCheck) {
-      const check = await pool.query(`
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_name = 'facture_usager' AND column_name = $1
-      `, [col]);
-      if (check.rows.length === 0) {
-        console.log(`📝 Ajout de la colonne ${col}...`);
-        await pool.query(`ALTER TABLE facture_usager ADD COLUMN ${col} VARCHAR(255);`);
-        console.log(`✅ Colonne ${col} ajoutée`);
-      }
-    }
-
-    // Créer les index
+    // ============================================================
+    // CRÉATION DES INDEX
+    // ============================================================
     await pool.query(`
-      CREATE INDEX IF NOT EXISTS idx_facture_ref_omda ON facture_usager(ref_omda);
-      CREATE INDEX IF NOT EXISTS idx_facture_ref_client_type ON facture_usager(ref_client_type);
-      CREATE INDEX IF NOT EXISTS idx_facture_ref_usager ON facture_usager(ref_usager);
-      CREATE INDEX IF NOT EXISTS idx_facture_statut ON facture_usager(statut);
+      CREATE INDEX idx_facture_ref_omda ON facture_usager(ref_omda);
+      CREATE INDEX idx_facture_ref_client_type ON facture_usager(ref_client_type);
+      CREATE INDEX idx_facture_ref_usager ON facture_usager(ref_usager);
+      CREATE INDEX idx_facture_statut ON facture_usager(statut);
+      CREATE INDEX idx_facture_usager_mois_facture ON facture_usager(mois_facture);
+      CREATE INDEX idx_facture_usager_annee_facture ON facture_usager(annee_facture);
+      CREATE INDEX idx_facture_usager_type_groupe ON facture_usager(type_groupe);
+      CREATE INDEX idx_facture_usager_annee_paiement ON facture_usager(annee_paiement);
     `);
     console.log('✅ Index de facture_usager créés');
 

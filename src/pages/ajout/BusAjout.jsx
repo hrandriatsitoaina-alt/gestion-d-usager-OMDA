@@ -536,12 +536,12 @@ const BusAjout = ({ onCancel }) => {
         </div>
       </div>
 
-      <div className="form-row">
+      {/* <div className="form-row">
         <div className="form-label"><h2><DollarSign size={18} strokeWidth={2} /> Montant mensuel :</h2></div>
         <div className="form-input">
           <input type="text" value={getDisplayValue(montant)} onChange={handleMontantChange} className="input-style" placeholder="Montant mensuel en Ar" />
         </div>
-      </div>
+      </div> */}
 
       <div className="form-row">
         <div className="form-label"><h2><Hash size={18} strokeWidth={2} /> Uniter :</h2></div>

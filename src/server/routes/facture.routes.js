@@ -28,20 +28,32 @@ const getDAFName = async () => {
 };
 
 // ============================================================
-// 0.1 RÉCUPÉRER LE DERNIER NUMÉRO DE QUITTANCE
+// 0.1 RÉCUPÉRER LE DERNIER NUMÉRO DE QUITTANCE (PERSISTANT)
 // ============================================================
 const getLastQuittanceNumber = async () => {
   try {
+    // Récupérer le MAX de quittance dans la table facture_usager
     const result = await pool.query(`
-      SELECT quittance FROM facture_usager 
-      WHERE quittance IS NOT NULL AND quittance != ''
-      ORDER BY id DESC LIMIT 1
+      SELECT MAX(CAST(quittance AS INTEGER)) as max_quittance 
+      FROM facture_usager 
+      WHERE quittance IS NOT NULL AND quittance != '' AND quittance ~ '^[0-9]+$'
     `);
-    if (result.rows.length > 0 && result.rows[0].quittance) {
-      const quittanceStr = result.rows[0].quittance;
-      const num = parseInt(quittanceStr.replace(/\D/g, ''));
-      return isNaN(num) ? 0 : num;
+    
+    if (result.rows.length > 0 && result.rows[0].max_quittance !== null) {
+      return parseInt(result.rows[0].max_quittance);
     }
+    
+    // Si aucun quittance trouvé, chercher dans paiements
+    const paiementResult = await pool.query(`
+      SELECT MAX(CAST(quittance AS INTEGER)) as max_quittance 
+      FROM paiements 
+      WHERE quittance IS NOT NULL AND quittance != '' AND quittance ~ '^[0-9]+$'
+    `);
+    
+    if (paiementResult.rows.length > 0 && paiementResult.rows[0].max_quittance !== null) {
+      return parseInt(paiementResult.rows[0].max_quittance);
+    }
+    
     return 0;
   } catch (error) {
     console.error('❌ Erreur récupération dernier quittance:', error);
@@ -58,14 +70,13 @@ const formatQuittance = (num) => {
 
 // ============================================================
 // 0.3 EXTRACTION GÉNÉRIQUE DU MONTANT DEPUIS LA BASE
-// Teste TOUTES les colonnes possibles, quel que soit le type d'usager.
 // ============================================================
 const extractMontantDepuisBase = (usagerData) => {
   const candidats = [
     usagerData.montant_mensuel,
     usagerData.montant_total,
-    usagerData.montant,   // ✅ utilisé par OCC
-    usagerData.taux       // ✅ utilisé par Média (Radio/TV)
+    usagerData.montant,
+    usagerData.taux
   ];
   for (const val of candidats) {
     const num = parseFloat(val);
@@ -75,12 +86,15 @@ const extractMontantDepuisBase = (usagerData) => {
 };
 
 // ============================================================
-// 1. CRÉER UNE FACTURE À PARTIR D'UN USAGER
+// 1. CRÉER UNE FACTURE SIMPLE (ROUTE PRINCIPALE)
 // ============================================================
 router.post('/factures/creer', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    
+    console.log('📥 ROUTE /factures/creer appelée');
+    console.log('📦 Body reçu:', req.body);
     
     const { 
       usagerId, 
@@ -97,47 +111,18 @@ router.post('/factures/creer', async (req, res) => {
       soitTotal: frontSoitTotal
     } = req.body;
 
-    console.log('📥 Données reçues du frontend:', {
-      usagerId,
-      usagerType,
-      userId,
-      frontMontantMensuel,
-      frontFraisDossier,
-      frontMontantRetard,
-      frontIsRetard,
-      frontUniter,
-      frontSoitTotal
-    });
-
-    // ✅ Déterminer la table selon le type
+    // Déterminer la table selon le type
     let tableName = '';
-    
     switch(usagerType) {
-      case 'hotel': 
-        tableName = 'usagers_hotel'; 
-        break;
-      case 'grand-surface': 
-        tableName = 'usagers_magasin'; 
-        break;
-      case 'media': 
-        tableName = 'usagers_media'; 
-        break;
-      case 'bus': 
-        tableName = 'usagers_bus'; 
-        break;
-      case 'nightclub': 
-        tableName = 'usagers_nightclub'; 
-        break;
-      case 'occ': 
-        tableName = 'usagers_occasionnel'; 
-        break;
-      default: 
-        throw new Error('Type d\'usager non reconnu');
+      case 'hotel': tableName = 'usagers_hotel'; break;
+      case 'grand-surface': tableName = 'usagers_magasin'; break;
+      case 'media': tableName = 'usagers_media'; break;
+      case 'bus': tableName = 'usagers_bus'; break;
+      case 'nightclub': tableName = 'usagers_nightclub'; break;
+      case 'occ': tableName = 'usagers_occasionnel'; break;
+      default: throw new Error('Type d\'usager non reconnu');
     }
 
-    console.log(`📋 Table: ${tableName}`);
-
-    // ✅ Récupérer les données de l'usager
     const usagerResult = await client.query(
       `SELECT * FROM ${tableName} WHERE id = $1`,
       [usagerId]
@@ -148,104 +133,13 @@ router.post('/factures/creer', async (req, res) => {
     }
     const usagerData = usagerResult.rows[0];
 
-    console.log('📊 Données de l\'usager (colonnes montants disponibles):', {
-      id: usagerData.id,
-      denomination: usagerData.denomination,
-      montant_mensuel: usagerData.montant_mensuel,
-      montant_total: usagerData.montant_total,
-      montant: usagerData.montant,
-      taux: usagerData.taux,
-      frais_dossier: usagerData.frais_dossier,
-      uniter: usagerData.uniter,
-      region: usagerData.region,
-      soit_total: usagerData.soit_total,
-      is_retard: usagerData.is_retard,
-      montant_retard: usagerData.montant_retard
-    });
+    let montantMensuel = frontMontantMensuel || extractMontantDepuisBase(usagerData) || 0;
+    let fraisDossier = frontFraisDossier || parseFloat(usagerData.frais_dossier) || 0;
+    let montantRetard = frontMontantRetard || parseFloat(usagerData.montant_retard) || 0;
+    let isRetard = frontIsRetard !== undefined ? frontIsRetard : (usagerData.is_retard || false);
+    let uniter = frontUniter || parseInt(usagerData.uniter) || 1;
+    let soitTotal = frontSoitTotal || (montantMensuel * uniter + fraisDossier + (isRetard ? montantRetard : 0));
 
-    // ✅ RÉCUPÉRER LES MONTANTS - VERSION CORRIGÉE ET GÉNÉRIQUE
-    let montantMensuel = 0;
-    let fraisDossier = 5000;
-    let montantRetard = 0;
-    let isRetard = false;
-    let uniter = 1;
-    let soitTotal = 0;
-
-    // 🔥 1. PRIORITÉ ABSOLUE aux valeurs du frontend
-    if (frontMontantMensuel !== undefined && frontMontantMensuel > 0) {
-      montantMensuel = frontMontantMensuel;
-      console.log('📊 Montant du frontend:', montantMensuel);
-    }
-    
-    if (frontFraisDossier !== undefined && frontFraisDossier > 0) {
-      fraisDossier = frontFraisDossier;
-    }
-    
-    if (frontUniter !== undefined && frontUniter > 0) {
-      uniter = frontUniter;
-    }
-    
-    if (frontMontantRetard !== undefined && frontMontantRetard > 0) {
-      montantRetard = frontMontantRetard;
-    }
-    if (frontIsRetard !== undefined) {
-      isRetard = frontIsRetard;
-    }
-    
-    if (frontSoitTotal !== undefined && frontSoitTotal > 0) {
-      soitTotal = frontSoitTotal;
-    }
-
-    // 🔥 2. SI LES VALEURS DU FRONTEND SONT À 0, RÉCUPÉRER DE LA BASE
-    if (montantMensuel === 0) {
-      console.log('⚠️ Montant frontend à 0, récupération depuis la base...');
-      montantMensuel = extractMontantDepuisBase(usagerData);
-      console.log(`📊 [${usagerType}] Montant récupéré depuis la base:`, montantMensuel);
-
-      // Cas spécifique OCC : retard éventuel stocké en base
-      if (usagerType === 'occ') {
-        montantRetard = parseFloat(usagerData.montant_retard) || montantRetard;
-        isRetard = usagerData.is_retard !== undefined && usagerData.is_retard !== null
-          ? usagerData.is_retard
-          : isRetard;
-      }
-    }
-
-    // 🔥 3. SI FRAIS DOSSIER À 0, PRENDRE DE LA BASE OU 5000
-    if (fraisDossier === 0) {
-      fraisDossier = parseFloat(usagerData.frais_dossier) || 5000;
-    }
-
-    // 🔥 4. SI UNITER À 0, PRENDRE DE LA BASE OU 1
-    if (uniter === 0) {
-      uniter = parseInt(usagerData.uniter) || 1;
-    }
-
-    // 🔥 5. SI SOIT TOTAL À 0, LE CALCULER
-    if (soitTotal === 0 && montantMensuel > 0) {
-      const baseTotal = montantMensuel * uniter;
-      const retard = isRetard ? montantRetard : 0;
-      soitTotal = baseTotal + fraisDossier + retard;
-      console.log('🔄 Soit_total recalculé:', soitTotal);
-    }
-
-    // 🔥 6. DERNIER SECOURS - SI TOUJOURS 0, PRENDRE DEPUIS LA BASE
-    if (soitTotal === 0) {
-      soitTotal = parseFloat(usagerData.soit_total) || parseFloat(usagerData.montant_total) || 0;
-      console.log('🔄 Soit_total depuis base:', soitTotal);
-    }
-
-    console.log('📊 MONTANTS FINAUX:', {
-      usagerType,
-      montantMensuel,
-      fraisDossier,
-      montantRetard,
-      isRetard,
-      uniter,
-      soitTotal
-    });
-
-    // Générer les références
     const lastRefResult = await client.query(
       `SELECT MAX(ref_omda) as max_ref FROM facture_usager`
     );
@@ -261,14 +155,11 @@ router.post('/factures/creer', async (req, res) => {
     };
     const refClientType = typeMapping[usagerType] || 'AUT';
 
-    // ✅ Récupérer le prochain numéro de quittance
+    // Récupérer le prochain numéro de quittance (PERSISTANT)
     const lastQuittanceNum = await getLastQuittanceNumber();
     const nextQuittanceNum = lastQuittanceNum + 1;
-    const quittanceValue = formatQuittance(nextQuittanceNum);
+    const quittanceValue = nextQuittanceNum; // Stocker en nombre
 
-    console.log(`📋 Prochain numéro de quittance: ${quittanceValue}`);
-
-    // ✅ Construction de la requête d'insertion
     const query = `
       INSERT INTO facture_usager (
         ref_omda, num_facture, num_facture_type, ref_client_type,
@@ -288,81 +179,83 @@ router.post('/factures/creer', async (req, res) => {
         montant_mensuel, frais_dossier, montant_retard,
         is_retard, soit_total, uniter,
         numero_dossier_utilisateur, numero_dossier_global,
-        statut, created_by
+        statut, created_by, mois_facture, annee_facture
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
         $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
         $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35,
         $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46,
         $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57,
-        $58, $59, $60, $61, $62, $63
+        $58, $59, $60, $61, $62, $63, $64, $65
       ) RETURNING id
     `;
 
     const values = [
-      newRefOmda,                                           // 1
-      String(newRefOmda).padStart(4, '0'),                  // 2
-      'A',                                                  // 3
-      refClientType,                                        // 4
-      usagerId,                                             // 5
-      typeFacture || 'DAFC',                                // 6
-      regionUsager || usagerData.region || '',             // 7
-      new Date().toISOString().split('T')[0],              // 8
-      usagerData.denomination || usagerData.nom_evenement || usagerData.genre_manifestation || '', // 9
-      usagerData.demandeur || usagerData.proprietaire_nom || usagerData.organisateurs || '', // 10
-      usagerData.telephone || '',                          // 11
-      usagerData.email || '',                              // 12
-      usagerData.adresse_siege || usagerData.siege || usagerData.adresse || '', // 13
-      usagerData.representant_nom || usagerData.representant_par || '', // 14
-      usagerData.representant_adresse || usagerData.proprietaire_adresse || '', // 15
-      usagerData.representant_tel || usagerData.proprietaire_tel || '', // 16
-      usagerData.representant_cin || usagerData.proprietaire_cin || '', // 17
-      usagerData.representant_cin_delivree || usagerData.proprietaire_cin_delivree || null, // 18
-      usagerData.representant_cin_lieu || usagerData.proprietaire_cin_lieu || '', // 19
-      usagerData.representant_fonction || usagerData.proprietaire_fonction || '', // 20
-      usagerData.activite || '',                           // 21
-      usagerData.etoiles || '',                            // 22
-      usagerData.ravinala || false,                        // 23
-      usagerData.nombre_magasins || 0,                     // 24
-      usagerData.nombre_vehicules || 0,                    // 25
-      usagerData.lignes || '',                             // 26
-      usagerData.type_bus || '',                           // 27
-      usagerData.trajet || '',                             // 28
-      usagerData.horaires || '',                           // 29
-      usagerData.zones_desservies || '',                   // 30
-      usagerData.jauge_max || 0,                           // 31
-      usagerData.frequence || '',                          // 32
-      usagerData.canal || '',                              // 33
-      usagerData.siege || '',                              // 34
-      usagerData.nif || '',                                // 35
-      usagerData.stat || '',                               // 36
-      usagerData.taux || 0,                                // 37
-      usagerData.organisateurs || '',                      // 38
-      usagerData.representant_par || '',                   // 39
-      usagerData.genre_manifestation || '',                // 40
-      usagerData.artistes || '',                           // 41
-      usagerData.date_evenement || null,                   // 42
-      usagerData.lieu_evenement || '',                     // 43
-      usagerData.domicile || usagerData.adresse || '',     // 44
-      usagerData.lieu_ajout || usagerData.lieu_signature || 'Antananarivo', // 45
-      usagerData.date_signature || null,                   // 46
-      usagerData.confirmation_nom || usagerData.demandeur || '', // 47
-      personneRecu || '',                                  // 48
-      quittanceValue,                                      // 49
-      false,                                               // 50
-      usagerData.moyens_communication || null,             // 51
-      usagerData.a_compter_du || null,                     // 52
-      usagerData.echeance || null,                         // 53
-      montantMensuel,                                      // 54 ✅
-      fraisDossier,                                        // 55 ✅
-      montantRetard,                                       // 56 ✅
-      isRetard,                                            // 57 ✅
-      soitTotal,                                           // 58 ✅
-      uniter,                                              // 59 ✅
-      usagerData.numero_dossier_utilisateur || '',         // 60
-      usagerData.numero_dossier_global || '',              // 61
-      'brouillon',                                          // 62
-      userId                                               // 63
+      newRefOmda,
+      String(newRefOmda).padStart(4, '0'),
+      'A',
+      refClientType,
+      usagerId,
+      typeFacture || 'DAFC',
+      regionUsager || usagerData.region || '',
+      new Date().toISOString().split('T')[0],
+      usagerData.denomination || usagerData.nom_evenement || usagerData.genre_manifestation || '',
+      usagerData.demandeur || usagerData.proprietaire_nom || usagerData.organisateurs || '',
+      usagerData.telephone || '',
+      usagerData.email || '',
+      usagerData.adresse_siege || usagerData.siege || usagerData.adresse || '',
+      usagerData.representant_nom || usagerData.representant_par || '',
+      usagerData.representant_adresse || usagerData.proprietaire_adresse || '',
+      usagerData.representant_tel || usagerData.proprietaire_tel || '',
+      usagerData.representant_cin || usagerData.proprietaire_cin || '',
+      usagerData.representant_cin_delivree || usagerData.proprietaire_cin_delivree || null,
+      usagerData.representant_cin_lieu || usagerData.proprietaire_cin_lieu || '',
+      usagerData.representant_fonction || usagerData.proprietaire_fonction || '',
+      usagerData.activite || '',
+      usagerData.etoiles || '',
+      usagerData.ravinala || false,
+      usagerData.nombre_magasins || 0,
+      usagerData.nombre_vehicules || 0,
+      usagerData.lignes || '',
+      usagerData.type_bus || '',
+      usagerData.trajet || '',
+      usagerData.horaires || '',
+      usagerData.zones_desservies || '',
+      usagerData.jauge_max || 0,
+      usagerData.frequence || '',
+      usagerData.canal || '',
+      usagerData.siege || '',
+      usagerData.nif || '',
+      usagerData.stat || '',
+      usagerData.taux || 0,
+      usagerData.organisateurs || '',
+      usagerData.representant_par || '',
+      usagerData.genre_manifestation || '',
+      usagerData.artistes || '',
+      usagerData.date_evenement || null,
+      usagerData.lieu_evenement || '',
+      usagerData.domicile || usagerData.adresse || '',
+      usagerData.lieu_ajout || usagerData.lieu_signature || 'Antananarivo',
+      usagerData.date_signature || null,
+      usagerData.confirmation_nom || usagerData.demandeur || '',
+      personneRecu || '',
+      quittanceValue,
+      false,
+      usagerData.moyens_communication || null,
+      null,
+      null,
+      montantMensuel,
+      fraisDossier,
+      montantRetard,
+      isRetard,
+      soitTotal,
+      uniter,
+      usagerData.numero_dossier_utilisateur || '',
+      usagerData.numero_dossier_global || '',
+      'validee',
+      userId,
+      new Date().getMonth() + 1,
+      new Date().getFullYear()
     ];
 
     const result = await client.query(query, values);
@@ -372,14 +265,7 @@ router.post('/factures/creer', async (req, res) => {
     await client.query('COMMIT');
     
     console.log('✅ Facture créée avec succès, ID:', result.rows[0].id);
-    console.log('📊 Montants STOCKÉS dans facture_usager:', { 
-      montantMensuel, 
-      fraisDossier, 
-      montantRetard, 
-      isRetard, 
-      uniter, 
-      soitTotal 
-    });
+    console.log('📝 Quittance attribuée:', quittanceValue);
 
     res.json({
       success: true,
@@ -388,12 +274,7 @@ router.post('/factures/creer', async (req, res) => {
       refOmda: newRefOmda,
       numFacture: String(newRefOmda).padStart(4, '0'),
       dafName: dafName,
-      quittance: quittanceValue,
-      montantMensuel: montantMensuel,
-      fraisDossier: fraisDossier,
-      montantRetard: montantRetard,
-      isRetard: isRetard,
-      uniter: uniter,
+      quittance: formatQuittance(quittanceValue),
       soitTotal: soitTotal
     });
 
@@ -410,7 +291,446 @@ router.post('/factures/creer', async (req, res) => {
 });
 
 // ============================================================
-// 2. RÉCUPÉRER LE NOM DU DAF (ROUTE API)
+// 2. CRÉER UNE FACTURE AVEC PAIEMENT (Type B)
+// ============================================================
+router.post('/factures/creer-avec-paiement', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    console.log('📥 ROUTE /factures/creer-avec-paiement appelée');
+    console.log('📦 Body reçu:', req.body);
+    
+    const { 
+      usagerId, 
+      usagerType, 
+      userId,
+      typeFacture,
+      regionUsager,
+      personneRecu,
+      montantMensuel: frontMontantMensuel,
+      fraisDossier: frontFraisDossier,
+      montantRetard: frontMontantRetard,
+      isRetard: frontIsRetard,
+      uniter: frontUniter,
+      soitTotal: frontSoitTotal,
+      mois,
+      annee,
+      datePaiement,
+      numFactureType,
+      suffixe,
+      descriptionPersonnalisee
+    } = req.body;
+
+    let tableName = '';
+    switch(usagerType) {
+      case 'hotel': tableName = 'usagers_hotel'; break;
+      case 'grand-surface': tableName = 'usagers_magasin'; break;
+      case 'media': tableName = 'usagers_media'; break;
+      case 'bus': tableName = 'usagers_bus'; break;
+      case 'nightclub': tableName = 'usagers_nightclub'; break;
+      case 'occ': tableName = 'usagers_occasionnel'; break;
+      default: throw new Error('Type d\'usager non reconnu');
+    }
+
+    const usagerResult = await client.query(
+      `SELECT * FROM ${tableName} WHERE id = $1`,
+      [usagerId]
+    );
+    
+    if (usagerResult.rows.length === 0) {
+      throw new Error('Usager non trouvé');
+    }
+    const usagerData = usagerResult.rows[0];
+
+    let montantMensuel = frontMontantMensuel || extractMontantDepuisBase(usagerData) || 0;
+    let fraisDossier = frontFraisDossier || parseFloat(usagerData.frais_dossier) || 0;
+    let montantRetard = frontMontantRetard || parseFloat(usagerData.montant_retard) || 0;
+    let isRetard = frontIsRetard !== undefined ? frontIsRetard : (usagerData.is_retard || false);
+    let uniter = frontUniter || parseInt(usagerData.uniter) || 1;
+    let soitTotal = frontSoitTotal || (montantMensuel * uniter + fraisDossier + (isRetard ? montantRetard : 0));
+
+    const lastRefResult = await client.query(
+      `SELECT MAX(ref_omda) as max_ref FROM facture_usager`
+    );
+    const newRefOmda = (lastRefResult.rows[0].max_ref || 0) + 1;
+
+    const typeMapping = {
+      'hotel': 'HTL',
+      'grand-surface': 'MGS',
+      'media': 'RDP',
+      'bus': 'TRP',
+      'nightclub': 'NGT',
+      'occ': 'OCC'
+    };
+    const refClientType = typeMapping[usagerType] || 'AUT';
+
+    // Récupérer le prochain numéro de quittance (PERSISTANT)
+    const lastQuittanceNum = await getLastQuittanceNumber();
+    const nextQuittanceNum = lastQuittanceNum + 1;
+    const quittanceValue = nextQuittanceNum;
+
+    let numFactureDisplay = String(newRefOmda).padStart(4, '0');
+    if (suffixe) {
+      numFactureDisplay = `${numFactureDisplay}-${suffixe}`;
+    }
+
+    const query = `
+      INSERT INTO facture_usager (
+        ref_omda, num_facture, num_facture_type, ref_client_type,
+        ref_usager, type_facture, region_usager, date_ajout,
+        denomination, demandeur, telephone, email, adresse,
+        representant_nom, representant_adresse, representant_tel,
+        representant_cin, representant_cin_delivree, representant_cin_lieu,
+        representant_fonction, activite, etoiles, ravinala,
+        nombre_magasins, nombre_vehicules, lignes, type_bus,
+        trajet, horaires, zones_desservies, jauge_max,
+        frequence, canal, siege, nif, stat, taux,
+        organisateurs, representant_par, genre_manifestation,
+        artistes, date_evenement, lieu_evenement, domicile,
+        lieu_ajout, date_signature, confirmation_nom,
+        personne_recu, quittance, quittance_validee,
+        moyens_communication, a_compter_du, echeance,
+        montant_mensuel, frais_dossier, montant_retard,
+        is_retard, soit_total, uniter,
+        numero_dossier_utilisateur, numero_dossier_global,
+        statut, created_by, mois_facture, annee_facture,
+        suffixe, description_personnalisee
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+        $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
+        $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35,
+        $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46,
+        $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57,
+        $58, $59, $60, $61, $62, $63, $64, $65, $66, $67
+      ) RETURNING id
+    `;
+
+    const values = [
+      newRefOmda,
+      numFactureDisplay,
+      numFactureType || 'B',
+      refClientType,
+      usagerId,
+      typeFacture || 'DAFC',
+      regionUsager || usagerData.region || '',
+      new Date().toISOString().split('T')[0],
+      usagerData.denomination || usagerData.nom_evenement || usagerData.genre_manifestation || '',
+      usagerData.demandeur || usagerData.proprietaire_nom || usagerData.organisateurs || '',
+      usagerData.telephone || '',
+      usagerData.email || '',
+      usagerData.adresse_siege || usagerData.siege || usagerData.adresse || '',
+      usagerData.representant_nom || usagerData.representant_par || '',
+      usagerData.representant_adresse || usagerData.proprietaire_adresse || '',
+      usagerData.representant_tel || usagerData.proprietaire_tel || '',
+      usagerData.representant_cin || usagerData.proprietaire_cin || '',
+      usagerData.representant_cin_delivree || usagerData.proprietaire_cin_delivree || null,
+      usagerData.representant_cin_lieu || usagerData.proprietaire_cin_lieu || '',
+      usagerData.representant_fonction || usagerData.proprietaire_fonction || '',
+      usagerData.activite || '',
+      usagerData.etoiles || '',
+      usagerData.ravinala || false,
+      usagerData.nombre_magasins || 0,
+      usagerData.nombre_vehicules || 0,
+      usagerData.lignes || '',
+      usagerData.type_bus || '',
+      usagerData.trajet || '',
+      usagerData.horaires || '',
+      usagerData.zones_desservies || '',
+      usagerData.jauge_max || 0,
+      usagerData.frequence || '',
+      usagerData.canal || '',
+      usagerData.siege || '',
+      usagerData.nif || '',
+      usagerData.stat || '',
+      usagerData.taux || 0,
+      usagerData.organisateurs || '',
+      usagerData.representant_par || '',
+      usagerData.genre_manifestation || '',
+      usagerData.artistes || '',
+      usagerData.date_evenement || null,
+      usagerData.lieu_evenement || '',
+      usagerData.domicile || usagerData.adresse || '',
+      usagerData.lieu_ajout || usagerData.lieu_signature || 'Antananarivo',
+      usagerData.date_signature || null,
+      usagerData.confirmation_nom || usagerData.demandeur || '',
+      personneRecu || '',
+      quittanceValue,
+      false,
+      usagerData.moyens_communication || null,
+      datePaiement || new Date().toISOString().split('T')[0],
+      null,
+      montantMensuel,
+      fraisDossier,
+      montantRetard,
+      isRetard,
+      soitTotal,
+      uniter,
+      usagerData.numero_dossier_utilisateur || '',
+      usagerData.numero_dossier_global || '',
+      'validee',
+      userId,
+      mois,
+      annee,
+      suffixe || '',
+      descriptionPersonnalisee || null // 🔥 null si pas de description personnalisée
+    ];
+
+    const result = await client.query(query, values);
+    
+    const dafName = await getDAFName();
+    
+    await client.query('COMMIT');
+    
+    console.log('✅ Facture avec paiement créée avec succès, ID:', result.rows[0].id);
+    console.log('📝 Quittance attribuée:', quittanceValue);
+
+    res.json({
+      success: true,
+      message: 'Facture avec paiement créée avec succès',
+      factureId: result.rows[0].id,
+      refOmda: newRefOmda,
+      numFacture: numFactureDisplay,
+      dafName: dafName,
+      quittance: formatQuittance(quittanceValue),
+      mois: mois,
+      annee: annee,
+      soitTotal: soitTotal
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ Erreur création facture avec paiement:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Erreur lors de la création de la facture avec paiement'
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// ============================================================
+// 3. CRÉER UNE FACTURE GROUPÉE (TYPE A)
+// ============================================================
+router.post('/factures/creer-avec-paiement-groupe', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    console.log('📥 ROUTE /factures/creer-avec-paiement-groupe appelée');
+    console.log('📦 Body reçu:', req.body);
+    
+    const { 
+      usagerId, 
+      usagerType, 
+      userId,
+      typeFacture,
+      regionUsager,
+      personneRecu,
+      montantMensuel: frontMontantMensuel,
+      fraisDossier: frontFraisDossier,
+      montantRetard: frontMontantRetard,
+      isRetard: frontIsRetard,
+      uniter: frontUniter,
+      soitTotal: frontSoitTotal,
+      mois: moisGroupes,
+      annee,
+      datePaiement,
+      numFactureType,
+      typeGroupe,
+      descriptionPersonnalisee
+    } = req.body;
+
+    let tableName = '';
+    switch(usagerType) {
+      case 'hotel': tableName = 'usagers_hotel'; break;
+      case 'grand-surface': tableName = 'usagers_magasin'; break;
+      case 'media': tableName = 'usagers_media'; break;
+      case 'bus': tableName = 'usagers_bus'; break;
+      case 'nightclub': tableName = 'usagers_nightclub'; break;
+      case 'occ': tableName = 'usagers_occasionnel'; break;
+      default: throw new Error('Type d\'usager non reconnu');
+    }
+
+    const usagerResult = await client.query(
+      `SELECT * FROM ${tableName} WHERE id = $1`,
+      [usagerId]
+    );
+    
+    if (usagerResult.rows.length === 0) {
+      throw new Error('Usager non trouvé');
+    }
+    const usagerData = usagerResult.rows[0];
+
+    let montantMensuel = frontMontantMensuel || extractMontantDepuisBase(usagerData) || 0;
+    let fraisDossier = frontFraisDossier || parseFloat(usagerData.frais_dossier) || 0;
+    let montantRetard = frontMontantRetard || parseFloat(usagerData.montant_retard) || 0;
+    let isRetard = frontIsRetard !== undefined ? frontIsRetard : (usagerData.is_retard || false);
+    let uniter = frontUniter || parseInt(usagerData.uniter) || 1;
+    const nbMois = moisGroupes ? moisGroupes.length : 1;
+    let soitTotal = frontSoitTotal || (montantMensuel * uniter * nbMois + fraisDossier + (isRetard ? montantRetard : 0));
+
+    const lastRefResult = await client.query(
+      `SELECT MAX(ref_omda) as max_ref FROM facture_usager`
+    );
+    const newRefOmda = (lastRefResult.rows[0].max_ref || 0) + 1;
+
+    const typeMapping = {
+      'hotel': 'HTL',
+      'grand-surface': 'MGS',
+      'media': 'RDP',
+      'bus': 'TRP',
+      'nightclub': 'NGT',
+      'occ': 'OCC'
+    };
+    const refClientType = typeMapping[usagerType] || 'AUT';
+
+    // Récupérer le prochain numéro de quittance (PERSISTANT)
+    const lastQuittanceNum = await getLastQuittanceNumber();
+    const nextQuittanceNum = lastQuittanceNum + 1;
+    const quittanceValue = nextQuittanceNum;
+
+    const moisGroupesStr = moisGroupes ? moisGroupes.join(',') : null;
+    const premierMois = moisGroupes && moisGroupes.length > 0 ? moisGroupes[0] : 1;
+
+    const query = `
+      INSERT INTO facture_usager (
+        ref_omda, num_facture, num_facture_type, ref_client_type,
+        ref_usager, type_facture, region_usager, date_ajout,
+        denomination, demandeur, telephone, email, adresse,
+        representant_nom, representant_adresse, representant_tel,
+        representant_cin, representant_cin_delivree, representant_cin_lieu,
+        representant_fonction, activite, etoiles, ravinala,
+        nombre_magasins, nombre_vehicules, lignes, type_bus,
+        trajet, horaires, zones_desservies, jauge_max,
+        frequence, canal, siege, nif, stat, taux,
+        organisateurs, representant_par, genre_manifestation,
+        artistes, date_evenement, lieu_evenement, domicile,
+        lieu_ajout, date_signature, confirmation_nom,
+        personne_recu, quittance, quittance_validee,
+        moyens_communication, a_compter_du, echeance,
+        montant_mensuel, frais_dossier, montant_retard,
+        is_retard, soit_total, uniter,
+        numero_dossier_utilisateur, numero_dossier_global,
+        statut, created_by, annee_facture, mois_facture,
+        mois_groupes, type_groupe, description_personnalisee
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+        $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
+        $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35,
+        $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46,
+        $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57,
+        $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68
+      ) RETURNING id
+    `;
+
+    const values = [
+      newRefOmda,
+      String(newRefOmda).padStart(4, '0'),
+      numFactureType || 'A',
+      refClientType,
+      usagerId,
+      typeFacture || 'DAFC',
+      regionUsager || usagerData.region || '',
+      new Date().toISOString().split('T')[0],
+      usagerData.denomination || usagerData.nom_evenement || usagerData.genre_manifestation || '',
+      usagerData.demandeur || usagerData.proprietaire_nom || usagerData.organisateurs || '',
+      usagerData.telephone || '',
+      usagerData.email || '',
+      usagerData.adresse_siege || usagerData.siege || usagerData.adresse || '',
+      usagerData.representant_nom || usagerData.representant_par || '',
+      usagerData.representant_adresse || usagerData.proprietaire_adresse || '',
+      usagerData.representant_tel || usagerData.proprietaire_tel || '',
+      usagerData.representant_cin || usagerData.proprietaire_cin || '',
+      usagerData.representant_cin_delivree || usagerData.proprietaire_cin_delivree || null,
+      usagerData.representant_cin_lieu || usagerData.proprietaire_cin_lieu || '',
+      usagerData.representant_fonction || usagerData.proprietaire_fonction || '',
+      usagerData.activite || '',
+      usagerData.etoiles || '',
+      usagerData.ravinala || false,
+      usagerData.nombre_magasins || 0,
+      usagerData.nombre_vehicules || 0,
+      usagerData.lignes || '',
+      usagerData.type_bus || '',
+      usagerData.trajet || '',
+      usagerData.horaires || '',
+      usagerData.zones_desservies || '',
+      usagerData.jauge_max || 0,
+      usagerData.frequence || '',
+      usagerData.canal || '',
+      usagerData.siege || '',
+      usagerData.nif || '',
+      usagerData.stat || '',
+      usagerData.taux || 0,
+      usagerData.organisateurs || '',
+      usagerData.representant_par || '',
+      usagerData.genre_manifestation || '',
+      usagerData.artistes || '',
+      usagerData.date_evenement || null,
+      usagerData.lieu_evenement || '',
+      usagerData.domicile || usagerData.adresse || '',
+      usagerData.lieu_ajout || usagerData.lieu_signature || 'Antananarivo',
+      usagerData.date_signature || null,
+      usagerData.confirmation_nom || usagerData.demandeur || '',
+      personneRecu || '',
+      quittanceValue,
+      false,
+      usagerData.moyens_communication || null,
+      datePaiement || new Date().toISOString().split('T')[0],
+      null,
+      montantMensuel,
+      fraisDossier,
+      montantRetard,
+      isRetard,
+      soitTotal,
+      uniter,
+      usagerData.numero_dossier_utilisateur || '',
+      usagerData.numero_dossier_global || '',
+      'validee',
+      userId,
+      annee,
+      premierMois,
+      moisGroupesStr,
+      typeGroupe || 'A',
+      descriptionPersonnalisee || null // 🔥 null si pas de description personnalisée
+    ];
+
+    const result = await client.query(query, values);
+    
+    const dafName = await getDAFName();
+    
+    await client.query('COMMIT');
+    
+    console.log('✅ Facture groupée créée avec succès, ID:', result.rows[0].id);
+    console.log('📝 Quittance attribuée:', quittanceValue);
+
+    res.json({
+      success: true,
+      message: 'Facture groupée créée avec succès',
+      factureId: result.rows[0].id,
+      refOmda: newRefOmda,
+      numFacture: String(newRefOmda).padStart(4, '0'),
+      dafName: dafName,
+      quittance: formatQuittance(quittanceValue),
+      moisGroupes: moisGroupes,
+      soitTotal: soitTotal
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ Erreur création facture groupée:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Erreur lors de la création de la facture groupée'
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// ============================================================
+// 4. RÉCUPÉRER LE NOM DU DAF
 // ============================================================
 router.get('/daf/name', async (req, res) => {
   try {
@@ -429,7 +749,7 @@ router.get('/daf/name', async (req, res) => {
 });
 
 // ============================================================
-// 2.1 RÉCUPÉRER LE DERNIER NUMÉRO DE QUITTANCE
+// 5. RÉCUPÉRER LE DERNIER NUMÉRO DE QUITTANCE
 // ============================================================
 router.get('/quittance/last', async (req, res) => {
   try {
@@ -450,7 +770,7 @@ router.get('/quittance/last', async (req, res) => {
 });
 
 // ============================================================
-// 3. RÉCUPÉRER UNE FACTURE PAR ID
+// 6. RÉCUPÉRER UNE FACTURE PAR ID
 // ============================================================
 router.get('/factures/:id', async (req, res) => {
   try {
@@ -470,27 +790,10 @@ router.get('/factures/:id', async (req, res) => {
     const dafName = await getDAFName();
     result.rows[0].daf_nom = dafName;
     
-    // ✅ S'assurer que la quittance est sur 7 chiffres
-    if (!result.rows[0].quittance || result.rows[0].quittance === '') {
-      const lastNum = await getLastQuittanceNumber();
-      const nextNum = lastNum + 1;
-      result.rows[0].quittance = formatQuittance(nextNum);
-    } else {
-      const num = parseInt(result.rows[0].quittance.replace(/\D/g, ''));
-      if (!isNaN(num)) {
-        result.rows[0].quittance = formatQuittance(num);
-      }
+    // Formater le quittance
+    if (result.rows[0].quittance) {
+      result.rows[0].quittance = formatQuittance(result.rows[0].quittance);
     }
-    
-    console.log('📊 Facture récupérée avec montants:', {
-      id: result.rows[0].id,
-      montantMensuel: result.rows[0].montant_mensuel,
-      fraisDossier: result.rows[0].frais_dossier,
-      soitTotal: result.rows[0].soit_total,
-      uniter: result.rows[0].uniter,
-      montantRetard: result.rows[0].montant_retard,
-      isRetard: result.rows[0].is_retard
-    });
     
     res.json({
       success: true,
@@ -506,10 +809,12 @@ router.get('/factures/:id', async (req, res) => {
 });
 
 // ============================================================
-// 4. RÉCUPÉRER TOUTES LES FACTURES
+// 7. RÉCUPÉRER TOUTES LES FACTURES
 // ============================================================
 router.get('/factures', async (req, res) => {
   try {
+    console.log('📄 Récupération de toutes les factures...');
+    
     const result = await pool.query(`
       SELECT 
         id, ref_omda, num_facture, num_facture_type,
@@ -519,6 +824,8 @@ router.get('/factures', async (req, res) => {
         frais_dossier, montant_retard, is_retard,
         soit_total, uniter, statut, personne_recu,
         quittance, quittance_validee,
+        mois_facture, annee_facture, mois_groupes, type_groupe,
+        suffixe, description_personnalisee,
         created_at, created_by
       FROM facture_usager 
       ORDER BY created_at DESC
@@ -528,24 +835,27 @@ router.get('/factures', async (req, res) => {
     const factures = result.rows.map(f => ({
       ...f,
       daf_nom: dafName,
-      quittance: f.quittance ? String(f.quittance).padStart(7, '0') : ''
+      quittance: f.quittance ? formatQuittance(f.quittance) : ''
     }));
     
     res.json({
       success: true,
-      factures: factures
+      factures: factures,
+      total: factures.length
     });
+    
   } catch (error) {
     console.error('❌ Erreur récupération factures:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
+      factures: []
     });
   }
 });
 
 // ============================================================
-// 5. METTRE À JOUR UNE FACTURE
+// 8. METTRE À JOUR UNE FACTURE
 // ============================================================
 router.put('/factures/:id', async (req, res) => {
   try {
@@ -569,26 +879,17 @@ router.put('/factures/:id', async (req, res) => {
       'moyens_communication', 'a_compter_du', 'echeance',
       'montant_mensuel', 'frais_dossier', 'montant_retard',
       'is_retard', 'soit_total', 'uniter',
-      'quittance', 'quittance_validee'
+      'quittance', 'quittance_validee',
+      'description_personnalisee', 'suffixe'
     ];
     
     const filteredUpdates = {};
     for (const key of allowedFields) {
       if (updates[key] !== undefined) {
-        if (key === 'quittance' && updates[key]) {
-          const num = parseInt(updates[key].replace(/\D/g, ''));
-          if (!isNaN(num)) {
-            filteredUpdates[key] = formatQuittance(num);
-          } else {
-            filteredUpdates[key] = updates[key];
-          }
-        } else {
-          filteredUpdates[key] = updates[key];
-        }
+        filteredUpdates[key] = updates[key];
       }
     }
     
-    // ✅ Recalcul automatique de soit_total
     if (filteredUpdates.montant_mensuel !== undefined || 
         filteredUpdates.frais_dossier !== undefined || 
         filteredUpdates.uniter !== undefined) {
@@ -656,7 +957,7 @@ router.put('/factures/:id', async (req, res) => {
 });
 
 // ============================================================
-// 6. VALIDER UNE FACTURE
+// 9. VALIDER UNE FACTURE
 // ============================================================
 router.patch('/factures/:id/valider', async (req, res) => {
   try {
@@ -696,7 +997,7 @@ router.patch('/factures/:id/valider', async (req, res) => {
 });
 
 // ============================================================
-// 7. SUPPRIMER UNE FACTURE
+// 10. SUPPRIMER UNE FACTURE
 // ============================================================
 router.delete('/factures/:id', async (req, res) => {
   try {

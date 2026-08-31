@@ -3,15 +3,12 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
-  Home,
   Users,
-  Building2,
   MapPin,
   Phone,
   Mail,
   CreditCard,
   Calendar,
-  Clock,
   DollarSign,
   Hash,
   FileText,
@@ -19,7 +16,6 @@ import {
   AlertCircle,
   X,
   Search,
-  Filter,
   RefreshCw,
   Loader,
   BadgeCheck,
@@ -30,11 +26,12 @@ import {
   Bus,
   Music,
   Tv,
-  Tent,
-  Plus,
-  Minus,
   Eye,
-  EyeOff
+  EyeOff,
+  Star,
+  Award,
+  Wallet,
+  ReceiptText
 } from 'lucide-react';
 import '../styles/gere-paiement.css';
 import MiniSidebar from '../components/MiniSidebar';
@@ -58,7 +55,7 @@ const GerePaiement = () => {
   const [apiError, setApiError] = useState(null);
 
   const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth() + 1;
+
   const [filtreAnnee, setFiltreAnnee] = useState(currentYear);
   const [anneesDisponibles, setAnneesDisponibles] = useState([]);
 
@@ -71,22 +68,13 @@ const GerePaiement = () => {
 
   const notificationsAffichees = useRef(new Set());
 
+  // Type config sans "occ" (occasionnel)
   const typeConfig = {
-    hotel:   { label: 'Hôtels',        icon: Hotel,   color: '#4A90D9' },
-    'grand-surface': { label: 'Grandes Surfaces', icon: Store,  color: '#27ae60' },
-    bus:     { label: 'Bus',           icon: Bus,    color: '#f39c12' },
-    nightclub: { label: 'Night Clubs', icon: Music,  color: '#8e44ad' },
-    media:   { label: 'Médias',        icon: Tv,     color: '#e74c3c' },
-    occ:     { label: 'Occasionnels',  icon: Tent,   color: '#1abc9c' }
-  };
-
-  const typeTableMapping = {
-    hotel: 'usagers_hotel',
-    'grand-surface': 'usagers_magasin',
-    bus: 'usagers_bus',
-    nightclub: 'usagers_nightclub',
-    media: 'usagers_media',
-    occ: 'usagers_occasionnel'
+    hotel: { label: 'Hôtels', icon: Hotel },
+    'grand-surface': { label: 'Grandes Surfaces', icon: Store },
+    bus: { label: 'Bus', icon: Bus },
+    nightclub: { label: 'Night Clubs', icon: Music },
+    media: { label: 'Médias', icon: Tv }
   };
 
   const moisLabels = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
@@ -101,16 +89,49 @@ const GerePaiement = () => {
     } catch (err) { console.error(err); }
   }, []);
 
+  const checkNouveauxUsagers = useCallback(async () => {
+    try {
+      const countRes = await fetch('http://localhost:3001/api/usagers/nouveaux-compteur');
+      const countData = await countRes.json();
+      if (countData.success && countData.nouveaux) {
+        let totalNew = 0;
+        const idsTemp = {};
+        const typesFiltres = Object.keys(countData.nouveaux).filter(t => t !== 'occ');
+        for (const type of typesFiltres) {
+          if (countData.nouveaux[type] > 0) {
+            totalNew += countData.nouveaux[type];
+            const idsRes = await fetch(`http://localhost:3001/api/usagers/nouveaux-ids/${type}`);
+            const idsData = await idsRes.json();
+            idsTemp[type] = idsData.success ? idsData.ids : [];
+          } else {
+            idsTemp[type] = [];
+          }
+        }
+        setNouveauxIds(idsTemp);
+        const key = JSON.stringify(idsTemp);
+        if (totalNew > 0 && !notificationsAffichees.current.has(key)) {
+          notificationsAffichees.current.add(key);
+          setNotification({
+            type: 'info',
+            message: `${totalNew} nouveau(x) usager(s) ajouté(s)`,
+            onClick: () => {
+              setShowOnlyNouveaux(true);
+              setTimeout(() => setNotification(null), 5000);
+            }
+          });
+        }
+      }
+    } catch (err) { console.error(err); }
+  }, []);
+
   const loadAllData = useCallback(async () => {
     setLoading(true);
     setApiError(null);
     try {
-      // Stats
       const statsRes = await fetch('http://localhost:3001/api/paiements/stats');
       const statsData = await statsRes.json();
       if (statsData.success) setStats(statsData.stats);
 
-      // Usagers
       const url = `http://localhost:3001/api/usagers/paiements/${selectedType}`;
       const usagersRes = await fetch(url);
       const usagersData = await usagersRes.json();
@@ -141,7 +162,6 @@ const GerePaiement = () => {
         setApiError('Aucun usager trouvé');
       }
 
-      // Années disponibles
       try {
         const anRes = await fetch(`http://localhost:3001/api/paiements/annees-disponibles/${selectedType}`);
         const anData = await anRes.json();
@@ -165,56 +185,18 @@ const GerePaiement = () => {
       setUsagers([]);
       setFilteredUsagers([]);
       setAnneesDisponibles([currentYear, currentYear + 1]);
-      setNotification({ type: 'error', message: '❌ Erreur de chargement des données' });
+      setNotification({ type: 'error', message: 'Erreur de chargement des données' });
     } finally {
       setLoading(false);
     }
-  }, [selectedType, selectedRegion, currentYear]);
-
-  const checkNouveauxUsagers = useCallback(async () => {
-    try {
-      const countRes = await fetch('http://localhost:3001/api/usagers/nouveaux-compteur');
-      const countData = await countRes.json();
-      if (countData.success && countData.nouveaux) {
-        let totalNew = 0;
-        const idsTemp = {};
-        for (const [type, count] of Object.entries(countData.nouveaux)) {
-          if (count > 0) {
-            totalNew += count;
-            const idsRes = await fetch(`http://localhost:3001/api/usagers/nouveaux-ids/${type}`);
-            const idsData = await idsRes.json();
-            idsTemp[type] = idsData.success ? idsData.ids : [];
-          } else {
-            idsTemp[type] = [];
-          }
-        }
-        setNouveauxIds(idsTemp);
-        const key = JSON.stringify(idsTemp);
-        if (totalNew > 0 && !notificationsAffichees.current.has(key)) {
-          notificationsAffichees.current.add(key);
-          setNotification({
-            type: 'info',
-            message: `✨ ${totalNew} nouveau(x) usager(s) ajouté(s) !`,
-            onClick: () => {
-              setShowOnlyNouveaux(true);
-              setTimeout(() => setNotification(null), 5000);
-            }
-          });
-        }
-      }
-    } catch (err) { console.error(err); }
-  }, []);
+  }, [selectedType, selectedRegion, currentYear, checkNouveauxUsagers]);
 
   useEffect(() => {
     loadRegions();
     loadAllData();
   }, [loadRegions, loadAllData]);
 
-  useEffect(() => {
-    filterUsagers();
-  }, [searchTerm, usagers, showOnlyNouveaux, nouveauxIds, filtreAnnee, selectedType]);
-
-  const filterUsagers = () => {
+  const filterUsagers = useCallback(() => {
     let filtered = [...usagers];
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
@@ -225,147 +207,153 @@ const GerePaiement = () => {
         const email = (u.email || '').toLowerCase();
         const region = (u.region || '').toLowerCase();
         const adresse = (u.adresse || u.adresse_siege || '').toLowerCase();
-        const artistes = (u.artistes || '').toLowerCase();
         return nom.includes(term) || demandeur.includes(term) || telephone.includes(term) ||
-               email.includes(term) || region.includes(term) || adresse.includes(term) ||
-               artistes.includes(term);
+               email.includes(term) || region.includes(term) || adresse.includes(term);
       });
     }
     if (showOnlyNouveaux) {
-      if (selectedType === 'occ') {
-        filtered = filtered.filter(u => u.statut_paiement !== 'paye');
-      } else if (nouveauxIds[selectedType]?.length) {
+      if (nouveauxIds[selectedType]?.length) {
         filtered = filtered.filter(u => nouveauxIds[selectedType].includes(u.id));
       }
     }
     setFilteredUsagers(filtered);
+  }, [searchTerm, usagers, showOnlyNouveaux, nouveauxIds, selectedType]);
+
+  useEffect(() => {
+    filterUsagers();
+  }, [filterUsagers]);
+
+  // ========== FONCTIONS CORRIGÉES - AFFICHE TOUS LES MOIS PAYÉS ==========
+  
+  // ✅ Récupère la liste des mois payés pour une année donnée
+  const getMoisPayes = (usager, annee) => {
+    return usager.moisPayesParAnnee?.[annee] || [];
   };
 
-  // ========== UTILITAIRES ==========
+  // ✅ Récupère le mois de début de paiement
+  const getMoisDebut = (usager, annee) => {
+    const anneeData = usager.resumeAnnees?.find(a => a.annee === annee);
+    if (anneeData && anneeData.moisDebut) {
+      return anneeData.moisDebut;
+    }
+    return usager.moisCreation || 1;
+  };
+
+  // ✅ Récupère TOUS les mois payés (sans filtre de début)
+  const getMoisPayesComplet = (usager, annee) => {
+    return usager.moisPayesParAnnee?.[annee] || [];
+  };
+
+  // ✅ Affiche la progression des paiements (mois payés / 12)
   const getProgressionForYear = (usager, annee) => {
-    if (!usager.resumeAnnees) return 'Aucune donnée';
-    const anneeData = usager.resumeAnnees.find(a => a.annee === annee);
-    if (!anneeData) {
-      const moisDebut = usager.moisCreation || 1;
-      const moisTotalAttendus = 12 - moisDebut + 1;
-      return `0/${moisTotalAttendus}`;
+    // ✅ Utiliser TOUS les mois payés, pas seulement ceux après le début
+    const moisPayes = getMoisPayesComplet(usager, annee);
+    const nbMoisPayes = moisPayes.length;
+    
+    // ✅ Trier les mois payés pour l'affichage
+    const moisTries = [...moisPayes].sort((a, b) => a - b);
+    const affichageMois = moisTries.map(m => moisLabelsShort[m - 1]).join(', ');
+    
+    // ✅ Si 12 mois payés
+    if (nbMoisPayes >= 12) {
+      return '12/12 ✅';
     }
-    const nbMois = anneeData.nbMois || 0;
-    const moisTotalAttendus = anneeData.moisTotalAttendus || 12;
-    const moisDebut = anneeData.moisDebut || 1;
-    const moisPayes = usager.moisPayesParAnnee?.[annee] || [];
-    if (nbMois === 0) return `0/${moisTotalAttendus}`;
-    const moisValides = moisPayes.filter(m => m >= moisDebut);
-    const nbMoisValides = moisValides.length;
-    if (nbMoisValides >= moisTotalAttendus) {
-      const moisTries = [...moisValides].sort((a, b) => a - b);
-      const affichageMois = moisTries.map(m => moisLabelsShort[m - 1]).join(', ');
-      return `✅ 12/12${affichageMois ? ` (${affichageMois})` : ''}`;
+    
+    // ✅ Si des mois sont payés
+    if (nbMoisPayes > 0) {
+      return `${nbMoisPayes}/12 (${affichageMois})`;
     }
-    let affichageMois = '';
-    if (moisValides.length > 0) {
-      const moisTries = [...moisValides].sort((a, b) => a - b);
-      affichageMois = moisTries.map(m => moisLabelsShort[m - 1]).join(', ');
-    }
-    return `${nbMoisValides}/${moisTotalAttendus}${affichageMois ? ` (${affichageMois})` : ''}`;
+    
+    // ✅ Aucun mois payé
+    return '0/12';
   };
 
+  // ✅ Vérifie si l'usager est en retard (basé sur les mois payés)
   const isEnRetard = (usager) => {
-    if (selectedType === 'occ') return false;
-    const anneeData = usager.resumeAnnees?.find(a => a.annee === filtreAnnee);
-    if (!anneeData) return true;
-    const nbMois = anneeData.nbMois || 0;
-    const moisTotalAttendus = anneeData.moisTotalAttendus || 12;
-    const moisDebut = anneeData.moisDebut || 1;
-    if (nbMois >= moisTotalAttendus) return false;
+    const moisPayes = getMoisPayesComplet(usager, filtreAnnee);
+    const nbMoisPayes = moisPayes.length;
+    
+    // ✅ Si 12 mois payés, pas en retard
+    if (nbMoisPayes >= 12) return false;
+    
+    const moisDebut = getMoisDebut(usager, filtreAnnee);
     const moisActuel = new Date().getMonth() + 1;
     const anneeActuelle = new Date().getFullYear();
-    if (filtreAnnee === usager.anneeCreation) {
-      const moisEcoules = Math.max(0, moisActuel - moisDebut + 1);
-      return nbMois < moisEcoules && nbMois < moisTotalAttendus;
+    
+    // ✅ Pour l'année en cours
+    if (filtreAnnee === anneeActuelle) {
+      const moisEcoules = Math.min(moisActuel, 12) - moisDebut + 1;
+      return nbMoisPayes < moisEcoules && nbMoisPayes < 12;
     }
-    if (filtreAnnee < anneeActuelle) return nbMois < moisTotalAttendus;
-    const moisEcoules = Math.min(moisActuel, 12);
-    return nbMois < moisEcoules && nbMois < moisTotalAttendus;
+    
+    // ✅ Pour les années passées
+    if (filtreAnnee < anneeActuelle) {
+      return nbMoisPayes < 12;
+    }
+    
+    return false;
   };
 
+  // ✅ Affiche le badge de statut - CORRIGÉ
   const getStatusBadge = (usager) => {
-    if (selectedType === 'occ') {
-      if (usager.statut_paiement === 'paye' || (usager.montant_total && usager.montant_total > 0)) {
-        return <span className="badge-success"><BadgeCheck size={14} /> Payé</span>;
-      }
-      return <span className="badge-warning"><AlertCircle size={14} /> En attente</span>;
+    // ✅ Utiliser TOUS les mois payés
+    const moisPayes = getMoisPayesComplet(usager, filtreAnnee);
+    const nbMoisPayes = moisPayes.length;
+    
+    // ✅ Trier les mois payés pour l'affichage
+    const moisTries = [...moisPayes].sort((a, b) => a - b);
+    const affichageMois = moisTries.map(m => moisLabelsShort[m - 1]).join(', ');
+    
+    // ✅ Si 12 mois payés
+    if (nbMoisPayes >= 12) {
+      return <span className="badge badge-success"><CheckCircle size={14} /> 12/12 ✅</span>;
     }
-    const anneeData = usager.resumeAnnees?.find(a => a.annee === filtreAnnee);
-    if (!anneeData) {
-      const moisDebut = usager.moisCreation || 1;
-      const moisTotalAttendus = 12 - moisDebut + 1;
-      return <span className="badge-danger"><X size={14} /> 0/{moisTotalAttendus}</span>;
-    }
-    const nbMois = anneeData.nbMois || 0;
-    const moisTotalAttendus = anneeData.moisTotalAttendus || 12;
-    const moisDebut = anneeData.moisDebut || 1;
-    if (nbMois >= moisTotalAttendus) {
-      return <span className="badge-success"><CheckCircle size={14} /> 12/12</span>;
-    } else if (nbMois > 0) {
-      const moisRestants = moisTotalAttendus - nbMois;
-      const moisPayes = usager.moisPayesParAnnee?.[filtreAnnee] || [];
-      const moisValides = moisPayes.filter(m => m >= moisDebut);
-      const affichageMois = moisValides.map(m => moisLabelsShort[m - 1]).join(', ');
+    
+    // ✅ Si des mois sont payés
+    if (nbMoisPayes > 0) {
+      const moisRestants = 12 - nbMoisPayes;
       return (
-        <span className="badge-warning">
-          <AlertTriangle size={14} /> {nbMois}/{moisTotalAttendus}
-          {affichageMois ? ` (${affichageMois})` : ''}
-          <span className="badge-sub">{moisRestants} mois restants</span>
+        <span className="badge badge-warning">
+          <AlertTriangle size={14} /> {nbMoisPayes}/12
+          <span className="badge-sub"> ({affichageMois})</span>
+          <span className="badge-sub" style={{ display: 'block', marginTop: '2px' }}>
+            {moisRestants} mois restants
+          </span>
         </span>
       );
     }
-    return <span className="badge-danger"><X size={14} /> 0/{moisTotalAttendus}</span>;
-  };
-
-  const getSpecificInfo = (usager, type) => {
-    switch(type) {
-      case 'hotel': return usager.etoiles ? `${usager.etoiles}⭐` : '-';
-      case 'grand-surface': return usager.nombre_magasins ? `${usager.nombre_magasins} mag` : '-';
-      case 'bus': return usager.nombre_vehicules ? `${usager.nombre_vehicules} bus` : '-';
-      case 'nightclub': return usager.jauge_max ? `${usager.jauge_max} pl` : '-';
-      case 'media': return usager.frequence || usager.canal || '-';
-      case 'occ': return usager.artistes || usager.nom_evenement || usager.genre_manifestation || '-';
-      default: return '-';
-    }
+    
+    // ✅ Aucun mois payé
+    return <span className="badge badge-danger"><X size={14} /> 0/12</span>;
   };
 
   const getFullInfo = (usager, type) => {
     const infos = [];
-    if (usager.adresse || usager.adresse_siege) infos.push(usager.adresse || usager.adresse_siege);
-    if (usager.region && usager.region !== 'N/A') infos.push(`📍 ${usager.region}`);
-    if (usager.email) infos.push(`📧 ${usager.email}`);
-    switch(type) {
+    if (usager.adresse || usager.adresse_siege) infos.push({ icon: null, text: usager.adresse || usager.adresse_siege });
+    if (usager.region && usager.region !== 'N/A') infos.push({ icon: MapPin, text: usager.region });
+    if (usager.email) infos.push({ icon: Mail, text: usager.email });
+    switch (type) {
       case 'hotel':
-        if (usager.etoiles) infos.push(`${usager.etoiles}⭐`);
-        if (usager.ravinala) infos.push('🏆 Ravinala');
+        if (usager.etoiles) infos.push({ icon: Star, text: `${usager.etoiles} étoiles` });
+        if (usager.ravinala) infos.push({ icon: Award, text: 'Label Ravinala' });
         break;
       case 'grand-surface':
-        if (usager.nombre_magasins) infos.push(`${usager.nombre_magasins} magasins`);
-        if (usager.activite) infos.push(usager.activite);
+        if (usager.nombre_magasins) infos.push({ icon: Store, text: `${usager.nombre_magasins} magasins` });
+        if (usager.activite) infos.push({ icon: FileText, text: usager.activite });
         break;
       case 'bus':
-        if (usager.nombre_vehicules) infos.push(`${usager.nombre_vehicules} bus`);
-        if (usager.lignes) infos.push(`Ligne: ${usager.lignes}`);
-        if (usager.trajet) infos.push(`Trajet: ${usager.trajet}`);
+        if (usager.nombre_vehicules) infos.push({ icon: Bus, text: `${usager.nombre_vehicules} bus` });
+        if (usager.lignes) infos.push({ icon: MapPin, text: `Ligne : ${usager.lignes}` });
+        if (usager.trajet) infos.push({ icon: MapPin, text: `Trajet : ${usager.trajet}` });
         break;
       case 'nightclub':
-        if (usager.jauge_max) infos.push(`Jauge: ${usager.jauge_max}`);
+        if (usager.jauge_max) infos.push({ icon: Users, text: `Jauge : ${usager.jauge_max}` });
         break;
       case 'media':
-        if (usager.frequence) infos.push(`Fréquence: ${usager.frequence}`);
-        if (usager.canal) infos.push(`Canal: ${usager.canal}`);
+        if (usager.frequence) infos.push({ icon: Tv, text: `Fréquence : ${usager.frequence}` });
+        if (usager.canal) infos.push({ icon: Tv, text: `Canal : ${usager.canal}` });
         break;
-      case 'occ':
-        if (usager.nom_evenement) infos.push(`🎪 ${usager.nom_evenement}`);
-        if (usager.date_evenement) infos.push(`📅 ${formatDate(usager.date_evenement)}`);
-        if (usager.lieu_evenement) infos.push(`📍 ${usager.lieu_evenement}`);
-        if (usager.artistes) infos.push(`🎤 ${usager.artistes}`);
+      default:
         break;
     }
     return infos;
@@ -383,89 +371,23 @@ const GerePaiement = () => {
     } catch { return dateString; }
   };
 
-  // ========== MODALE ==========
+  // ========== REDIRECTION VERS PAIEMENT MENSUEL ==========
   const openPaymentModal = (usager) => {
-    setSelectedUsager(usager);
-    setPaymentDate(new Date().toISOString().split('T')[0]);
-    setSelectedYear(filtreAnnee);
-    setNombreMois(1);
-    setIsSubmitting(false);
-    if (selectedType === 'occ') {
-      const montantSansFrais = usager.montant_total || 0;
-      setMontantPayer(montantSansFrais.toString());
-      setMontantTotal(montantSansFrais);
-      setMontantMensuelOriginal(montantSansFrais);
-    } else {
-      const montantMensuel = usager.montant_mensuel || 0;
-      setMontantMensuelOriginal(montantMensuel);
-      setMontantPayer(montantMensuel.toString());
-      setMontantTotal(montantMensuel);
+    if (!usager || !usager.id) {
+      setNotification({ type: 'error', message: 'Usager invalide' });
+      return;
     }
-    setShowModal(true);
-  };
 
-  const closeModal = () => {
-    setShowModal(false);
-    setSelectedUsager(null);
-    setNombreMois(1);
-    setIsSubmitting(false);
-  };
-
-  const updateNombreMois = (nb) => {
-    setNombreMois(nb);
-    // le montant reste saisi par l'utilisateur
-  };
-
-  const updateMontant = (value) => {
-    const montant = parseFloat(value) || 0;
-    setMontantPayer(montant.toString());
-    setMontantTotal(montant);
-  };
-
-  const submitPayment = async () => {
-    if (isSubmitting || !selectedUsager) return;
-    setIsSubmitting(true);
-    try {
-      const token = localStorage.getItem('adminToken');
-      const payload = {
-        usagerId: selectedUsager.id,
+    navigate('/paiement-mensuel', {
+      state: {
+        usagerId: usager.id,
         usagerType: selectedType,
-        montant: montantTotal,
-        datePaiement: paymentDate,
-        nombreMois: selectedType !== 'occ' ? nombreMois : 1,
-        anneeDebut: selectedYear
-      };
-      const res = await fetch('http://localhost:3001/api/paiements/enregistrer', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'adminToken': token },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (data.success) {
-        setNotification({ type: 'success', message: '✅ Paiement enregistré avec succès !' });
-        try {
-          await fetch('http://localhost:3001/api/usagers/marquer-vu', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'adminToken': token },
-            body: JSON.stringify({ usagerId: selectedUsager.id, type: selectedType })
-          });
-        } catch {}
-        setTimeout(() => setNotification(null), 3000);
-        closeModal();
-        await loadAllData();
-      } else {
-        setNotification({ type: 'error', message: '❌ ' + data.message });
-        setTimeout(() => setNotification(null), 3000);
-        setIsSubmitting(false);
+        usagerData: usager
       }
-    } catch (err) {
-      console.error(err);
-      setNotification({ type: 'error', message: '❌ Erreur lors de l\'enregistrement' });
-      setTimeout(() => setNotification(null), 3000);
-      setIsSubmitting(false);
-    }
+    });
   };
 
+  // ========== GESTION DU CHANGEMENT DE TYPE ==========
   const handleTypeChange = (typeName) => {
     setSelectedType(typeName);
     setShowOnlyNouveaux(false);
@@ -475,64 +397,83 @@ const GerePaiement = () => {
 
   const handleRetour = () => navigate('/billan');
 
+  const notificationIcon = {
+    success: CheckCircle,
+    error: AlertCircle,
+    info: Info,
+    warning: AlertTriangle
+  };
+
   // ========== RENDU ==========
   return (
     <>
       <MiniSidebar />
       <main className="contenu-paiement">
         {/* Notification */}
-        {notification && (
-          <div className={`notif ${notification.type}`} onClick={notification.onClick} style={{ cursor: notification.onClick ? 'pointer' : 'default' }}>
-            {notification.type === 'success' && <CheckCircle size={20} />}
-            {notification.type === 'error' && <AlertCircle size={20} />}
-            {notification.type === 'info' && <Info size={20} />}
-            {notification.type === 'warning' && <AlertTriangle size={20} />}
-            <span>{notification.message}</span>
-            <button className="notif-close" onClick={(e) => { e.stopPropagation(); setNotification(null); }}><X size={18} /></button>
-          </div>
-        )}
+        {notification && (() => {
+          const NotifIcon = notificationIcon[notification.type] || Info;
+          return (
+            <div
+              className={`notif notif-${notification.type}`}
+              onClick={notification.onClick}
+              role={notification.onClick ? 'button' : undefined}
+              tabIndex={notification.onClick ? 0 : undefined}
+            >
+              <NotifIcon size={18} className="notif-icon" />
+              <span className="notif-message">{notification.message}</span>
+              <button
+                type="button"
+                className="notif-close"
+                onClick={(e) => { e.stopPropagation(); setNotification(null); }}
+                aria-label="Fermer la notification"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          );
+        })()}
 
         <div className="paiement-container">
-          {/* HEADER AMÉLIORÉ */}
+          {/* HEADER */}
           <header className="paiement-header">
             <div className="header-left">
-              <button className="btn-retour" onClick={handleRetour}>
-                <ArrowLeft size={20} /> Retour
+              <button type="button" className="btn-retour" onClick={handleRetour}>
+                <ArrowLeft size={18} /> Retour
               </button>
-              <div className="header-title">
-                <h1>💰 Gestion des paiements</h1>
-                <p className="header-subtitle">Suivez et gérez les paiements mensuels de vos usagers</p>
+              <div className="header-title-group">
+                <span className="header-icon-badge"><Wallet size={20} /></span>
+                <div className="header-title">
+                  <h1>Gestion des paiements</h1>
+                  <p className="header-subtitle">Suivez et gérez les paiements mensuels de vos usagers</p>
+                </div>
               </div>
             </div>
             <div className="header-right">
-              <span className="header-badge">Année {currentYear}</span>
+              <span className="header-badge"><Calendar size={14} /> Année {currentYear}</span>
             </div>
           </header>
 
-          {/* Types & Stats */}
+          {/* Types & Stats - 5 types alignés */}
           <div className="types-stats">
             {Object.keys(typeConfig).map((type) => {
               const Icon = typeConfig[type].icon;
-              const color = typeConfig[type].color;
               const isActive = selectedType === type;
               const count = stats?.[type]?.total || 0;
               const hasNew = nouveauxIds[type]?.length > 0;
               return (
-                <div
+                <button
+                  type="button"
                   key={type}
                   className={`type-stat ${isActive ? 'active' : ''}`}
                   onClick={() => handleTypeChange(type)}
-                  style={{ borderColor: isActive ? color : 'transparent' }}
                 >
-                  <div className="type-stat-icon" style={{ color }}>
-                    <Icon size={24} />
-                  </div>
-                  <div className="type-stat-info">
+                  <span className="type-stat-icon"><Icon size={20} /></span>
+                  <span className="type-stat-info">
                     <span className="type-stat-name">{typeConfig[type].label}</span>
                     <span className="type-stat-count">{count}</span>
-                  </div>
+                  </span>
                   {hasNew && <span className="type-stat-alert">{nouveauxIds[type].length}</span>}
-                </div>
+                </button>
               );
             })}
           </div>
@@ -547,10 +488,10 @@ const GerePaiement = () => {
                   {regions.map(r => <option key={r.id} value={r.nom}>{r.nom}</option>)}
                 </select>
               </div>
-              {anneesDisponibles.length > 0 && selectedType !== 'occ' && (
+              {anneesDisponibles.length > 0 && (
                 <div className="filter-group">
                   <Calendar size={16} className="filter-icon" />
-                  <select value={filtreAnnee} onChange={(e) => setFiltreAnnee(parseInt(e.target.value))} className="filter-select">
+                  <select value={filtreAnnee} onChange={(e) => setFiltreAnnee(parseInt(e.target.value, 10))} className="filter-select">
                     {anneesDisponibles.map(y => <option key={y} value={y}>{y}</option>)}
                   </select>
                 </div>
@@ -566,12 +507,16 @@ const GerePaiement = () => {
               </div>
             </div>
             <div className="filters-right">
-              {showOnlyNouveaux && (
-                <button className="btn-show" onClick={() => setShowOnlyNouveaux(false)}>
+              {showOnlyNouveaux ? (
+                <button type="button" className="btn-secondary" onClick={() => setShowOnlyNouveaux(false)}>
                   <EyeOff size={16} /> Tous les usagers
                 </button>
+              ) : (
+                <button type="button" className="btn-secondary" onClick={() => setShowOnlyNouveaux(true)}>
+                  <Eye size={16} /> Nouveaux uniquement
+                </button>
               )}
-              <button className="btn-refresh" onClick={loadAllData}>
+              <button type="button" className="btn-refresh" onClick={loadAllData}>
                 <RefreshCw size={16} /> Rafraîchir
               </button>
             </div>
@@ -580,22 +525,23 @@ const GerePaiement = () => {
           {/* Table */}
           <div className="table-wrapper">
             {loading ? (
-              <div className="loading">
-                <Loader size={40} className="spinner" />
+              <div className="state-block">
+                <Loader size={32} className="spinner" />
                 <p>Chargement des données...</p>
               </div>
             ) : apiError ? (
-              <div className="empty error">
-                <AlertCircle size={32} />
+              <div className="state-block state-error">
+                <AlertCircle size={28} />
                 <p>{apiError}</p>
-                <button className="btn-refresh" onClick={loadAllData}>
+                <button type="button" className="btn-refresh" onClick={loadAllData}>
                   <RefreshCw size={16} /> Rafraîchir
                 </button>
               </div>
             ) : filteredUsagers.length === 0 ? (
-              <div className="empty">
+              <div className="state-block">
+                <FileText size={28} />
                 <p>{showOnlyNouveaux ? 'Aucun nouvel usager en attente' : 'Aucun résultat trouvé'}</p>
-                <button className="btn-refresh" onClick={loadAllData}>
+                <button type="button" className="btn-refresh" onClick={loadAllData}>
                   <RefreshCw size={16} /> Rafraîchir
                 </button>
               </div>
@@ -608,62 +554,93 @@ const GerePaiement = () => {
                     <th>Demandeur</th>
                     <th>Contact</th>
                     <th>Informations</th>
-                    {selectedType !== 'occ' && <th>Pmt {filtreAnnee}</th>}
+                    <th>Pmt {filtreAnnee}</th>
                     <th>Statut</th>
                     <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredUsagers.map((u) => {
-                    const isNew = selectedType === 'occ'
-                      ? u.statut_paiement !== 'paye'
-                      : nouveauxIds[selectedType]?.includes(u.id) || u.estNouveau;
+                    const isNew = nouveauxIds[selectedType]?.includes(u.id) || u.estNouveau;
                     const isLate = isEnRetard(u);
                     const fullInfos = getFullInfo(u, selectedType);
+                    
+                    // ✅ Utiliser TOUS les mois payés
+                    const moisPayes = getMoisPayesComplet(u, filtreAnnee);
+                    const moisTries = [...moisPayes].sort((a, b) => a - b);
+                    const affichageMoisPayes = moisTries.map(m => moisLabelsShort[m - 1]).join(', ');
+                    const nbMoisPayes = moisTries.length;
+                    
                     return (
-                      <tr key={u.id} className={`${isLate ? 'late' : ''} ${isNew ? 'new' : ''}`}>
+                      <tr key={u.id} className={`${isLate ? 'row-late' : ''} ${isNew ? 'row-new' : ''}`}>
                         <td data-label="ID">
-                          #{String(u.id).padStart(3, '0')}
-                          {isNew && <span className="badge-new">NOUVEAU</span>}
-                          {isLate && <span className="badge-late">!</span>}
+                          <span className="id-cell">
+                            #{String(u.id).padStart(3, '0')}
+                            {isNew && <span className="tag tag-new">Nouveau</span>}
+                            {isLate && <span className="tag tag-late"><AlertTriangle size={12} /></span>}
+                          </span>
                         </td>
                         <td data-label="Nom" className="name">
                           <strong>{u.denomination || u.nom_evenement || u.organisateurs || 'Sans nom'}</strong>
-                          {u.region && u.region !== 'N/A' && <div className="usager-region"><MapPin size={12} /> {u.region}</div>}
-                          {u.adresse || u.adresse_siege ? <div className="usager-adresse">{u.adresse || u.adresse_siege}</div> : null}
+                          {u.region && u.region !== 'N/A' && <div className="usager-sub"><MapPin size={12} /> {u.region}</div>}
+                          {u.adresse || u.adresse_siege ? <div className="usager-sub">{u.adresse || u.adresse_siege}</div> : null}
                           {u.moisCreation && u.moisCreation > 1 && (
-                            <div className="usager-creation"><Calendar size={12} /> Début: {moisLabelsShort[u.moisCreation - 1]} {u.anneeCreation}</div>
+                            <div className="usager-sub"><Calendar size={12} /> Début : {moisLabelsShort[u.moisCreation - 1]} {u.anneeCreation}</div>
                           )}
                         </td>
                         <td data-label="Demandeur">
                           <div className="demandeur-info">
                             <strong>{u.demandeur || u.representant_par || '-'}</strong>
-                            {u.representant_nom && <div className="usager-detail">Rep: {u.representant_nom}</div>}
+                            {u.representant_nom && <div className="usager-sub">Rep. {u.representant_nom}</div>}
                           </div>
                         </td>
                         <td data-label="Contact">
                           <div className="contact-info">
-                            {u.telephone && <div className="usager-phone"><Phone size={12} /> {u.telephone}</div>}
-                            {u.email && <div className="usager-email"><Mail size={12} /> {u.email}</div>}
+                            {u.telephone && <div className="usager-sub"><Phone size={12} /> {u.telephone}</div>}
+                            {u.email && <div className="usager-sub"><Mail size={12} /> {u.email}</div>}
                           </div>
                         </td>
                         <td data-label="Informations">
                           <div className="usager-infos">
-                            {fullInfos.length > 0 ? fullInfos.map((info, i) => <div key={i} className="usager-info-item">{info}</div>) : <span className="usager-info-empty">-</span>}
-                            {selectedType === 'occ' && u.montant_total > 0 && <div className="usager-info-item montant-info"><DollarSign size={12} /> {u.montant_total.toLocaleString()} Ar</div>}
+                            {fullInfos.length > 0 ? fullInfos.map((info, i) => (
+                              <div key={i} className="usager-info-item">
+                                {info.icon ? <info.icon size={12} /> : null}
+                                <span>{info.text}</span>
+                              </div>
+                            )) : <span className="usager-info-empty">Aucune information</span>}
                           </div>
                         </td>
-                        {selectedType !== 'occ' && (
-                          <td data-label="Pmt">
-                            <div className="pmt-info">
-                              {getProgressionForYear(u, filtreAnnee)}
-                              {u.montant_mensuel > 0 && <div className="usager-montant-mensuel">{u.montant_mensuel.toLocaleString()} Ar/mois</div>}
-                            </div>
-                          </td>
-                        )}
+                        <td data-label="Pmt">
+                          <div className="pmt-info">
+                            {/* ✅ Afficher TOUS les mois payés */}
+                            {nbMoisPayes >= 12 ? (
+                              <>
+                                <span style={{ fontWeight: 'bold', color: '#198754' }}>12/12 ✅</span>
+                                <div className="pmt-detail" style={{ fontSize: '10px', color: '#198754', marginTop: '2px' }}>
+                                  Tous les mois payés
+                                </div>
+                              </>
+                            ) : nbMoisPayes > 0 ? (
+                              <>
+                                <span style={{ fontWeight: '600' }}>{nbMoisPayes}/12</span>
+                                <span style={{ fontSize: '12px', color: '#0d6efd' }}> ({affichageMoisPayes})</span>
+                                <div className="pmt-detail" style={{ fontSize: '10px', color: '#6c757d', marginTop: '2px' }}>
+                                  Payés : {affichageMoisPayes}
+                                </div>
+                              </>
+                            ) : (
+                              <span style={{ color: '#dc3545' }}>0/12</span>
+                            )}
+                            {u.montant_mensuel > 0 && <div className="pmt-montant">{u.montant_mensuel.toLocaleString()} Ar / mois</div>}
+                          </div>
+                        </td>
                         <td data-label="Statut">{getStatusBadge(u)}</td>
                         <td data-label="Action">
-                          <button className="btn-pay" onClick={() => openPaymentModal(u)}>
+                          <button 
+                            type="button" 
+                            className="btn-pay" 
+                            onClick={() => openPaymentModal(u)}
+                          >
                             <CreditCard size={14} /> Payer
                           </button>
                         </td>
@@ -676,93 +653,6 @@ const GerePaiement = () => {
           </div>
         </div>
       </main>
-
-      {/* MODALE */}
-      {showModal && selectedUsager && (
-        <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3><CreditCard size={20} /> Enregistrer un paiement</h3>
-              <button className="modal-close" onClick={closeModal}><X size={24} /></button>
-            </div>
-            <div className="modal-body">
-              <div className="usager-info">
-                <div className="info-row"><span className="info-label">Nom :</span><strong>{selectedUsager.denomination || selectedUsager.nom_evenement || selectedUsager.organisateurs || '-'}</strong></div>
-                <div className="info-row"><span className="info-label">Demandeur :</span><span>{selectedUsager.demandeur || selectedUsager.representant_par || '-'}</span></div>
-                <div className="info-row"><span className="info-label">Téléphone :</span><span>{selectedUsager.telephone || '-'}</span></div>
-                <div className="info-row"><span className="info-label">Région :</span><span>{selectedUsager.region || '-'}</span></div>
-                {selectedType !== 'occ' && (
-                  <>
-                    <div className="info-row"><span className="info-label">Montant mensuel :</span><span className="montant-highlight">{montantMensuelOriginal.toLocaleString()} Ar</span></div>
-                    {selectedUsager.moisCreation && selectedUsager.moisCreation > 1 && (
-                      <div className="info-row"><span className="info-label">Début paiement :</span><span>{moisLabels[selectedUsager.moisCreation - 1]} {selectedUsager.anneeCreation}</span></div>
-                    )}
-                  </>
-                )}
-                {selectedType === 'occ' && (
-                  <>
-                    <div className="info-row"><span className="info-label">Genre :</span><span>{selectedUsager.genre_manifestation || '-'}</span></div>
-                    <div className="info-row"><span className="info-label">Date événement :</span><span>{formatDate(selectedUsager.date_evenement) || '-'}</span></div>
-                    <div className="info-row"><span className="info-label">Lieu :</span><span>{selectedUsager.lieu_evenement || '-'}</span></div>
-                    <div className="info-row"><span className="info-label">Montant à payer :</span><span className="montant-highlight">{montantMensuelOriginal.toLocaleString()} Ar</span></div>
-                    <div className="info-row"><span className="info-label">Frais de dossier :</span><span className="montant-highlight">{(selectedUsager.frais_dossier || 5000).toLocaleString()} Ar</span></div>
-                  </>
-                )}
-              </div>
-
-              <div className="payment-form">
-                <div className="form-group">
-                  <label><Calendar size={16} /> Date de paiement</label>
-                  <input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
-                </div>
-                {selectedType !== 'occ' && (
-                  <div className="form-group">
-                    <label><Calendar size={16} /> Année de paiement</label>
-                    <select value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))}>
-                      {anneesDisponibles.map(y => <option key={y} value={y}>{y}</option>)}
-                    </select>
-                  </div>
-                )}
-                {selectedType !== 'occ' && (
-                  <div className="form-group">
-                    <label><Hash size={16} /> Nombre de mois</label>
-                    <select value={nombreMois} onChange={(e) => updateNombreMois(parseInt(e.target.value))}>
-                      {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => <option key={n} value={n}>{n} mois</option>)}
-                    </select>
-                  </div>
-                )}
-                <div className="form-group">
-                  <label><DollarSign size={16} /> Montant (Ar)</label>
-                  <input type="number" value={montantPayer} onChange={(e) => updateMontant(e.target.value)} placeholder="Saisir le montant" step="1" min="0" />
-                  <small className="field-hint">
-                    {selectedType !== 'occ' ? `Montant mensuel de référence : ${montantMensuelOriginal.toLocaleString()} Ar` : `Montant de la manifestation (sans frais de dossier)`}
-                  </small>
-                </div>
-                <div className="total-payment">
-                  <span>Total à payer :</span>
-                  <strong>{(montantTotal + (selectedType === 'occ' ? (selectedUsager?.frais_dossier || 5000) : 0)).toLocaleString()} Ar</strong>
-                </div>
-                {selectedType === 'occ' && (
-                  <div className="payment-detail">
-                    <small>Détail: {montantTotal.toLocaleString()} Ar (manifestation) + {(selectedUsager?.frais_dossier || 5000).toLocaleString()} Ar (frais de dossier)</small>
-                  </div>
-                )}
-                {selectedType !== 'occ' && (
-                  <div className="payment-detail">
-                    <small>Paiement de {nombreMois} mois • Montant saisi: {montantTotal.toLocaleString()} Ar</small>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn-cancel" onClick={closeModal}><X size={16} /> Annuler</button>
-              <button className="btn-validate" onClick={submitPayment} disabled={isSubmitting || montantTotal <= 0}>
-                {isSubmitting ? <><Loader size={16} className="spinner-inline" /> Traitement...</> : <><CheckCircle size={16} /> Valider le paiement</>}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 };
