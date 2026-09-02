@@ -1,8 +1,8 @@
 // server/routes/regions.js
 const express = require('express');
 const router = express.Router();
-const pool = require('../database');
-const { verifyAdminToken } = require('../middleware');
+const { pool } = require('../database');
+const { requireSuperAdmin } = require('../middleware');
 
 // ============================================================
 // GET /api/regions – Récupérer toutes les régions

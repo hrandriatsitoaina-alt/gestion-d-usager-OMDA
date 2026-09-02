@@ -490,6 +490,7 @@ const finalData = {
   const renderStep1 = () => {
     const globalParts = globalDossierNumber.split('/');
     const globalCount = globalParts[0] || '0';
+    const globalDay = String(new Date().getDate()).padStart(2, '0');
     const globalMonth = String(new Date().getMonth() + 1).padStart(2, '0');
     const globalYear = new Date().getFullYear();
     const globalDisplay = `${globalCount}/${globalMonth}/${globalYear}`;
@@ -509,7 +510,7 @@ const finalData = {
           </div>
           <div className="user-info-row">
             <FileText size={18} strokeWidth={2} />
-            <span>Dossier Global: <strong>{globalDisplay}</strong></span>
+            <span>Dossier Global: <strong>{globalCount}/{globalDay}/{globalMonth}/{globalYear}</strong></span>
             <span style={{ marginLeft: '20px', color: '#007bff' }}>{userDossierDisplay}</span>
           </div>
           <div className="user-info-row" style={{ fontSize: '12px', color: '#6c757d' }}>
@@ -782,10 +783,9 @@ const finalData = {
   const renderStep4 = () => {
     const globalParts = globalDossierNumber.split('/');
     const globalCount = globalParts[0] || '0';
+    const globalDay = String(new Date().getDate()).padStart(2, '0');
     const globalMonth = String(new Date().getMonth() + 1).padStart(2, '0');
     const globalYear = new Date().getFullYear();
-    const globalDisplay = `${globalCount}/${globalMonth}/${globalYear}`;
-
     const prefix = userInfo.prefix || '';
     const nextCompteur = (userInfo.compteurs?.['OCC'] || 0) + 1;
     const currentMonth = new Date().getMonth() + 1;
@@ -812,7 +812,7 @@ const finalData = {
           <p><Clock size={16} strokeWidth={2} /> Cas de retard: <strong>{isRetard ? 'Oui' : 'Non'}</strong> {isRetard && `(Pénalité: ${formatNumber(montantRetard)} Ar)`}</p>
         </div>
         <table className="recap-table"><tbody>
-          <tr><td><FileText size={16} strokeWidth={2} /> Dossier Global N° {globalDisplay}</td><td><strong>{userDossierDisplay}</strong></td></tr>
+          <tr><td><FileText size={16} strokeWidth={2} /> Dossier Global N° {globalCount}/{globalDay}/{globalMonth}/{globalYear}</td><td><strong>{userDossierDisplay}</strong></td></tr>
           <tr><td><Users size={16} strokeWidth={2} /> Organisateurs</td><td>{occData.organisateurs || '-'}</td></tr>
           <tr><td><User size={16} strokeWidth={2} /> Representé par</td><td>{occData.representantPar || '-'}</td></tr>
           <tr><td><Music size={16} strokeWidth={2} /> Genre manifestation</td><td>{occData.genreManifestation || '-'}</td></tr>

@@ -1,137 +1,57 @@
 // server/middleware/auth.js
 const config = require('../config');
-const pool = require('../database');
+const jwt = require('jsonwebtoken'); 
 
-// -------------------------------------------------------------------
-// Middleware : vérification du token administrateur
-// -------------------------------------------------------------------
-const verifyAdminToken = (req, res, next) => {
-  // Récupération du token dans les en-têtes (accepte les deux cas)
-  const adminToken = req.headers.adminToken || req.headers['admintoken'];
-  console.log('🔐 verifyAdminToken - token reçu :', adminToken);
+// ============================================================
+// Vérifie un JWT valide et pose req.user = { id, role, email }
+// C'est LE middleware à utiliser pour toute route protégée
+// (change-password, current-user, users, stats, etc.)
+// ============================================================
 
-  // 1. Vérifier que le token est présent
-  if (!adminToken) {
-    console.warn('❌ Token manquant');
-    return res.status(403).json({
-      success: false,
-      message: 'Non autorisé - Token manquant'
-    });
+const authMiddleware = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, message: 'Token manquant.' });
   }
 
-  // 2. Tokens de test (pour le développement)
-  //    On accepte les tokens connus utilisés par le front-end
-  const knownTokens = [
-    'super_admin_secret_2026',
-    'super_admin_token_2026',
-    'admin_secret_2026',
-    config.ADMIN_SECRET_TOKEN,
-    config.DAF_SECRET_TOKEN,
-  ].filter(Boolean); // retire les undefined
+  const token = authHeader.split(' ')[1];
 
-  if (knownTokens.includes(adminToken)) {
-    console.log('✅ Token admin valide (reconnu)');
-    req.userId = null; // aucun ID spécifique, mais autorisé
-    return next();
-  }
-
-  // 3. Si le token est un email, on cherche l'utilisateur dans la base
-  //    (utile si on utilise les emails comme tokens)
-  pool.query(
-    'SELECT id FROM utilisateurs WHERE email = $1',
-    [adminToken],
-    (err, result) => {
-      if (err) {
-        console.error('❌ Erreur SQL dans verifyAdminToken:', err);
-        return res.status(500).json({
-          success: false,
-          message: 'Erreur interne du serveur'
-        });
-      }
-      if (result.rows.length === 0) {
-        console.warn('❌ Aucun utilisateur trouvé pour le token:', adminToken);
-        return res.status(403).json({
-          success: false,
-          message: 'Token invalide - utilisateur non trouvé'
-        });
-      }
-      // Succès : on associe l'ID utilisateur
-      req.userId = result.rows[0].id;
-      console.log('✅ Token email valide, utilisateur ID:', req.userId);
-      next();
-    }
-  );
-};
-
-// -------------------------------------------------------------------
-// Middleware : vérification du token DAF
-// -------------------------------------------------------------------
-const verifyDAFToken = (req, res, next) => {
-  const adminToken = req.headers.adminToken || req.headers['admintoken'];
-  console.log('🔐 verifyDAFToken - token reçu :', adminToken);
-
-  if (!adminToken) {
-    return res.status(403).json({
-      success: false,
-      message: 'Non autorisé - Token manquant'
-    });
-  }
-
-  // Tokens acceptés pour DAF
-  const dafTokens = [
-    'daf_secret_2026',
-    config.DAF_SECRET_TOKEN,
-  ].filter(Boolean);
-
-  if (dafTokens.includes(adminToken)) {
-    console.log('✅ Token DAF valide');
-    req.userId = null;
-    return next();
-  }
-
-  // Sinon, essayer de trouver l'utilisateur par email
-  pool.query(
-    'SELECT id FROM utilisateurs WHERE email = $1',
-    [adminToken],
-    (err, result) => {
-      if (err || result.rows.length === 0) {
-        return res.status(403).json({
-          success: false,
-          message: 'Token invalide'
-        });
-      }
-      req.userId = result.rows[0].id;
-      next();
-    }
-  );
-};
-
-// -------------------------------------------------------------------
-// Middleware : autoriser tout utilisateur (pour paiements)
-// -------------------------------------------------------------------
-const verifyAnyUser = (req, res, next) => {
-  const adminToken = req.headers.adminToken || req.headers['admintoken'];
-  console.log('🔐 verifyAnyUser - token reçu :', adminToken);
-
-  // On autorise toujours, mais on essaie d'extraire l'ID si possible
-  if (adminToken) {
-    pool.query(
-      'SELECT id FROM utilisateurs WHERE email = $1',
-      [adminToken],
-      (err, result) => {
-        if (!err && result.rows.length > 0) {
-          req.userId = result.rows[0].id;
-        }
-        next();
-      }
-    );
-  } else {
+  try {
+    const decoded = jwt.verify(token, config.JWT_SECRET);
+    req.user = decoded; // { id, role, email }
     next();
+  } catch (err) {
+    return res.status(401).json({ success: false, message: 'Token invalide ou expiré.' });
   }
+};
+
+// ============================================================
+// Vérifie un JWT valide ET que le rôle est super_admin
+// ============================================================
+const requireSuperAdmin = (req, res, next) => {
+  authMiddleware(req, res, () => {
+    if (req.user.role !== 'super_admin') {
+      return res.status(403).json({ success: false, message: 'Accès réservé au Super Admin.' });
+    }
+    next();
+  });
+};
+
+// ============================================================
+// Vérifie un JWT valide ET que le rôle est super_admin ou daf
+// ============================================================
+const requireAdminOrDaf = (req, res, next) => {
+  authMiddleware(req, res, () => {
+    if (req.user.role !== 'super_admin' && req.user.role !== 'daf') {
+      return res.status(403).json({ success: false, message: 'Accès réservé aux administrateurs.' });
+    }
+    next();
+  });
 };
 
 module.exports = {
-  verifyAdminToken,
-  verifyDAFToken,
-  verifyAnyUser
+  authMiddleware,        // usage par défaut : n'importe quel utilisateur connecté
+  requireSuperAdmin,      // usage : routes réservées au super admin
+  requireAdminOrDaf       // usage : routes réservées à super_admin + daf
 };

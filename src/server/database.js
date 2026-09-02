@@ -1,27 +1,20 @@
-// server/database.js
-const { Pool } = require('pg');
+require('dotenv').config(); // Charger les variables d'environnement depuis le fichier .env
+const bcrypt = require('bcryptjs'); // Pour le hashage des mots de passe
+const { Pool } = require('pg'); // Pour se connecter à PostgreSQL
+
+// il faut installer bcrypt pour le hashage des mdp;
+//  jsonwebtoken pour la gestion des tokens JWT
+// npm install bcryptjs jsonwebtoken
 
 // ============================================================
 // CONFIGURATION DE LA BASE DE DONNÉES
 // ============================================================
 const pool = new Pool({
-  user: 'omda_user',
-  password: 'Omda2026',
-  host: 'localhost',
-  port: 5432,
-  database: 'omda_db',
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
-});
-
-pool.on('connect', (client) => {
-  client.query('SET search_path TO omda_app, public;')
-    .catch(err => console.warn('⚠️ Erreur SET search_path:', err.message));
-});
-
-pool.on('error', (err) => {
-  console.error('❌ Erreur inattendue du pool PostgreSQL:', err);
+  user : process.env.PGUSER,
+  password : process.env.PGPASSWORD,
+  host : process.env.PGHOST,
+  port : process.env.PGPORT,
+  database : process.env.PGDATABASE,
 });
 
 pool.connect((err, client, release) => {
@@ -75,8 +68,20 @@ async function initDB() {
     console.log('✅ Table utilisateurs prête');
 
     // ============================================================
+    // CREATION DE LA COLONNE "doit_changer_mdp" DANS LA TABLE UTILISATEURS
+    // ============================================================
+
+    await pool.query(`
+        ALTER TABLE utilisateurs
+        ADD COLUMN IF NOT EXISTS doit_changer_mdp BOOLEAN DEFAULT TRUE
+      `
+    );
+    console.log('✅ Colonne doit_changer_mdp ajoutée à la table utilisateurs');
+
+    // ============================================================
     // TABLE REGIONS
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS regions (
         id SERIAL PRIMARY KEY,
@@ -90,6 +95,7 @@ async function initDB() {
     // ============================================================
     // TABLE COMPTEURS DOSSIERS UTILISATEURS
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS compteurs_dossiers_utilisateurs (
         id SERIAL PRIMARY KEY,
@@ -107,6 +113,7 @@ async function initDB() {
     // ============================================================
     // TABLE NOTIFICATIONS
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS notifications (
         id SERIAL PRIMARY KEY,
@@ -123,6 +130,7 @@ async function initDB() {
     // ============================================================
     // TABLE DELETE_REQUESTS
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS delete_requests (
         id SERIAL PRIMARY KEY,
@@ -138,6 +146,7 @@ async function initDB() {
     // ============================================================
     // TABLE DELETE_CONFIRMATIONS
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS delete_confirmations (
         id SERIAL PRIMARY KEY,
@@ -153,6 +162,7 @@ async function initDB() {
     // ============================================================
     // TABLE DELETE_HISTORY
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS delete_history (
         id SERIAL PRIMARY KEY,
@@ -171,6 +181,7 @@ async function initDB() {
     // ============================================================
     // TABLE ACTIVITES
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS activites (
         id SERIAL PRIMARY KEY,
@@ -186,6 +197,7 @@ async function initDB() {
     // ============================================================
     // TABLE USAGERS_VUS
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS usagers_vus (
         id SERIAL PRIMARY KEY,
@@ -217,6 +229,7 @@ async function initDB() {
     // ============================================================
     // TABLE PAIEMENTS
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS paiements (
         id SERIAL PRIMARY KEY,
@@ -250,6 +263,7 @@ async function initDB() {
     // ============================================================
     // TABLE BACKUP_ANNUEL
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS backup_annuel (
         id SERIAL PRIMARY KEY,
@@ -304,6 +318,7 @@ async function initDB() {
     // ============================================================
     // TABLE EVENT_ARTISTES
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS event_artistes (
         id SERIAL PRIMARY KEY,
@@ -319,6 +334,7 @@ async function initDB() {
     // ============================================================
     // TABLE USAGERS (générique)
     // ============================================================
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS usagers (
         id SERIAL PRIMARY KEY,
@@ -475,6 +491,7 @@ async function initDB() {
     for (const user of defaultUsers) {
       const exists = await pool.query('SELECT id FROM utilisateurs WHERE email = $1', [user.email]);
       if (exists.rows.length === 0) {
+        const hashedPassword = await bcrypt.hash(user.mot_de_passe, 12);
         const result = await pool.query(
           `INSERT INTO utilisateurs (nom, email, mot_de_passe, role, statut, prefix) 
            VALUES ($1, $2, $3, $4, 'actif', $5) RETURNING id`,
