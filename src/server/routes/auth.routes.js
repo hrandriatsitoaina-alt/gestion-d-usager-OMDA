@@ -221,6 +221,7 @@ router.get('/auth/users', authMiddleware, async (req, res) => {
     );
     res.json({ success: true, users: result.rows });
   } catch (error) {
+    console.error('Erreur auth/users:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

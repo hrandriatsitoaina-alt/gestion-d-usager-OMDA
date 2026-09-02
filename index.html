@@ -3,46 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
-    <!-- Favicon OMDA pour navigateur -->
+
     <link rel="icon" type="image/x-icon" href="/logo.ico">
     <link rel="shortcut icon" href="/logo.ico">
     <link rel="apple-touch-icon" href="/logo.ico">
-    
+
     <title>OMDA - Office Malagasy du Droit d'Auteur</title>
 </head>
 <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
-    
-    <!-- Script pour corriger les inputs dans Electron -->
-     
-    <script>
-        if (window && window.process && window.process.type === 'renderer') {
-            console.log('🔧 Mode Electron détecté - Correction des inputs');
-            
-            // Fonction pour corriger tous les inputs
-            function fixAllInputs() {
-                const inputs = document.querySelectorAll('input, select, textarea');
-                inputs.forEach(input => {
-                    input.removeAttribute('readonly');
-                    input.removeAttribute('disabled');
-                    input.style.pointerEvents = 'auto';
-                    input.style.opacity = '1';
-                });
-            }
-            
-            // Exécuter au chargement
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', fixAllInputs);
-            } else {
-                fixAllInputs();
-            }
-            
-            // Observer les changements
-            const observer = new MutationObserver(fixAllInputs);
-            observer.observe(document.body, { childList: true, subtree: true });
-        }
-    </script>
 </body>
 </html>

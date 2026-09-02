@@ -7,7 +7,9 @@ const { requireSuperAdmin } = require('../middleware');
 // GET /api/admin/users
 router.get('/admin/users', requireSuperAdmin, async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, nom, email, role, statut, created_at, derniere_connexion FROM utilisateurs ORDER BY id');
+    const result = await pool.query(
+      'SELECT id, nom, email, role, statut, created_at, derniere_connexion FROM utilisateurs ORDER BY id'
+    );
     res.json({ success: true, users: result.rows });
   } catch (error) {
     console.error('Erreur admin users:', error);
@@ -145,6 +147,46 @@ router.post('/admin/activities', requireSuperAdmin, async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Erreur create activity:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ✅ POST /api/admin/verify - Vérifier les accès (CRUCIAL pour Super Admin)
+router.post('/admin/verify', async (req, res) => {
+  const { password } = req.body;
+  try {
+    const superAdminResult = await pool.query(
+      "SELECT mot_de_passe FROM utilisateurs WHERE role = 'super_admin' LIMIT 1"
+    );
+    let adminPassword = superAdminResult.rows.length > 0 ? superAdminResult.rows[0].mot_de_passe : '1234';
+    
+    if (password === adminPassword) {
+      return res.json({ 
+        success: true, 
+        token: config.ADMIN_SECRET_TOKEN, 
+        message: 'Accès Super Admin autorisé',
+        role: 'super_admin'
+      });
+    }
+    
+    const dafResult = await pool.query(
+      "SELECT mot_de_passe FROM utilisateurs WHERE role = 'daf' LIMIT 1"
+    );
+    if (dafResult.rows.length > 0) {
+      const dafPassword = dafResult.rows[0].mot_de_passe;
+      if (password === dafPassword) {
+        return res.json({ 
+          success: true, 
+          token: config.DAF_SECRET_TOKEN, 
+          message: 'Accès DAF autorisé',
+          role: 'daf'
+        });
+      }
+    }
+    
+    res.status(401).json({ success: false, message: 'Mot de passe incorrect' });
+  } catch (error) {
+    console.error('Erreur verify admin:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

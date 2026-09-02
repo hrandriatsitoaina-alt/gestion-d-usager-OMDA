@@ -8,22 +8,26 @@ import {
   PlusCircle, Bus, Route, Navigation, Truck, CheckCircle,
   UserPlus, MapPinned
 } from 'lucide-react';
+import { useToast } from '../../components/Toast';
 
 const BusAjout = ({ onCancel }) => {
   const navigate = useNavigate();
+  const showToast = useToast();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [userInfo, setUserInfo] = useState({ 
-    id: null, nom: '', prefix: '', 
-    compteurs: { 'Bus': 0 }, 
-    anneeEnCours: new Date().getFullYear() 
+  const [userInfo, setUserInfo] = useState({
+    id: null, nom: '', prefix: '',
+    compteurs: { 'Bus': 0 },
+    anneeEnCours: new Date().getFullYear()
   });
   const [fraisDossier, setFraisDossier] = useState('');
   const [montant, setMontant] = useState('');
   const [uniter, setUniter] = useState(1);
   const [soitTotal, setSoitTotal] = useState(0);
+
   const [regionsList, setRegionsList] = useState([]);
   const [newRegion, setNewRegion] = useState('');
+  const [newRegionPhone, setNewRegionPhone] = useState('');
   const [showAddRegion, setShowAddRegion] = useState(false);
 
   const [busData, setBusData] = useState({
@@ -32,8 +36,18 @@ const BusAjout = ({ onCancel }) => {
     representantCinDelivree: '', representantCinLieu: '', representantFonction: '',
     nombreVehicules: '', lignes: '', typeBus: '', trajet: '', horaires: '', zonesDesservies: '',
     confirmationNom: '', dateSignature: '', lieuSignature: '',
-    region: ''
+    region: '', aCompterDu: '', echeance: ''
   });
+
+  const formatPhoneNumber = (phone) => {
+    if (!phone) return '';
+    const cleaned = phone.replace(/\s/g, '').replace(/[^0-9]/g, '');
+    if (cleaned.length === 0) return '';
+    if (cleaned.length <= 3) return cleaned;
+    if (cleaned.length <= 5) return `${cleaned.slice(0, 3)} ${cleaned.slice(3)}`;
+    if (cleaned.length <= 8) return `${cleaned.slice(0, 3)} ${cleaned.slice(3, 5)} ${cleaned.slice(5)}`;
+    return `${cleaned.slice(0, 3)} ${cleaned.slice(3, 5)} ${cleaned.slice(5, 8)} ${cleaned.slice(8, 10)}`;
+  };
 
   const formatNumber = (value) => {
     if (value === '' || value === null || value === undefined) return '';
@@ -43,6 +57,19 @@ const BusAjout = ({ onCancel }) => {
   };
 
   const getDisplayValue = (rawValue) => formatNumber(rawValue);
+  
+  // ✅ CALCUL CORRIGÉ - (Montant × Uniter) + Frais de dossier
+  const calculateSoitTotal = () => {
+    const fraisVal = parseFloat(fraisDossier) || 0;
+    const montantVal = parseFloat(montant) || 0;
+    const uniterVal = parseInt(uniter) || 1;
+    return (montantVal * uniterVal) + fraisVal;
+  };
+
+  useEffect(() => {
+    setSoitTotal(calculateSoitTotal());
+  }, [fraisDossier, montant, uniter]);
+
   const getSoitTotalDisplay = () => formatNumber(soitTotal) + ' Ar';
 
   const getTrimestreFromMonth = (month) => {
@@ -79,44 +106,67 @@ const BusAjout = ({ onCancel }) => {
     try {
       const response = await fetch('http://localhost:3001/api/regions');
       const result = await response.json();
-      if (result.success) setRegionsList(result.regions.map(r => r.nom));
-    } catch (error) { console.error(error); }
+      if (result.success) {
+        setRegionsList(result.regions);
+      }
+    } catch (error) {
+      console.error('Erreur chargement régions:', error);
+    }
   };
 
   const handleAddRegion = async () => {
-    if (newRegion.trim() && !regionsList.includes(newRegion.trim())) {
-      try {
-        const response = await fetch('http://localhost:3001/api/regions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nom: newRegion.trim() })
-        });
-        const result = await response.json();
-        if (result.success) {
-          setRegionsList([...regionsList, newRegion.trim()]);
-          setNewRegion('');
-          setShowAddRegion(false);
-          alert(`✅ Région "${newRegion.trim()}" ajoutée!`);
-        }
-      } catch (error) { console.error(error); }
+    const trimmed = newRegion.trim();
+    if (!trimmed) {
+      showToast('Veuillez saisir un nom de région', 'error');
+      return;
+    }
+    if (regionsList.some(r => r.nom === trimmed)) {
+      showToast('Cette région existe déjà', 'error');
+      return;
+    }
+
+    const adminToken = localStorage.getItem('adminToken');
+    if (!adminToken) {
+      showToast('Token administrateur manquant. Veuillez vous reconnecter.', 'error');
+      return;
+    }
+
+    try {
+      const response = await fetch('http://localhost:3001/api/regions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'adminToken': adminToken
+        },
+        body: JSON.stringify({
+          nom: trimmed,
+          telephone: newRegionPhone.trim() || null
+        })
+      });
+      const result = await response.json();
+      if (result.success) {
+        setRegionsList([...regionsList, result.region]);
+        setNewRegion('');
+        setNewRegionPhone('');
+        setShowAddRegion(false);
+        showToast(`✅ Région "${trimmed}" ajoutée !`, 'success');
+        loadRegions();
+      } else {
+        showToast(`❌ ${result.message}`, 'error');
+      }
+    } catch (error) {
+      console.error('Erreur ajout région:', error);
+      showToast('❌ Erreur de connexion', 'error');
     }
   };
 
   useEffect(() => {
-    const fraisVal = parseFloat(fraisDossier) || 0;
-    const montantVal = parseFloat(montant) || 0;
-    const totalMoyens = fraisVal + montantVal;
-    const finalTotal = totalMoyens * uniter;
-    setSoitTotal(finalTotal);
-  }, [fraisDossier, montant, uniter]);
-
-  useEffect(() => {
     const currentUser = getCurrentUser();
     if (currentUser) {
-      setUserInfo(prev => ({ 
-        ...prev, 
+      setUserInfo(prev => ({
+        ...prev,
         id: currentUser.id,
-        nom: currentUser.nom, 
+        nom: currentUser.nom,
         prefix: currentUser.prefix,
         compteurs: currentUser.compteurs || { 'Bus': 0 },
         anneeEnCours: currentUser.anneeEnCours || new Date().getFullYear()
@@ -143,7 +193,7 @@ const BusAjout = ({ onCancel }) => {
 
     if (currentStep === 1) {
       if (!busData.demandeur || !busData.denomination || !busData.region) {
-        alert('Veuillez remplir les champs obligatoires: Demandeur, Dénomination et Région');
+        showToast('Veuillez remplir les champs obligatoires: Demandeur, Dénomination et Région', 'error');
         return;
       }
       setCurrentStep(2);
@@ -151,7 +201,7 @@ const BusAjout = ({ onCancel }) => {
     }
     if (currentStep === 2) {
       if (!busData.representantNom || !busData.representantCin) {
-        alert('Veuillez remplir les infos du représentant légal');
+        showToast('Veuillez remplir les infos du représentant légal', 'error');
         return;
       }
       setCurrentStep(3);
@@ -159,7 +209,7 @@ const BusAjout = ({ onCancel }) => {
     }
     if (currentStep === 3) {
       if (!busData.nombreVehicules || !busData.lignes || !busData.typeBus) {
-        alert('Veuillez renseigner les infos du transport');
+        showToast('Veuillez renseigner les infos du transport', 'error');
         return;
       }
       setCurrentStep(4);
@@ -171,24 +221,34 @@ const BusAjout = ({ onCancel }) => {
     }
   };
 
+  // ✅ HANDLE FINAL SUBMIT CORRIGÉ - comme Hotel et OCC
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
     const currentUser = getCurrentUser();
     if (!currentUser || !currentUser.id) {
-      alert('Erreur: Utilisateur non identifié');
+      showToast('Erreur: Utilisateur non identifié', 'error');
       setIsSubmitting(false);
       return;
     }
 
+    const fraisVal = parseFloat(fraisDossier) || 0;
+    const montantVal = parseFloat(montant) || 0;
+    const uniterVal = parseInt(uniter) || 1;
+    const total = (montantVal * uniterVal) + fraisVal;
+
     const finalData = {
       type: 'Bus',
       userId: currentUser.id,
+      prefix: userInfo.prefix || currentUser.prefix || '',
       ...busData,
-      fraisDossier: parseFloat(fraisDossier) || 0,
-      montantMensuel: parseFloat(montant) || 0,
-      soitTotal: soitTotal,
-      uniter: uniter
+      frais_dossier: fraisVal,
+      montant_mensuel: montantVal,
+      montant_total: montantVal,
+      soit_total: total,
+      uniter: uniterVal
     };
+
+    console.log('📤 Données envoyées au backend (Bus):', finalData);
 
     try {
       const response = await fetch('http://localhost:3001/api/usagers', {
@@ -197,8 +257,28 @@ const BusAjout = ({ onCancel }) => {
         body: JSON.stringify(finalData)
       });
       const result = await response.json();
+      
       if (result.success) {
-        alert('✅ Bus ajouté avec succès !');
+        const updatedUser = getCurrentUser();
+        if (updatedUser) {
+          updatedUser.compteurs = updatedUser.compteurs || {};
+          const nouveauCompteur = (updatedUser.compteurs['Bus'] || 0) + 1;
+          updatedUser.compteurs['Bus'] = nouveauCompteur;
+          localStorage.setItem('user', JSON.stringify(updatedUser));
+          
+          setUserInfo(prev => ({
+            ...prev,
+            compteurs: {
+              ...prev.compteurs,
+              'Bus': nouveauCompteur
+            }
+          }));
+          
+          console.log(`✅ Compteur Bus incrémenté à ${nouveauCompteur}`);
+        }
+        
+        showToast('✅ Bus ajouté avec succès !', 'success');
+        
         navigate('/confirme-paiement', { 
           state: { 
             usager: { 
@@ -207,37 +287,43 @@ const BusAjout = ({ onCancel }) => {
               demandeur: busData.demandeur,
               telephone: busData.telephone,
               region: busData.region,
-              montant_mensuel: parseFloat(montant) || 0,
-              frais_dossier: parseFloat(fraisDossier) || 0,
-              montant_total: parseFloat(montant) || 0,
-              soit_total: soitTotal,
-              uniter: uniter || 1,
-              adresse: busData.adresseSiege,
-              activite: 'Transport',
+              adresse_siege: busData.adresseSiege,
+              nif_stat: busData.nifStat,
+              email: busData.email,
+              representant_nom: busData.representantNom,
+              representant_adresse: busData.representantAdresse,
+              representant_tel: busData.representantTel,
+              representant_cin: busData.representantCin,
+              representant_cin_delivree: busData.representantCinDelivree,
+              representant_cin_lieu: busData.representantCinLieu,
+              representant_fonction: busData.representantFonction,
               nombre_vehicules: busData.nombreVehicules,
               lignes: busData.lignes,
               type_bus: busData.typeBus,
               trajet: busData.trajet,
               horaires: busData.horaires,
               zones_desservies: busData.zonesDesservies,
-              representant_nom: busData.representantNom,
-              representant_par: busData.representantPar,
-              date_evenement: null,
-              lieu_evenement: null,
-              genre_manifestation: null,
-              organisateurs: null,
-              artistes: null,
-              nom_evenement: null
+              a_compter_du: busData.aCompterDu,
+              echeance: busData.echeance,
+              confirmation_nom: busData.confirmationNom,
+              lieu_signature: busData.lieuSignature,
+              date_signature: busData.dateSignature,
+              montant_mensuel: montantVal,
+              frais_dossier: fraisVal,
+              montant_total: montantVal,
+              soit_total: total,
+              uniter: uniterVal,
+              numero_dossier_utilisateur: `${userInfo.prefix || ''} ${(userInfo.compteurs?.['Bus'] || 0) + 1}/${getTrimestreFromMonth(new Date().getMonth() + 1)}/${userInfo.anneeEnCours || new Date().getFullYear()}`
             }, 
             type: 'bus'
           } 
         });
       } else {
-        alert('❌ Erreur: ' + result.message);
+        showToast('❌ Erreur: ' + result.message, 'error');
       }
     } catch (error) {
       console.error(error);
-      alert('❌ Erreur de connexion');
+      showToast('❌ Erreur de connexion', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -309,16 +395,41 @@ const BusAjout = ({ onCancel }) => {
           <div className="form-input" style={{ display: 'flex', gap: '10px' }}>
             <select name="region" value={busData.region || ''} onChange={handleBusChange} className="input-style" style={{ flex: 1 }} required>
               <option value="">Sélectionner une région</option>
-              {regionsList.map((region, idx) => (<option key={idx} value={region}>{region}</option>))}
+              {regionsList.map((region) => {
+                const phone = region.telephone && region.telephone.trim() !== ''
+                  ? formatPhoneNumber(region.telephone)
+                  : null;
+                return (
+                  <option key={region.id} value={region.nom}>
+                    {region.nom} {phone ? `- ${phone}` : ''}
+                  </option>
+                );
+              })}
             </select>
             <button type="button" onClick={() => setShowAddRegion(!showAddRegion)} className="btn-add-region">+</button>
           </div>
         </div>
+
         {showAddRegion && (
           <div className="form-row">
             <div className="form-label"><h2><PlusCircle size={18} strokeWidth={2} /> Nouvelle région :</h2></div>
-            <div className="form-input" style={{ display: 'flex', gap: '10px' }}>
-              <input type="text" value={newRegion} onChange={(e) => setNewRegion(e.target.value)} placeholder="Nom de la nouvelle région" className="input-style" style={{ flex: 1 }} />
+            <div className="form-input" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                value={newRegion}
+                onChange={(e) => setNewRegion(e.target.value)}
+                placeholder="Nom de la région"
+                className="input-style"
+                style={{ flex: 1, minWidth: '150px' }}
+              />
+              <input
+                type="text"
+                value={newRegionPhone}
+                onChange={(e) => setNewRegionPhone(e.target.value)}
+                placeholder="Téléphone (optionnel)"
+                className="input-style"
+                style={{ flex: 1, minWidth: '150px' }}
+              />
               <button type="button" onClick={handleAddRegion} className="btn-add-region-confirm">Ajouter</button>
             </div>
           </div>
@@ -396,6 +507,7 @@ const BusAjout = ({ onCancel }) => {
           <select name="typeBus" value={busData.typeBus} onChange={handleBusChange} className="input-style" required>
             <option value="">Sélectionner</option>
             <option value="Urbaine">Urbaine</option>
+            <option value="Suburbain">Suburbain</option>
             <option value="National">National</option>
             <option value="Regional">Régional</option>
           </select>
@@ -403,18 +515,33 @@ const BusAjout = ({ onCancel }) => {
       </div>
 
       <div className="form-row">
-        <div className="form-label"><h2><FileText size={18} strokeWidth={2} /> Frais de dossier :</h2></div>
+        <div className="form-label"><h2><MapPinned size={18} strokeWidth={2} /> Parcours :</h2></div>
         <div className="form-input">
-          <input type="text" value={getDisplayValue(fraisDossier)} onChange={handleFraisDossierChange} className="input-style" placeholder="Frais de dossier en Ar" />
+          <input type="text" name="trajet" value={busData.trajet} onChange={handleBusChange} className="input-style" placeholder="Antananarivo → Toamasina" />
         </div>
       </div>
 
       <div className="form-row">
+        <div className="form-label"><h2><Clock size={18} strokeWidth={2} /> Horaires :</h2></div>
+        <div className="form-input">
+          <input type="text" name="horaires" value={busData.horaires} onChange={handleBusChange} className="input-style" placeholder="Horaires de service" />
+        </div>
+      </div>
+
+      <div className="form-row">
+        <div className="form-label"><h2><FileText size={18} strokeWidth={2} /> Frais de dossier :</h2></div>
+        <div className="form-input">
+          <input type="text" value={getDisplayValue(fraisDossier)} onChange={handleFraisDossierChange} className="input-style" placeholder="Frais de dossier en Ar" />
+          <span style={{ marginLeft: '10px', fontSize: '12px', color: '#6c757d' }}>(fixe, non multiplié par Uniter)</span>
+        </div>
+      </div>
+
+      {/* <div className="form-row">
         <div className="form-label"><h2><DollarSign size={18} strokeWidth={2} /> Montant mensuel :</h2></div>
         <div className="form-input">
           <input type="text" value={getDisplayValue(montant)} onChange={handleMontantChange} className="input-style" placeholder="Montant mensuel en Ar" />
         </div>
-      </div>
+      </div> */}
 
       <div className="form-row">
         <div className="form-label"><h2><Hash size={18} strokeWidth={2} /> Uniter :</h2></div>
@@ -428,6 +555,23 @@ const BusAjout = ({ onCancel }) => {
         <div className="form-label"><h2><DollarSign size={18} strokeWidth={2} /> Soit Total :</h2></div>
         <div className="form-input">
           <input type="text" value={getSoitTotalDisplay()} readOnly className="input-style total-field" />
+          <span style={{ marginLeft: '10px', fontSize: '12px', color: '#6c757d' }}>
+            (Montant × Uniter + Frais de dossier)
+          </span>
+        </div>
+      </div>
+
+      <div className="form-row">
+        <div className="form-label"><h2><Calendar size={18} strokeWidth={2} /> A compter du :</h2></div>
+        <div className="form-input">
+          <input type="date" name="aCompterDu" value={busData.aCompterDu} onChange={handleBusChange} className="input-style" />
+        </div>
+      </div>
+
+      <div className="form-row">
+        <div className="form-label"><h2><Calendar size={18} strokeWidth={2} /> Echéance :</h2></div>
+        <div className="form-input">
+          <input type="date" name="echeance" value={busData.echeance} onChange={handleBusChange} className="input-style" />
         </div>
       </div>
 
@@ -460,6 +604,11 @@ const BusAjout = ({ onCancel }) => {
     const currentTrimestre = getTrimestreFromMonth(currentMonth);
     const userDossierDisplay = `${userInfo.prefix || ''} ${nextCompteur}/${currentTrimestre}/${userInfo.anneeEnCours || new Date().getFullYear()}`;
 
+    const fraisVal = parseFloat(fraisDossier) || 0;
+    const montantVal = parseFloat(montant) || 0;
+    const uniterVal = parseInt(uniter) || 1;
+    const total = (montantVal * uniterVal) + fraisVal;
+
     return (
       <div className="recap-container">
         <h3><CheckCircle size={20} strokeWidth={2} /> RÉCAPITULATIF - BUS</h3>
@@ -474,10 +623,10 @@ const BusAjout = ({ onCancel }) => {
           <tr><td><Bus size={16} strokeWidth={2} /> Nombre véhicules</td><td>{busData.nombreVehicules || '0'}</td></tr>
           <tr><td><Route size={16} strokeWidth={2} /> Ligne</td><td>{busData.lignes || '-'}</td></tr>
           <tr><td><Navigation size={16} strokeWidth={2} /> Type</td><td>{busData.typeBus || '-'}</td></tr>
-          <tr><td><FileText size={16} strokeWidth={2} /> Frais de dossier</td><td>{formatNumber(fraisDossier || 0)} Ar</td></tr>
-          <tr><td><DollarSign size={16} strokeWidth={2} /> Montant mensuel</td><td>{formatNumber(montant || 0)} Ar/mois</td></tr>
-          <tr><td><Hash size={16} strokeWidth={2} /> Uniter</td><td>{uniter}</td></tr>
-          <tr><td><DollarSign size={16} strokeWidth={2} /> Soit Total</td><td><strong style={{ color: '#28a745' }}>{getSoitTotalDisplay()}</strong></td></tr>
+          <tr><td><FileText size={16} strokeWidth={2} /> Frais de dossier</td><td>{formatNumber(fraisVal)} Ar <span style={{ color: '#6c757d', fontSize: '12px' }}>(fixe)</span></td></tr>
+          <tr><td><DollarSign size={16} strokeWidth={2} /> Montant mensuel</td><td>{formatNumber(montantVal)} Ar/mois</td></tr>
+          <tr><td><Hash size={16} strokeWidth={2} /> Uniter</td><td>{uniterVal}</td></tr>
+          <tr><td><DollarSign size={16} strokeWidth={2} /> Soit Total</td><td><strong style={{ color: '#28a745' }}>{formatNumber(total)} Ar</strong></td></tr>
         </tbody></table>
       </div>
     );

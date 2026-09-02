@@ -1,21 +1,45 @@
-// src/pages/date_occ.jsx
-import React, { useState, useEffect } from 'react';
+// src/pages/DateOcc.jsx
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import '../styles/date_occ.css';
+import {
+  Calendar,
+  CalendarDays,
+  MapPin,
+  Building2,
+  Search,
+  X,
+  Eye,
+  RotateCcw,
+  ArrowLeft,
+  Music,
+  User,
+  Mail,
+  Phone,
+  DollarSign,
+  Tag,
+  Clock,
+  AlertCircle,
+  CheckCircle,
+} from 'lucide-react';
+
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import MiniSidebar from '../components/MiniSidebar';
+import '../styles/date_occ.css';
+
 
 const DateOcc = () => {
   const navigate = useNavigate();
+
+  // Filtres
   const [searchTerm, setSearchTerm] = useState('');
   const [referenceId, setReferenceId] = useState('');
   const [selectedDay, setSelectedDay] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('');
   const [selectedYear, setSelectedYear] = useState('');
-  const [startYear, setStartYear] = useState('');
-  const [endYear, setEndYear] = useState('');
   const [selectedRegion, setSelectedRegion] = useState('');
+
+  // Données
   const [regionsDisponibles, setRegionsDisponibles] = useState([]);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -23,332 +47,209 @@ const DateOcc = () => {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [availableYears, setAvailableYears] = useState([]);
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return '';
-    const joursCourt = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
-    return `${joursCourt[date.getDay()]} ${date.getDate()}`;
-  };
-
+  // ========== Fonctions utilitaires ==========
   const formatDateComplete = (dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString);
-    if (isNaN(date.getTime())) return '';
-    const jours = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
-    const mois = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-    return `${jours[date.getDay()]} ${date.getDate()} ${mois[date.getMonth()]} ${date.getFullYear()}`;
-  };
-
-  const getMonthName = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return '';
-    const mois = ['JANVIER', 'FÉVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN', 'JUILLET', 'AOÛT', 'SEPTEMBRE', 'OCTOBRE', 'NOVEMBRE', 'DÉCEMBRE'];
-    return mois[date.getMonth()];
+    if (isNaN(date)) return '';
+    return date.toLocaleDateString('fr-FR', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
   };
 
   const extractAvailableYears = (eventsList) => {
     const years = new Set();
-    eventsList.forEach(event => {
-      if (event.date_evenement) {
-        const date = new Date(event.date_evenement);
-        if (!isNaN(date.getTime())) {
-          years.add(date.getFullYear());
-        }
+    eventsList.forEach((ev) => {
+      if (ev.date_evenement) {
+        const d = new Date(ev.date_evenement);
+        if (!isNaN(d)) years.add(d.getFullYear());
       }
     });
     return Array.from(years).sort((a, b) => b - a);
   };
 
-  // Chargement des régions
-  const loadRegions = async () => {
+  // ========== Appels API ==========
+  const loadRegions = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/regions');
-      const data = await response.json();
-      if (data.success) {
-        setRegionsDisponibles(data.regions || []);
-      }
-    } catch (error) {
-      console.error('Erreur chargement régions:', error);
+      const res = await fetch('http://localhost:3001/api/regions');
+      const data = await res.json();
+      if (data.success) setRegionsDisponibles(data.regions || []);
+    } catch (err) {
+      console.error('Erreur chargement régions:', err);
     }
-  };
+  }, []);
 
-  const fetchOccasionnels = async () => {
+  const fetchOccasionnels = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('http://localhost:3001/api/usagers/occasionnels');
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const data = await response.json();
+      const res = await fetch('http://localhost:3001/api/usagers/occasionnels');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
       if (data.success && data.events) {
         setEvents(data.events);
-        const years = extractAvailableYears(data.events);
-        setAvailableYears(years);
+        setAvailableYears(extractAvailableYears(data.events));
       } else {
         setEvents([]);
         setAvailableYears([]);
       }
-    } catch (error) {
-      console.error('Erreur:', error);
+    } catch (err) {
+      console.error(err);
       setError('Impossible de charger les données.');
       setEvents([]);
       setAvailableYears([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadRegions();
     fetchOccasionnels();
-  }, []);
+  }, [loadRegions, fetchOccasionnels]);
 
-  const groupEventsByDenominationAndMonth = (eventsList) => {
-    if (!eventsList || eventsList.length === 0) return [];
-    const grouped = {};
-    
-    eventsList.forEach(event => {
-      const raisonSociale = event.denomination || 'Sans dénomination';
-      let monthYearKey = '', monthName = '', year = '';
-      if (event.date_evenement) {
-        const date = new Date(event.date_evenement);
-        if (!isNaN(date.getTime())) {
-          monthName = getMonthName(event.date_evenement);
-          year = date.getFullYear().toString();
-          monthYearKey = `${monthName} ${year}`;
-        } else {
-          monthYearKey = 'Date non spécifiée';
-          monthName = 'DATE NON SPÉCIFIÉE';
-        }
-      } else {
-        monthYearKey = 'Date non spécifiée';
-        monthName = 'DATE NON SPÉCIFIÉE';
-      }
-      
-      if (!grouped[raisonSociale]) grouped[raisonSociale] = {};
-      if (!grouped[raisonSociale][monthYearKey]) {
-        grouped[raisonSociale][monthYearKey] = { monthName, year, events: [] };
-      }
-      
-      const allArtists = event.artistesList || [];
-      
-      grouped[raisonSociale][monthYearKey].events.push({
-        id: event.id,
-        date: formatDate(event.date_evenement),
-        dateComplete: formatDateComplete(event.date_evenement),
-        dateOriginal: event.date_evenement,
-        lieu: event.lieu_evenement || 'Lieu non spécifié',
-        artistesList: allArtists,
-        nomEvenement: event.nom_evenement || event.denomination || 'Événement sans nom',
-        demandeur: event.demandeur || '',
-        telephone: event.telephone || '',
-        email: event.email || '',
-        denomination: event.denomination || '',
-        region: event.region || '',
-        genre: event.genre_manifestation || '',
-        montant_total: event.montant_total || 0
-      });
-    });
-    
-    const result = [];
-    Object.keys(grouped).forEach(raisonSociale => {
-      Object.keys(grouped[raisonSociale]).forEach(monthKey => {
-        grouped[raisonSociale][monthKey].events.sort((a, b) => new Date(a.dateOriginal) - new Date(b.dateOriginal));
-        result.push({ 
-          raisonSociale, 
-          monthYear: monthKey, 
-          monthName: grouped[raisonSociale][monthKey].monthName, 
-          events: grouped[raisonSociale][monthKey].events 
-        });
-      });
-    });
-    result.sort((a, b) => {
-      if (a.events.length === 0 || b.events.length === 0) return 0;
-      return new Date(b.events[0].dateOriginal) - new Date(a.events[0].dateOriginal);
-    });
-    return result;
-  };
-
+  // ========== Filtrage ==========
   const normalizeId = (input) => {
     if (!input) return null;
-    const str = input.toString().trim();
-    const num = parseInt(str, 10);
+    const num = parseInt(input.trim(), 10);
     return isNaN(num) ? null : num;
   };
 
   const findEventById = (id) => {
-    const normalizedId = normalizeId(id);
-    if (normalizedId === null) return null;
-    return events.find(event => event.id === normalizedId);
+    const normalized = normalizeId(id);
+    if (normalized === null) return null;
+    return events.find((ev) => ev.id === normalized);
   };
 
-  const getFilteredEvents = () => {
-    if (!events || events.length === 0) return [];
+  const getFilteredEvents = useMemo(() => {
+    if (!events.length) return [];
+
     let filtered = [...events];
-    
-    if (referenceId && referenceId.trim() !== '') {
-      const foundEvent = findEventById(referenceId);
-      if (foundEvent) {
-        return groupEventsByDenominationAndMonth([foundEvent]);
-      } else {
-        return [];
-      }
+
+    // Recherche par ID
+    if (referenceId.trim()) {
+      const found = findEventById(referenceId);
+      return found ? [found] : [];
     }
-    
-    if (searchTerm && searchTerm.trim() !== '') {
-      const searchLower = searchTerm.toLowerCase().trim();
-      filtered = filtered.filter(event => {
-        const artistesMatch = (event.artistesList || []).some(a => 
-          (a.nom && a.nom.toLowerCase().includes(searchLower)) || 
-          (a.prenom && a.prenom.toLowerCase().includes(searchLower))
+
+    // Recherche textuelle
+    if (searchTerm.trim()) {
+      const lower = searchTerm.toLowerCase().trim();
+      filtered = filtered.filter((ev) => {
+        const artistesMatch = (ev.artistesList || []).some(
+          (a) =>
+            (a.nom && a.nom.toLowerCase().includes(lower)) ||
+            (a.prenom && a.prenom.toLowerCase().includes(lower))
         );
         return (
-          (event.denomination && event.denomination.toLowerCase().includes(searchLower)) ||
-          (event.demandeur && event.demandeur.toLowerCase().includes(searchLower)) ||
-          (event.nom_evenement && event.nom_evenement.toLowerCase().includes(searchLower)) ||
-          (event.lieu_evenement && event.lieu_evenement.toLowerCase().includes(searchLower)) ||
-          (event.genre_manifestation && event.genre_manifestation.toLowerCase().includes(searchLower)) ||
+          (ev.denomination && ev.denomination.toLowerCase().includes(lower)) ||
+          (ev.demandeur && ev.demandeur.toLowerCase().includes(lower)) ||
+          (ev.nom_evenement && ev.nom_evenement.toLowerCase().includes(lower)) ||
+          (ev.lieu_evenement && ev.lieu_evenement.toLowerCase().includes(lower)) ||
+          (ev.genre_manifestation && ev.genre_manifestation.toLowerCase().includes(lower)) ||
           artistesMatch
         );
       });
     }
 
-    if (selectedRegion && selectedRegion !== '') {
-      filtered = filtered.filter(event => event.region === selectedRegion);
+    // Filtres date
+    if (selectedDay) {
+      const day = parseInt(selectedDay, 10);
+      filtered = filtered.filter(
+        (ev) => ev.date_evenement && new Date(ev.date_evenement).getDate() === day
+      );
     }
-
-    if (selectedDay && selectedDay !== '') {
-      filtered = filtered.filter(event => {
-        if (!event.date_evenement) return false;
-        return new Date(event.date_evenement).getDate() === parseInt(selectedDay);
-      });
-    }
-
-    if (selectedMonth && selectedMonth !== '') {
-      const moisMap = { 'janvier':0, 'février':1, 'mars':2, 'avril':3, 'mai':4, 'juin':5, 'juillet':6, 'août':7, 'septembre':8, 'octobre':9, 'novembre':10, 'décembre':11 };
+    if (selectedMonth) {
+      const moisMap = {
+        janvier: 0,
+        février: 1,
+        mars: 2,
+        avril: 3,
+        mai: 4,
+        juin: 5,
+        juillet: 6,
+        août: 7,
+        septembre: 8,
+        octobre: 9,
+        novembre: 10,
+        décembre: 11,
+      };
       const moisNum = moisMap[selectedMonth.toLowerCase()];
-      filtered = filtered.filter(event => {
-        if (!event.date_evenement) return false;
-        return new Date(event.date_evenement).getMonth() === moisNum;
-      });
+      filtered = filtered.filter(
+        (ev) => ev.date_evenement && new Date(ev.date_evenement).getMonth() === moisNum
+      );
+    }
+    if (selectedYear) {
+      const year = parseInt(selectedYear, 10);
+      filtered = filtered.filter(
+        (ev) => ev.date_evenement && new Date(ev.date_evenement).getFullYear() === year
+      );
     }
 
-    if (selectedYear && selectedYear !== '') {
-      filtered = filtered.filter(event => {
-        if (!event.date_evenement) return false;
-        return new Date(event.date_evenement).getFullYear() === parseInt(selectedYear);
-      });
+    // Filtre région
+    if (selectedRegion) {
+      filtered = filtered.filter((ev) => ev.region === selectedRegion);
     }
 
-    if (startYear && startYear !== '') {
-      filtered = filtered.filter(event => {
-        if (!event.date_evenement) return false;
-        return new Date(event.date_evenement).getFullYear() >= parseInt(startYear);
-      });
-    }
+    // Tri par date décroissante
+    filtered.sort((a, b) => new Date(b.date_evenement) - new Date(a.date_evenement));
+    return filtered;
+  }, [
+    events,
+    searchTerm,
+    referenceId,
+    selectedDay,
+    selectedMonth,
+    selectedYear,
+    selectedRegion,
+  ]);
 
-    if (endYear && endYear !== '') {
-      filtered = filtered.filter(event => {
-        if (!event.date_evenement) return false;
-        return new Date(event.date_evenement).getFullYear() <= parseInt(endYear);
-      });
-    }
-
-    return groupEventsByDenominationAndMonth(filtered);
-  };
-
-  const handleSearch = (e) => { if (e) e.preventDefault(); };
-  
-  const handleReset = () => { 
-    setSearchTerm(''); 
-    setReferenceId('');
-    setSelectedDay(''); 
-    setSelectedMonth(''); 
-    setSelectedYear(''); 
-    setStartYear(''); 
-    setEndYear(''); 
-    setSelectedRegion('');
-  };
-
-  const filteredEvents = getFilteredEvents();
+  // Statistiques
   const totalEvents = events.length;
-  const uniqueRaisonSociale = new Set(events.map(e => e.denomination).filter(Boolean));
-  const uniqueLieux = new Set(events.map(e => e.lieu_evenement).filter(Boolean));
-  
-  const yearOptions = availableYears.length > 0 ? availableYears : [];
-  const dayOptions = Array.from({ length: 31 }, (_, i) => i + 1);
+  const uniqueOrgs = new Set(events.map((e) => e.denomination).filter(Boolean)).size;
+  const uniqueLieux = new Set(events.map((e) => e.lieu_evenement).filter(Boolean)).size;
 
-  const openModal = (event) => {
-    setSelectedEvent(event);
-    document.body.style.overflow = 'hidden';
-  };
-
-  const closeModal = () => {
-    setSelectedEvent(null);
-    document.body.style.overflow = 'auto';
-  };
-
-  const getAllArtistsNames = (artistesList) => {
-    if (!artistesList || artistesList.length === 0) return 'Aucun artiste';
-    return artistesList.map(artist => artist.nom).join(', ');
-  };
-
-  // Vérifier le statut d'un événement
+  // ========== Statut ==========
   const getEventStatus = (dateOriginal) => {
     if (!dateOriginal) return 'unknown';
     const eventDate = new Date(dateOriginal);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
-    // Calculer la différence en jours
-    const diffTime = eventDate.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    if (diffDays < 0) {
-      return 'passed'; // Passé - Rouge
-    } else if (diffDays === 0) {
-      return 'today'; // Aujourd'hui - Vert
-    } else if (diffDays <= 5) {
-      return 'near'; // Proche (5 jours) - Vert
-    } else {
-      return 'upcoming'; // Futur - Jaune
-    }
+    const diffDays = Math.ceil((eventDate - today) / (1000 * 60 * 60 * 24));
+    if (diffDays < 0) return 'passed';
+    if (diffDays === 0) return 'today';
+    if (diffDays <= 5) return 'near';
+    return 'upcoming';
   };
 
-  const getEventBadge = (status) => {
-    switch(status) {
-      case 'passed':
-        return <span className="event-badge passed">🔴 Passé</span>;
-      case 'today':
-        return <span className="event-badge today">🟢 Aujourd'hui</span>;
-      case 'near':
-        return <span className="event-badge near">🟢 Proche</span>;
-      case 'upcoming':
-        return <span className="event-badge upcoming">🟡 Futur</span>;
-      default:
-        return null;
-    }
+  const statusConfig = {
+    passed: { label: 'Passé', icon: AlertCircle, className: 'status-passed' },
+    today: { label: "Aujourd'hui", icon: CheckCircle, className: 'status-today' },
+    near: { label: 'Proche', icon: Clock, className: 'status-near' },
+    upcoming: { label: 'Futur', icon: Calendar, className: 'status-upcoming' },
   };
 
-  // Trier les événements : futurs en haut, passés en bas
-  const sortEventsByStatus = (eventsList) => {
-    return [...eventsList].sort((a, b) => {
-      const dateA = new Date(a.dateOriginal);
-      const dateB = new Date(b.dateOriginal);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const aPassed = dateA < today;
-      const bPassed = dateB < today;
-      
-      // Les événements futurs passent en premier
-      if (aPassed && !bPassed) return 1;
-      if (!aPassed && bPassed) return -1;
-      
-      // Si même statut, trier par date
-      return dateA - dateB;
-    });
+  // ========== Modal ==========
+  const openModal = (event) => {
+    setSelectedEvent(event);
+    document.body.style.overflow = 'hidden';
+  };
+  const closeModal = () => {
+    setSelectedEvent(null);
+    document.body.style.overflow = 'auto';
+  };
+
+  // Réinitialisation
+  const resetFilters = () => {
+    setSearchTerm('');
+    setReferenceId('');
+    setSelectedDay('');
+    setSelectedMonth('');
+    setSelectedYear('');
+    setSelectedRegion('');
   };
 
   return (
@@ -357,152 +258,235 @@ const DateOcc = () => {
       <Sidebar />
       <MiniSidebar />
       <main className="contenu">
-        {/* ===== HEADER SIMPLIFIÉ ===== */}
-        <div className="header-simplified">
+        {/* ===== EN‑TÊTE ===== */}
+        <div className="page-header">
           <div className="header-left">
-            <div className="header-title">
-              <h1>🎪 OMDA : <span>OCCASIONNELLES</span></h1>
-              <div className="header-stats">
-                <span className="stat-badge"><strong>{totalEvents}</strong> Événements</span>
-                <span className="stat-badge"><strong>{uniqueRaisonSociale.size}</strong> Organisations</span>
-                <span className="stat-badge"><strong>{uniqueLieux.size}</strong> Lieux</span>
-              </div>
+            <h1>
+              <CalendarDays className="header-icon" size={28} />
+              OMDA : <span>Occasionnelles</span>
+            </h1>
+            <div className="header-stats">
+              <span className="stat-badge">
+                <strong>{totalEvents}</strong> Événements
+              </span>
+              <span className="stat-badge">
+                <strong>{uniqueOrgs}</strong> Organisations
+              </span>
+              <span className="stat-badge">
+                <strong>{uniqueLieux}</strong> Lieux
+              </span>
             </div>
           </div>
-          <div className="header-right">
-            <button className="btn-retour" onClick={() => navigate('/dashboard')}>← Retour</button>
-          </div>
+          <button className="btn-back" onClick={() => navigate('/dashboard')}>
+            <ArrowLeft size={18} /> Retour
+          </button>
         </div>
 
-        {/* ===== FILTRES ===== */}
-        <section className="filters-section">
+        {/* ===== FILTRES INDÉPENDANTS ===== */}
+        <div className="filters-container">
           <div className="filters-row">
-            <div className="filter-group">
-              <label>📅 Bilan global</label>
-              <div className="filter-group-inline">
-                <select className="form-select small" value={startYear} onChange={(e) => setStartYear(e.target.value)}>
-                  <option value="">Année début</option>
-                  {yearOptions.map(year => <option key={year} value={year}>{year}</option>)}
-                </select>
-                <select className="form-select small" value={endYear} onChange={(e) => setEndYear(e.target.value)}>
-                  <option value="">Année fin</option>
-                  {yearOptions.map(year => <option key={year} value={year}>{year}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <div className="filter-group">
-              <label>📆 Date</label>
-              <div className="filter-group-inline">
-                <select className="form-select" value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)}>
-                  <option value="">Jour</option>
-                  {dayOptions.map(day => <option key={day} value={day}>{day}</option>)}
-                </select>
-                <select className="form-select" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}>
-                  <option value="">Mois</option>
-                  <option value="janvier">Janvier</option>
-                  <option value="février">Février</option>
-                  <option value="mars">Mars</option>
-                  <option value="avril">Avril</option>
-                  <option value="mai">Mai</option>
-                  <option value="juin">Juin</option>
-                  <option value="juillet">Juillet</option>
-                  <option value="août">Août</option>
-                  <option value="septembre">Septembre</option>
-                  <option value="octobre">Octobre</option>
-                  <option value="novembre">Novembre</option>
-                  <option value="décembre">Décembre</option>
-                </select>
-                <select className="form-select" value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)}>
-                  <option value="">Année</option>
-                  {yearOptions.map(year => <option key={year} value={year}>{year}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <div className="filter-group">
-              <label>📍 Région</label>
-              <select className="form-select" value={selectedRegion} onChange={(e) => setSelectedRegion(e.target.value)}>
-                <option value="">Toutes les régions</option>
-                {regionsDisponibles.map(region => (
-                  <option key={region.id} value={region.nom}>{region.nom}</option>
+            {/* Jour */}
+            <div className="filter-item">
+              <label htmlFor="daySelect">
+                <Calendar size={14} className="filter-icon" /> Jour
+              </label>
+              <select
+                id="daySelect"
+                value={selectedDay}
+                onChange={(e) => setSelectedDay(e.target.value)}
+                className="form-select"
+              >
+                <option value="">Tous</option>
+                {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                  <option key={d} value={d}>{d}</option>
                 ))}
               </select>
             </div>
 
-            <div className="filter-group filter-actions">
+            {/* Mois */}
+            <div className="filter-item">
+              <label htmlFor="monthSelect">
+                <Calendar size={14} className="filter-icon" /> Mois
+              </label>
+              <select
+                id="monthSelect"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="form-select"
+              >
+                <option value="">Tous</option>
+                {[
+                  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+                  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+                ].map((m) => (
+                  <option key={m} value={m}>
+                    {m.charAt(0).toUpperCase() + m.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Année */}
+            <div className="filter-item">
+              <label htmlFor="yearSelect">
+                <Calendar size={14} className="filter-icon" /> Année
+              </label>
+              <select
+                id="yearSelect"
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(e.target.value)}
+                className="form-select"
+              >
+                <option value="">Tous</option>
+                {availableYears.map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Région */}
+            <div className="filter-item">
+              <label htmlFor="regionSelect">
+                <MapPin size={14} className="filter-icon" /> Région
+              </label>
+              <select
+                id="regionSelect"
+                value={selectedRegion}
+                onChange={(e) => setSelectedRegion(e.target.value)}
+                className="form-select"
+              >
+                <option value="">Toutes les régions</option>
+                {regionsDisponibles.map((r) => (
+                  <option key={r.id} value={r.nom}>{r.nom}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Réinitialiser */}
+            <div className="filter-item filter-actions">
               <label>&nbsp;</label>
-              <button className="btn-reset" onClick={handleReset}>🔄 Réinitialiser</button>
+              <button className="btn-reset" onClick={resetFilters}>
+                <RotateCcw size={16} /> Réinitialiser
+              </button>
             </div>
           </div>
 
+          {/* Barre de recherche */}
           <div className="search-bar">
-            <div className="search-normal">
-              <span className="search-icon"></span>
-              <input 
-                type="text" 
-                className="search-input" 
-                placeholder="Rechercher par nom, lieu, artiste..." 
-                value={searchTerm} 
-                onChange={(e) => setSearchTerm(e.target.value)} 
+            <div className="search-input-wrapper">
+
+              <input
+                type="text"
+                placeholder="Rechercher par nom, lieu, artiste…"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="search-input"
               />
             </div>
-            <button className="search-btn" onClick={handleSearch}>Rechercher</button>
-            
-            <div className="reference-search">
-              <span className="reference-label">📌 Réf :</span>
-              <input 
-                type="text" 
-                className="reference-input" 
-                placeholder="ID événement" 
-                value={referenceId} 
-                onChange={(e) => setReferenceId(e.target.value)} 
+            <div className="reference-input-wrapper">
+              <Tag size={16} className="ref-icon" />
+              <input
+                type="text"
+                placeholder="ID événement"
+                value={referenceId}
+                onChange={(e) => setReferenceId(e.target.value)}
+                className="reference-input"
               />
             </div>
           </div>
-        </section>
+        </div>
 
-        {/* ===== ÉVÉNEMENTS ===== */}
-        <section className="events-section">
+        {/* ===== TABLEAU ===== */}
+        <section className="events-table-wrapper">
           {loading ? (
-            <div className="loading-container"><div className="spinner"></div><p>Chargement...</p></div>
+            <div className="loading-state">
+              <div className="spinner" />
+              <p>Chargement des événements…</p>
+            </div>
           ) : error ? (
-            <div className="error-container"><p className="error-message">❌ {error}</p><button className="btn-modern" onClick={fetchOccasionnels}>Réessayer</button></div>
-          ) : filteredEvents.length > 0 ? (
-            filteredEvents.map((eventGroup, idx) => {
-              const sortedEvents = sortEventsByStatus(eventGroup.events);
-              
-              return (
-                <div className="event-card" key={idx}>
-                  <div className="event-header">
-                    <h3>{eventGroup.raisonSociale}</h3>
-                    <h4>{eventGroup.monthYear}</h4>
-                  </div>
-                  <div className="event-details">
-                    {sortedEvents.map((item) => {
-                      const status = getEventStatus(item.dateOriginal);
-                      
-                      return (
-                        <div key={item.id} className={`event-item event-${status}`}>
-                          <div className="event-info-line">
-                            <span className="info-text">📅 {item.date}</span>
-                            <span className="info-text">📍 {item.lieu}</span>
-                            <span className="info-text event-name">📝 {item.nomEvenement}</span>
-                            <span className="info-text event-artist">🎤 {getAllArtistsNames(item.artistesList)}</span>
-                            <span className="info-text">👤 {item.demandeur}</span>
-                            {getEventBadge(status)}
-                            <button className="view-more-btn" onClick={() => openModal(item)}>▼</button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })
+            <div className="error-state">
+              <AlertCircle size={32} />
+              <p>{error}</p>
+              <button className="btn-retry" onClick={fetchOccasionnels}>
+                Réessayer
+              </button>
+            </div>
+          ) : getFilteredEvents.length === 0 ? (
+            <div className="empty-state">
+              <Search size={40} />
+              <p>
+                {referenceId
+                  ? `Aucun événement avec la référence ${referenceId}`
+                  : 'Aucun événement ne correspond à vos critères'}
+              </p>
+            </div>
           ) : (
-            <div className="no-results">
-              <p>{referenceId ? `Aucun événement trouvé avec la référence ${referenceId}` : 'Aucun événement trouvé.'}</p>
+            <div className="table-responsive">
+              <table className="events-table">
+                <thead>
+                  <tr>
+                    <th>Réf.</th>
+                    <th>Date</th>
+                    <th>Organisation</th>
+                    <th>Événement</th>
+                    <th>Lieu</th>
+                    <th>Artistes</th>
+                    <th>Statut</th>
+                    <th style={{ width: '50px' }}>Détail</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {getFilteredEvents.map((event) => {
+                    const status = getEventStatus(event.date_evenement);
+                    const { label, icon: StatusIcon, className } = statusConfig[status] || {};
+                    const artistNames = (event.artistesList || [])
+                      .map((a) => a.nom)
+                      .filter(Boolean)
+                      .join(', ') || '—';
+
+                    return (
+                      <tr key={event.id} className={`event-row ${className}`}>
+                        <td className="col-id">{event.id}</td>
+                        <td className="col-date" title={formatDateComplete(event.date_evenement)}>
+                          {formatDateComplete(event.date_evenement)}
+                        </td>
+                        <td className="col-org">
+                          <Building2 size={14} className="inline-icon" />
+                          {event.denomination || '—'}
+                        </td>
+                        <td className="col-event">
+                          {event.nom_evenement || event.denomination || '—'}
+                        </td>
+                        <td className="col-lieu">
+                          <MapPin size={14} className="inline-icon" />
+                          {event.lieu_evenement || '—'}
+                        </td>
+                        <td className="col-artists">
+                          <Music size={14} className="inline-icon" />
+                          {artistNames}
+                        </td>
+                        <td className="col-status">
+                          {status && (
+                            <span className={`status-badge ${className}`}>
+                              <StatusIcon size={14} />
+                              {label}
+                            </span>
+                          )}
+                        </td>
+                        <td className="col-action">
+                          <button
+                            className="btn-view"
+                            onClick={() => openModal(event)}
+                            aria-label="Voir les détails"
+                          >
+                            <Eye size={18} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </section>
@@ -513,44 +497,99 @@ const DateOcc = () => {
         <div className="modal-overlay" onClick={closeModal}>
           <div className="modal-container" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>📋 Détails - Réf: {selectedEvent.id}</h3>
-              <button className="modal-close" onClick={closeModal}>✕</button>
+              <h3>
+                <Tag size={18} /> Détails – Réf. {selectedEvent.id}
+              </h3>
+              <button className="modal-close" onClick={closeModal}>
+                <X size={20} />
+              </button>
             </div>
             <div className="modal-body">
               <div className="modal-section">
-                <h4>🎪 ÉVÉNEMENT</h4>
-                <div className="modal-row"><strong>🔢 Référence :</strong> <span>{selectedEvent.id}</span></div>
-                <div className="modal-row"><strong>📅 Date :</strong> <span>{selectedEvent.dateComplete}</span></div>
-                <div className="modal-row"><strong>📍 Lieu :</strong> <span>{selectedEvent.lieu}</span></div>
-                <div className="modal-row"><strong>📝 Nom :</strong> <span>{selectedEvent.nomEvenement}</span></div>
-                <div className="modal-row"><strong>🎭 Genre :</strong> <span>{selectedEvent.genre || 'Non spécifié'}</span></div>
-                <div className="modal-row"><strong>📍 Région :</strong> <span>{selectedEvent.region || 'Non spécifiée'}</span></div>
-                <div className="modal-row"><strong>💰 Montant :</strong> <span>{(selectedEvent.montant_total || 0).toLocaleString()} Ar</span></div>
+                <h4>
+                  <Calendar size={16} /> Événement
+                </h4>
+                <div className="modal-row">
+                  <span>Date</span>
+                  <strong>{formatDateComplete(selectedEvent.date_evenement)}</strong>
+                </div>
+                <div className="modal-row">
+                  <span>Lieu</span>
+                  <strong>{selectedEvent.lieu_evenement || '—'}</strong>
+                </div>
+                <div className="modal-row">
+                  <span>Nom</span>
+                  <strong>{selectedEvent.nom_evenement || '—'}</strong>
+                </div>
+                <div className="modal-row">
+                  <span>Genre</span>
+                  <strong>{selectedEvent.genre_manifestation || '—'}</strong>
+                </div>
+                <div className="modal-row">
+                  <span>Région</span>
+                  <strong>{selectedEvent.region || '—'}</strong>
+                </div>
+                <div className="modal-row">
+                  <span>
+                    <DollarSign size={14} /> Montant
+                  </span>
+                  <strong>{(selectedEvent.montant_total || 0).toLocaleString()} Ar</strong>
+                </div>
               </div>
-              
+
               <div className="modal-section">
-                <h4>👤 ORGANISATEUR</h4>
-                <div className="modal-row"><strong>🏢 Organisation :</strong> <span>{selectedEvent.denomination}</span></div>
-                <div className="modal-row"><strong>👤 Organisateur :</strong> <span>{selectedEvent.demandeur}</span></div>
-                <div className="modal-row"><strong>📞 Téléphone :</strong> <span>{selectedEvent.telephone || 'Non renseigné'}</span></div>
-                <div className="modal-row"><strong>📧 Email :</strong> <span>{selectedEvent.email || 'Non renseigné'}</span></div>
+                <h4>
+                  <Building2 size={16} /> Organisateur
+                </h4>
+                <div className="modal-row">
+                  <span>Structure</span>
+                  <strong>{selectedEvent.denomination || '—'}</strong>
+                </div>
+                <div className="modal-row">
+                  <span>
+                    <User size={14} /> Demandeur
+                  </span>
+                  <strong>{selectedEvent.demandeur || '—'}</strong>
+                </div>
+                <div className="modal-row">
+                  <span>
+                    <Phone size={14} /> Téléphone
+                  </span>
+                  <strong>{selectedEvent.telephone || '—'}</strong>
+                </div>
+                <div className="modal-row">
+                  <span>
+                    <Mail size={14} /> Email
+                  </span>
+                  <strong>{selectedEvent.email || '—'}</strong>
+                </div>
               </div>
-              
+
               {selectedEvent.artistesList && selectedEvent.artistesList.length > 0 && (
                 <div className="modal-section">
-                  <h4>🎤 ARTISTES</h4>
-                  {selectedEvent.artistesList.map((artist, i) => (
-                    <div key={i} className="artist-modal-item">
-                      <span className="artist-name">{artist.nom} {artist.prenom || ''}</span>
-                      {artist.role && <span className="artist-role">🎭 {artist.role}</span>}
-                      {artist.nombre_chansons && <span className="artist-chansons">🎵 {artist.nombre_chansons} chansons</span>}
-                    </div>
-                  ))}
+                  <h4>
+                    <Music size={16} /> Artistes
+                  </h4>
+                  <ul className="artist-list">
+                    {selectedEvent.artistesList.map((artist, idx) => (
+                      <li key={idx}>
+                        <span className="artist-name">
+                          {artist.nom} {artist.prenom || ''}
+                        </span>
+                        {artist.role && <span className="artist-role">🎭 {artist.role}</span>}
+                        {artist.nombre_chansons && (
+                          <span className="artist-songs">🎵 {artist.nombre_chansons} chansons</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
             </div>
             <div className="modal-footer">
-              <button className="modal-btn" onClick={closeModal}>Fermer</button>
+              <button className="btn-modal-close" onClick={closeModal}>
+                Fermer
+              </button>
             </div>
           </div>
         </div>

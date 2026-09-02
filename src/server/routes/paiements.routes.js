@@ -1,17 +1,182 @@
-// server/routes/paiements.routes.js
+// server/routes/paiements.routes.js - Ajout de la route pour récupérer les paiements d'un usager
 const express = require('express');
 const router = express.Router();
 const { pool } = require('../database');
 const { authMiddleware } = require('../middleware');
 
 // ============================================================
-// ROUTE DE TEST
+// GET - Paiements d'un usager (NOUVEAU)
 // ============================================================
 
 router.get('/paiements/test', authMiddleware, (req, res) => {
   res.json({ success: true, message: 'Route paiements fonctionne !' });
 });
 
+// server/routes/paiements.routes.js - Route POST /paiements/enregistrer corrigée
+
+// ============================================================
+// POST - Enregistrer un paiement (VERSION CORRIGÉE FINALE)
+// ============================================================
+router.post('/paiements/enregistrer', async (req, res) => {
+  console.log('🔥 ROUTE DIRECTE appelée');
+  console.log('📦 Body reçu:', req.body);
+
+  const { 
+    usagerId, 
+    usagerType, 
+    type_paiement,
+    montant, 
+    date_paiement, 
+    frais_dossier, 
+    montant_retard,
+    est_retard,
+    annee,
+    mois,
+    mois_payes,
+    nombre_mois,
+    reference,
+    statut
+  } = req.body;
+
+  if (!usagerId || !montant) {
+    return res.status(400).json({ success: false, message: 'usagerId et montant requis' });
+  }
+
+  try {
+    // Déterminer le type de paiement
+    const typePaiement = type_paiement || (usagerType === 'occ' ? 'unique' : 'mensuel');
+    
+    console.log(`📝 Type paiement: ${typePaiement}, usagerType: ${usagerType}`);
+
+    // ✅ Pour OCC, on enregistre un paiement unique sans année ni mois
+    if (usagerType === 'occ' || typePaiement === 'unique') {
+      const result = await pool.query(
+        `INSERT INTO omda_app.paiements 
+         (usager_id, usager_type, type_paiement, montant, date_paiement, statut, frais_dossier, montant_retard, est_retard, reference)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         RETURNING id`,
+        [
+          usagerId,
+          usagerType || 'hotel',
+          'unique',
+          montant,
+          date_paiement || new Date().toISOString().split('T')[0],
+          statut || 'paye',
+          frais_dossier || 0,
+          montant_retard || 0,
+          est_retard || false,
+          reference || null
+        ]
+      );
+
+      console.log('✅ Paiement unique enregistré, ID:', result.rows[0].id);
+      return res.json({
+        success: true,
+        message: 'Paiement unique enregistré avec succès',
+        id: result.rows[0].id
+      });
+    }
+
+    // ✅ Pour les paiements mensuels
+    // Déterminer l'année et le mois
+    let anneeFinale = annee || new Date().getFullYear();
+    let moisFinal = mois || new Date().getMonth() + 1;
+    
+    // Si plusieurs mois sont envoyés, on prend le premier
+    if (mois_payes && Array.isArray(mois_payes) && mois_payes.length > 0) {
+      moisFinal = mois_payes[0];
+    }
+
+    console.log(`📝 Enregistrement mensuel: annee=${anneeFinale}, mois=${moisFinal}`);
+
+    // ✅ Vérifier si le paiement existe déjà pour ce mois
+    const checkResult = await pool.query(
+      `SELECT id FROM omda_app.paiements 
+       WHERE usager_id = $1 AND usager_type = $2 AND annee = $3 AND mois = $4 AND statut = 'paye'`,
+      [usagerId, usagerType || 'hotel', anneeFinale, moisFinal]
+    );
+    
+    if (checkResult.rows.length > 0) {
+      console.log(`⚠️ Paiement déjà existant pour mois ${moisFinal}/${anneeFinale}`);
+      return res.json({
+        success: true,
+        message: 'Paiement déjà enregistré pour ce mois',
+        id: checkResult.rows[0].id,
+        dejaExistant: true
+      });
+    }
+
+    // ✅ Insérer le paiement mensuel
+    const result = await pool.query(
+      `INSERT INTO omda_app.paiements 
+       (usager_id, usager_type, type_paiement, annee, mois, montant, date_paiement, statut, frais_dossier, montant_retard, est_retard, reference)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       RETURNING id`,
+      [
+        usagerId,
+        usagerType || 'hotel',
+        'mensuel',
+        anneeFinale,
+        moisFinal,
+        montant,
+        date_paiement || new Date().toISOString().split('T')[0],
+        statut || 'paye',
+        frais_dossier || 0,
+        montant_retard || 0,
+        est_retard || false,
+        reference || null
+      ]
+    );
+
+    console.log('✅ Paiement mensuel enregistré, ID:', result.rows[0].id);
+    
+    // ✅ Si plusieurs mois sont payés, enregistrer chaque mois séparément
+    if (mois_payes && Array.isArray(mois_payes) && mois_payes.length > 1) {
+      for (const m of mois_payes) {
+        if (m === moisFinal) continue; // Déjà enregistré
+        
+        const checkAutre = await pool.query(
+          `SELECT id FROM omda_app.paiements 
+           WHERE usager_id = $1 AND usager_type = $2 AND annee = $3 AND mois = $4 AND statut = 'paye'`,
+          [usagerId, usagerType || 'hotel', anneeFinale, m]
+        );
+        
+        if (checkAutre.rows.length === 0) {
+          await pool.query(
+            `INSERT INTO omda_app.paiements 
+             (usager_id, usager_type, type_paiement, annee, mois, montant, date_paiement, statut, frais_dossier, montant_retard, est_retard, reference)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+            [
+              usagerId,
+              usagerType || 'hotel',
+              'mensuel',
+              anneeFinale,
+              m,
+              montant,
+              date_paiement || new Date().toISOString().split('T')[0],
+              statut || 'paye',
+              frais_dossier || 0,
+              montant_retard || 0,
+              est_retard || false,
+              reference || null
+            ]
+          );
+          console.log(`✅ Paiement mensuel supplémentaire enregistré pour mois ${m}`);
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `Paiement enregistré avec succès (${mois_payes ? mois_payes.length : 1} mois)`,
+      id: result.rows[0].id
+    });
+
+  } catch (error) {
+    console.error('❌ ERREUR SQL:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
 // ============================================================
 // GET - Statistiques des paiements
 // ============================================================
@@ -40,12 +205,12 @@ router.get('/paiements/stats', authMiddleware, async (req, res) => {
 
     for (const type of types) {
       try {
-        const totalResult = await pool.query(`SELECT COUNT(*) as count FROM ${type.table}`);
+        const totalResult = await pool.query(`SELECT COUNT(*) as count FROM omda_app.${type.table}`);
         stats[type.name].total = parseInt(totalResult.rows[0].count) || 0;
 
         const payesResult = await pool.query(
           `SELECT COUNT(DISTINCT usager_id) as count, COALESCE(SUM(montant), 0) as total_montant 
-           FROM paiements 
+           FROM omda_app.paiements 
            WHERE usager_type = $1 AND statut = 'paye'`,
           [type.name]
         );
@@ -67,7 +232,7 @@ router.get('/paiements/stats', authMiddleware, async (req, res) => {
 });
 
 // ============================================================
-// POST - Enregistrer un paiement (AVEC RENOUVELLEMENT COMPLET)
+// GET - Années disponibles
 // ============================================================
 router.post('/paiements/enregistrer', authMiddleware, async (req, res) => {
   const { 
@@ -270,22 +435,22 @@ router.post('/paiements/enregistrer', authMiddleware, async (req, res) => {
 
     res.json({ 
       success: true, 
-      message: `${moisTrouves} mois enregistrés avec succès`,
-      details: {
-        moisEnregistres: moisTrouves,
-        detailsMois: detailsMois,
-        totalMoisPayes: moisPayes.size
-      }
+      paiements: result.rows,
+      total: result.rows.length
     });
 
   } catch (error) {
-    console.error('❌ Erreur paiement enregistrer:', error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error('❌ Erreur récupération tous les paiements:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message,
+      paiements: [] 
+    });
   }
 });
 
 // ============================================================
-// GET - Historique des paiements (avec noms et régions)
+// GET - Historique des paiements
 // ============================================================
 router.get('/paiements/historique', authMiddleware, async (req, res) => {
   try {

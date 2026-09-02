@@ -2,7 +2,6 @@
 const express = require('express');
 const router = express.Router();
 
-// Importer toutes les routes
 const authRoutes = require('./auth.routes');
 const usagersRoutes = require('./usagers.routes');
 const regionsRoutes = require('./regions.routes');
@@ -11,15 +10,20 @@ const paiementsRoutes = require('./paiements.routes');
 const financeRoutes = require('./finance.routes');
 const backupRoutes = require('./backup.routes');
 const notificationsRoutes = require('./notifications.routes');
+const profileRoutes = require('./profile.routes');
+const factureRoutes = require('./facture.routes');
+const artistesRoutes = require('./artistes.routes'); //  NOUVEAU
 
-// Enregistrer les routes
 router.use(authRoutes);
 router.use(usagersRoutes);
 router.use(regionsRoutes);
 router.use(adminRoutes);
-router.use(paiementsRoutes);  
+router.use(paiementsRoutes);
 router.use(financeRoutes);
 router.use(backupRoutes);
 router.use(notificationsRoutes);
+router.use(profileRoutes);
+router.use(factureRoutes);
+router.use(artistesRoutes); //  AJOUTÉ
 
 module.exports = router;

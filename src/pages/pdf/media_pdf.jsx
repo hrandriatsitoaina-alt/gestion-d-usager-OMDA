@@ -1,17 +1,18 @@
 // src/pages/pdf/media_pdf.jsx
 import jsPDF from 'jspdf';
 
+// Fonctions utilitaires exportées
 export const formatDate = (dateString) => {
   if (!dateString) return '';
   try {
     const date = new Date(dateString);
-    if (isNaN(date.getTime())) return dateString;
+    if (isNaN(date.getTime())) return '';
     const jour = date.getDate();
     const mois = date.toLocaleString('fr-FR', { month: 'long' });
     const annee = date.getFullYear();
     return `${jour} ${mois} ${annee}`;
   } catch (error) {
-    return dateString;
+    return '';
   }
 };
 
@@ -28,33 +29,141 @@ export const getCurrentDate = () => {
   return `${jour} ${mois} ${annee}`;
 };
 
-const drawCheckbox = (doc, x, y, checked) => {
-  doc.setLineWidth(0.3);
-  doc.rect(x, y - 3.2, 3.2, 3.2);
-  if (checked) {
-    doc.line(x, y - 3.2, x + 3.2, y);
-    doc.line(x + 3.2, y - 3.2, x, y);
-  }
+// Fonction pour convertir un nombre en lettres (Ariary)
+const nombreEnLettres = (num) => {
+  if (num === 0) return 'zéro';
+  if (num < 0) return 'moins ' + nombreEnLettres(-num);
+  
+  const uniteMapping = {
+    0: 'zéro', 1: 'un', 2: 'deux', 3: 'trois', 4: 'quatre',
+    5: 'cinq', 6: 'six', 7: 'sept', 8: 'huit', 9: 'neuf',
+    10: 'dix', 11: 'onze', 12: 'douze', 13: 'treize', 14: 'quatorze',
+    15: 'quinze', 16: 'seize', 17: 'dix-sept', 18: 'dix-huit', 19: 'dix-neuf',
+    20: 'vingt', 30: 'trente', 40: 'quarante', 50: 'cinquante',
+    60: 'soixante', 70: 'soixante-dix', 80: 'quatre-vingts', 90: 'quatre-vingt-dix'
+  };
+
+  const convertHundreds = (n) => {
+    if (n === 0) return '';
+    if (n === 100) return 'cent';
+    if (n < 100) {
+      if (uniteMapping[n]) return uniteMapping[n];
+      if (n < 70) {
+        const tens = Math.floor(n / 10) * 10;
+        const units = n % 10;
+        if (units === 1 && tens !== 80) {
+          return uniteMapping[tens] + ' et un';
+        }
+        return uniteMapping[tens] + (units > 0 ? '-' + uniteMapping[units] : '');
+      }
+      if (n < 80) {
+        const units = n - 60;
+        if (units === 0) return 'soixante';
+        if (units === 1) return 'soixante et un';
+        return 'soixante-' + convertHundreds(units);
+      }
+      if (n < 90) {
+        const units = n - 80;
+        if (units === 0) return 'quatre-vingts';
+        if (units === 1) return 'quatre-vingt-un';
+        return 'quatre-vingt-' + convertHundreds(units);
+      }
+      const units = n - 90;
+      if (units === 0) return 'quatre-vingt-dix';
+      if (units === 1) return 'quatre-vingt-onze';
+      return 'quatre-vingt-' + convertHundreds(10 + units);
+    }
+    const hundreds = Math.floor(n / 100);
+    const remainder = n % 100;
+    let result = '';
+    if (hundreds === 1) {
+      result = 'cent';
+    } else {
+      result = convertHundreds(hundreds) + ' cents';
+    }
+    if (remainder > 0) {
+      if (hundreds === 1) {
+        result += ' ';
+      } else {
+        result += ' ';
+      }
+      result += convertHundreds(remainder);
+    }
+    return result;
+  };
+
+  const convertMilliers = (n) => {
+    if (n === 0) return '';
+    if (n === 1) return 'mille';
+    if (n < 1000) {
+      return convertHundreds(n);
+    }
+    const thousands = Math.floor(n / 1000);
+    const remainder = n % 1000;
+    let result = '';
+    if (thousands === 1) {
+      result = 'mille';
+    } else {
+      result = convertHundreds(thousands) + ' mille';
+    }
+    if (remainder > 0) {
+      result += ' ' + convertHundreds(remainder);
+    }
+    return result;
+  };
+
+  const convertMillions = (n) => {
+    if (n === 0) return '';
+    if (n < 1000000) return convertMilliers(n);
+    const millions = Math.floor(n / 1000000);
+    const remainder = n % 1000000;
+    let result = '';
+    if (millions === 1) {
+      result = 'un million';
+    } else {
+      result = convertHundreds(millions) + ' millions';
+    }
+    if (remainder > 0) {
+      result += ' ' + convertMilliers(remainder);
+    }
+    return result;
+  };
+
+  const roundedNum = Math.round(num);
+  if (roundedNum === 0) return 'zéro';
+  return convertMillions(roundedNum);
 };
 
-const drawUnderline = (doc, text, x, y, textWidth) => {
-  const lineY = y + 1.5;
-  doc.line(x, lineY, x + textWidth, lineY);
+// Fonction pour dessiner une case à cocher avec une vraie croix (X)
+const drawCheckbox = (doc, x, y, checked) => {
+  const size = 4.5;
+  doc.setLineWidth(0.5);
+  doc.rect(x, y - size/2, size, size);
+  if (checked) {
+    doc.setLineWidth(0.8);
+    doc.line(x + 0.5, y - size/2 + 0.5, x + size - 0.5, y + size/2 - 0.5);
+    doc.line(x + size - 0.5, y - size/2 + 0.5, x + 0.5, y + size/2 - 0.5);
+  }
 };
 
 export const generateMediaPDF = (usager, paymentDetails) => {
   try {
     console.log('========== GÉNÉRATION PDF MEDIA ==========');
     console.log('Données usager reçues:', usager);
-    console.log('Données paiement:', paymentDetails);
     
-    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const doc = new jsPDF({
+      unit: 'mm',
+      format: 'a4',
+      putOnlyUsedFonts: true
+    });
+    
     const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
     const marginX = 15;
-    const lineSpacing = 6.5;
-    let yPos = 20;
+    let yPos = 25;
+    const lineSpacing = 7.5;
     
-    // RENSEIGNEMENTS GENERAUX - PROPRIETAIRE
+    // Récupération des données
     const proprietaireNom = usager?.proprietaire_nom || '';
     const proprietaireAdresse = usager?.proprietaire_adresse || '';
     const proprietaireTel = usager?.proprietaire_tel || '';
@@ -69,10 +178,8 @@ export const generateMediaPDF = (usager, paymentDetails) => {
         }
       } catch(e) {}
     }
-    
     const proprietaireCinLieu = usager?.proprietaire_cin_lieu || '';
     
-    // REPRESENTANT LEGAL
     const representantNom = usager?.representant_nom || '';
     const representantAdresse = usager?.representant_adresse || '';
     const representantTel = usager?.representant_tel || '';
@@ -87,164 +194,106 @@ export const generateMediaPDF = (usager, paymentDetails) => {
         }
       } catch(e) {}
     }
-    
     const representantCinLieu = usager?.representant_cin_lieu || '';
     const representantPouvoirDate = usager?.representant_pouvoir_date ? formatDate(usager.representant_pouvoir_date) : '';
     const representantPouvoirPar = usager?.representant_pouvoir_par || '';
     const representantFonction = usager?.representant_fonction || '';
     
-    // INFORMATIONS MEDIA
     const denomination = usager?.denomination || '';
     const frequence = usager?.frequence || '';
     const canal = usager?.canal || '';
-    const siege = usager?.siege || '';
+    const siege = usager?.siege || usager?.adresse_siege || '';
     const telephone = usager?.telephone || '';
     const email = usager?.email || '';
     const nif = usager?.nif || '';
     const stat = usager?.stat || '';
-    const taux = usager?.taux || '';
+    const taux = parseFloat(usager?.taux) || 0;
     
-    // COUVERTURE
-    const couvercleCapitale = usager?.couvercle_capitale || false;
-    const couvercleChefLieuProvince = usager?.couvercle_chef_lieu_province || false;
-    const couvercleChefLieuRegion = usager?.couvercle_chef_lieu_region || false;
-    const couvercleDistrict = usager?.couvercle_district || false;
+    const couvertureCapitale = usager?.couverture_capitale || false;
+    const couvertureChefLieuProvince = usager?.couverture_chef_lieu_province || false;
+    const couvertureChefLieuRegion = usager?.couverture_chef_lieu_region || false;
+    const couvertureDistrict = usager?.couverture_district || false;
     
-    // HORAIRES
     const horairesJusqua12 = usager?.horaires_jusqua12 || false;
     const horaires13a24 = usager?.horaires_13a24 || false;
     
-    // REGIONS
-    let regionsDetail = [];
-    try {
-      if (usager?.regions_detail) {
-        regionsDetail = typeof usager.regions_detail === 'string' 
-          ? JSON.parse(usager.regions_detail) 
-          : usager.regions_detail;
-      }
-    } catch(e) {
-      console.error('Erreur parsing regions:', e);
-    }
-    
-    const hasRegions = usager?.has_regions || (regionsDetail.length > 0);
-    
-    // MONTANTS
-    const montantMensuel = parseFloat(usager?.montant_mensuel) || 0;
     const fraisDossier = parseFloat(usager?.frais_dossier) || 0;
-    const totalAnnuel = montantMensuel * 12;
+    const uniter = parseInt(usager?.uniter) || 1;
     
-    // AUTRES
-    const aCompterDu = usager?.a_compter_du ? formatDate(usager.a_compter_du) : '';
-    const echeance = usager?.echeance ? formatDate(usager.echeance) : '';
+    // ✅ BONNE RÈGLE DE CALCUL : (Taux × Uniter) + Frais de dossier
+    // Le frais de dossier est FIXE et N'EST PAS multiplié par Uniter
+    const baseTotal = taux * uniter;
+    const soitTotal = baseTotal + fraisDossier;
+    const totalEnLettres = nombreEnLettres(Math.round(soitTotal));
+    
     const confirmationNom = usager?.confirmation_nom || '';
     const lieuSignature = usager?.lieu_signature || 'Antananarivo';
     const dateSignature = usager?.date_signature ? formatDate(usager.date_signature) : getCurrentDate();
-    const numeroDossier = usager?.numero_dossier_utilisateur || '';
+
+    // ========== PAGE 1 ==========
+    // Titre principal
+    doc.setFont('times', 'bold');
+    doc.setFontSize(16);
+    doc.text('OFFICE MALAGASY DU DROIT D\'AUTEUR', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 8;
     
-    console.log('Données extraites:', { denomination, proprietaireNom, representantNom, frequence, canal, montantMensuel });
-    
-    // TITRE
-    doc.setFont('helvetica', 'bold');
+    // Sous-titre
+    doc.setFont('times', 'bold');
     doc.setFontSize(14);
-    const titre1 = 'OFFICE MALAGASY DU DROIT D\'AUTEUR';
-    const titre1Width = doc.getStringUnitWidth(titre1) * 14 / doc.internal.scaleFactor;
-    doc.text(titre1, pageWidth / 2, yPos, { align: 'center' });
-    drawUnderline(doc, titre1, pageWidth / 2 - titre1Width / 2, yPos, titre1Width);
-    yPos += lineSpacing + 2;
-    
-    doc.setFontSize(13);
-    const titre2 = 'FICHE DE RENSEIGNEMENTS – TELEVISION / RADIO';
-    const titre2Width = doc.getStringUnitWidth(titre2) * 13 / doc.internal.scaleFactor;
-    doc.text(titre2, pageWidth / 2, yPos, { align: 'center' });
-    drawUnderline(doc, titre2, pageWidth / 2 - titre2Width / 2, yPos, titre2Width);
-    yPos += lineSpacing + 5;
-    
-    if (numeroDossier) {
-      doc.setFontSize(10);
-      doc.text(`N° DOSSIER : ${numeroDossier}`, pageWidth - marginX - 20, yPos - 8, { align: 'right' });
-    }
+    doc.text('FICHE DE RENSEIGNEMENTS – RADIO ET TELEVISION', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 10;
     
     // SECTION 1
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
+    doc.setFontSize(13);
+    const section1Text = '1) RENSEIGNEMENTS SUR LE PROPRIETAIRE DE LA STATION :';
+    const section1Width = doc.getTextWidth(section1Text);
+    doc.text(section1Text, marginX, yPos);
+    doc.line(marginX, yPos + 1.5, marginX + section1Width, yPos + 1.5);
+    yPos += 8;
+    
+    doc.setFont('times', 'normal');
     doc.setFontSize(12);
-    const section1 = '1) RENSEIGNEMENTS GENERAUX :';
-    doc.text(section1, marginX, yPos);
-    const section1Width = doc.getStringUnitWidth(section1) * 12 / doc.internal.scaleFactor;
-    drawUnderline(doc, section1, marginX, yPos, section1Width);
-    yPos += lineSpacing + 2;
     
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
-    doc.text(`Dénomination : ${denomination || '……………………………………'}`, marginX + 5, yPos);
-    yPos += lineSpacing;
-    
-    doc.text(`Fréquence : ${frequence || '……………………………………'}`, marginX + 5, yPos);
-    doc.text(`Canal : ${canal || '……………………………………'}`, marginX + 100, yPos);
-    yPos += lineSpacing;
-    
-    doc.text(`Siège social : ${siege || '……………………………………'}`, marginX + 5, yPos);
-    yPos += lineSpacing;
-    
-    doc.text(`Tél. : ${telephone || '……………………………………'}`, marginX + 5, yPos);
-    doc.text(`E-mail : ${email || '……………………………………'}`, marginX + 100, yPos);
-    yPos += lineSpacing;
-    
-    doc.text(`NIF : ${nif || '……………………………………'}`, marginX + 5, yPos);
-    doc.text(`STAT : ${stat || '……………………………………'}`, marginX + 100, yPos);
-    yPos += lineSpacing;
-    
-    doc.text(`Taux : ${taux || '……………………………………'}`, marginX + 5, yPos);
-    yPos += lineSpacing + 3;
-    
-    // SECTION 2
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    const section2 = '2) PROPRIETAIRE :';
-    doc.text(section2, marginX, yPos);
-    const section2Width = doc.getStringUnitWidth(section2) * 12 / doc.internal.scaleFactor;
-    drawUnderline(doc, section2, marginX, yPos, section2Width);
-    yPos += lineSpacing + 2;
-    
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
     doc.text(`Nom et prénoms : ${proprietaireNom || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
-    doc.text(`Adresse : ${proprietaireAdresse || '……………………………………'}`, marginX + 5, yPos);
+    doc.text(`Adresse (domicile) : ${proprietaireAdresse || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
     doc.text(`Téléphone : ${proprietaireTel || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
-    doc.text(`N° CIN : ${proprietaireCin || '……………………………………'}`, marginX + 5, yPos);
+    doc.text(`N° Carte d'identité nationale : ${proprietaireCin || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
-    let cinText = `Délivrée le : ${proprietaireCinDelivree || '……………………………………'}`;
-    if (proprietaireCinLieu) cinText += ` à ${proprietaireCinLieu}`;
-    doc.text(cinText, marginX + 5, yPos);
-    yPos += lineSpacing + 3;
+    let cinPropText = `Délivrée le : ${proprietaireCinDelivree || '……………………………………'}`;
+    if (proprietaireCinLieu) cinPropText += ` à ${proprietaireCinLieu}`;
+    doc.text(cinPropText, marginX + 5, yPos);
+    yPos += lineSpacing + 5;
     
-    // SECTION 3
-    doc.setFont('helvetica', 'bold');
+    // SECTION 2
+    doc.setFont('times', 'bold');
+    doc.setFontSize(13);
+    const section2Text = '2) RENSEIGNEMENTS SUR LE REPRESENTANT LEGAL :';
+    const section2Width = doc.getTextWidth(section2Text);
+    doc.text(section2Text, marginX, yPos);
+    doc.line(marginX, yPos + 1.5, marginX + section2Width, yPos + 1.5);
+    yPos += 8;
+    
+    doc.setFont('times', 'normal');
     doc.setFontSize(12);
-    const section3 = '3) REPRESENTANT LEGAL :';
-    doc.text(section3, marginX, yPos);
-    const section3Width = doc.getStringUnitWidth(section3) * 12 / doc.internal.scaleFactor;
-    drawUnderline(doc, section3, marginX, yPos, section3Width);
-    yPos += lineSpacing + 2;
     
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
     doc.text(`Nom et prénoms : ${representantNom || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
-    doc.text(`Adresse : ${representantAdresse || '……………………………………'}`, marginX + 5, yPos);
+    doc.text(`Adresse (domicile) : ${representantAdresse || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
     doc.text(`Téléphone : ${representantTel || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
-    doc.text(`N° CIN : ${representantCin || '……………………………………'}`, marginX + 5, yPos);
+    doc.text(`N° Carte d'identité nationale : ${representantCin || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
     let cinRepText = `Délivrée le : ${representantCinDelivree || '……………………………………'}`;
@@ -252,129 +301,149 @@ export const generateMediaPDF = (usager, paymentDetails) => {
     doc.text(cinRepText, marginX + 5, yPos);
     yPos += lineSpacing;
     
-    doc.text(`Pouvoir en date du : ${representantPouvoirDate || '……………………………………'}`, marginX + 5, yPos);
-    yPos += lineSpacing;
-    
-    doc.text(`Par : ${representantPouvoirPar || '……………………………………'}`, marginX + 5, yPos);
+    doc.text(`Pouvoir donné le : ${representantPouvoirDate || '……………………………………'}`, marginX + 5, yPos);
+    doc.text(`par ${representantPouvoirPar || '……………………………………'}`, marginX + 85, yPos);
     yPos += lineSpacing;
     
     doc.text(`Fonction : ${representantFonction || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing + 3;
     
-    // SECTION 4 - COUVERTURE
-    doc.setFont('helvetica', 'bold');
+    // SECTION 3
+    doc.setFont('times', 'bold');
+    doc.setFontSize(13);
+    const section3Text = '3) RENSEIGNEMENTS SUR LA STATION RADIO/TV :';
+    const section3Width = doc.getTextWidth(section3Text);
+    doc.text(section3Text, marginX, yPos);
+    doc.line(marginX, yPos + 1.5, marginX + section3Width, yPos + 1.5);
+    yPos += 8;
+    
+    doc.setFont('times', 'normal');
     doc.setFontSize(12);
-    const section4 = '4) COUVERTURE :';
-    doc.text(section4, marginX, yPos);
-    const section4Width = doc.getStringUnitWidth(section4) * 12 / doc.internal.scaleFactor;
-    drawUnderline(doc, section4, marginX, yPos, section4Width);
-    yPos += lineSpacing + 2;
     
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
-    const checkboxX = marginX + 70;
-    
-    doc.text('Capitale (TNR)', marginX + 30, yPos);
-    drawCheckbox(doc, checkboxX, yPos, couvercleCapitale);
+    doc.text(`Dénomination : ${denomination || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
-    doc.text('Chef-lieu de province', marginX + 30, yPos);
-    drawCheckbox(doc, checkboxX, yPos, couvercleChefLieuProvince);
+    doc.text(`Fréquence : ${frequence || '……………………………………'}`, marginX + 5, yPos);
+    doc.text(`Canal : ${canal || '……………………………………'}`, marginX + 85, yPos);
     yPos += lineSpacing;
     
-    doc.text('Chef-lieu de région', marginX + 30, yPos);
-    drawCheckbox(doc, checkboxX, yPos, couvercleChefLieuRegion);
+    doc.text(`Siège : ${siege || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
-    doc.text('District', marginX + 30, yPos);
-    drawCheckbox(doc, checkboxX, yPos, couvercleDistrict);
-    yPos += lineSpacing + 3;
+    doc.text(`Téléphone : ${telephone || '……………………………………'}`, marginX + 5, yPos);
+    doc.text(`E-mail : ${email || '……………………………………'}`, marginX + 85, yPos);
+    yPos += lineSpacing;
     
-    // SECTION 5 - HORAIRES
-    doc.setFont('helvetica', 'bold');
+    doc.text(`NIF : ${nif || '……………………………………'}`, marginX + 5, yPos);
+    doc.text(`STAT : ${stat || '……………………………………'}`, marginX + 85, yPos);
+    yPos += lineSpacing;
+    
+    doc.text(`Taux : ${formatNumber(taux)} Ariary`, marginX + 5, yPos);
+    yPos += lineSpacing;
+    
+    // Couverture
+    doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    const section5 = '5) HORAIRES DE DIFFUSION :';
-    doc.text(section5, marginX, yPos);
-    const section5Width = doc.getStringUnitWidth(section5) * 12 / doc.internal.scaleFactor;
-    drawUnderline(doc, section5, marginX, yPos, section5Width);
-    yPos += lineSpacing + 2;
+    doc.text('Couverture :', marginX + 5, yPos);
     
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
-    const checkboxX2 = marginX + 70;
+    const couvStartX = marginX + 40;
+    const couvPos1 = couvStartX;
+    const couvPos2 = couvStartX + 26;
+    const couvPos3 = couvStartX + 72;
+    const couvPos4 = couvStartX + 122;
     
-    doc.text('Jusqu\'à 12h', marginX + 30, yPos);
-    drawCheckbox(doc, checkboxX2, yPos, horairesJusqua12);
-    yPos += lineSpacing;
-    
-    doc.text('13h à 24h', marginX + 30, yPos);
-    drawCheckbox(doc, checkboxX2, yPos, horaires13a24);
-    yPos += lineSpacing + 3;
-    
-    // SECTION 6 - REGIONS
-    if (hasRegions && regionsDetail.length > 0) {
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(12);
-      const section6 = '6) DETAIL DES REGIONS :';
-      doc.text(section6, marginX, yPos);
-      const section6Width = doc.getStringUnitWidth(section6) * 12 / doc.internal.scaleFactor;
-      drawUnderline(doc, section6, marginX, yPos, section6Width);
-      yPos += lineSpacing + 2;
-      
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      for (const region of regionsDetail.slice(0, 5)) {
-        const regionText = `• ${region.nom || ''}${region.type_equipement ? ` - ${region.type_equipement}` : ''}`;
-        doc.text(regionText, marginX + 5, yPos);
-        yPos += lineSpacing;
-      }
-      if (regionsDetail.length > 5) {
-        doc.text(`... et ${regionsDetail.length - 5} autre(s) région(s)`, marginX + 5, yPos);
-        yPos += lineSpacing;
-      }
-      yPos += 3;
-    }
-    
-    // SECTION 7 - REDEVANCES
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'normal');
     doc.setFontSize(12);
-    const section7 = '7) REDEVANCES :';
-    doc.text(section7, marginX, yPos);
-    const section7Width = doc.getStringUnitWidth(section7) * 12 / doc.internal.scaleFactor;
-    drawUnderline(doc, section7, marginX, yPos, section7Width);
-    yPos += lineSpacing + 2;
     
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
-    doc.text(`Montant mensuel : ${formatNumber(montantMensuel)} Ariary`, marginX + 5, yPos);
+    drawCheckbox(doc, couvPos1, yPos, couvertureCapitale);
+    doc.text('Capitale', couvPos1 + 7, yPos);
+    
+    drawCheckbox(doc, couvPos2, yPos, couvertureChefLieuProvince);
+    doc.text('Chef-lieu de Province', couvPos2 + 7, yPos);
+    
+    drawCheckbox(doc, couvPos3, yPos, couvertureChefLieuRegion);
+    doc.text('Chef-lieu de Région', couvPos3 + 7, yPos);
+    
+    drawCheckbox(doc, couvPos4, yPos, couvertureDistrict);
+    doc.text('District', couvPos4 + 7, yPos);
     yPos += lineSpacing;
     
-    doc.text(`Soit au Total annuel : ${formatNumber(totalAnnuel)} Ariary`, marginX + 5, yPos);
+    // Horaires
+    doc.setFont('times', 'bold');
+    doc.setFontSize(12);
+    doc.text('Horaires de diffusion :', marginX + 5, yPos);
+    
+    const horaireStartX = marginX + 60;
+    const horairePos1 = horaireStartX;
+    const horairePos2 = horaireStartX + 55;
+    
+    doc.setFont('times', 'normal');
+    doc.setFontSize(12);
+    
+    drawCheckbox(doc, horairePos1, yPos, horairesJusqua12);
+    doc.text('Jusqu\'à 12 heures', horairePos1 + 7, yPos);
+    
+    drawCheckbox(doc, horairePos2, yPos, horaires13a24);
+    doc.text('13 à 24 heures', horairePos2 + 7, yPos);
     yPos += lineSpacing;
     
-    doc.text(`Frais de dossier : ${formatNumber(fraisDossier)} Ariary`, marginX + 5, yPos);
-    yPos += lineSpacing + 2;
-    
-    doc.text(`A compter du : ${aCompterDu || '……………………………………'}`, marginX + 5, yPos);
-    yPos += lineSpacing;
-    doc.text(`Echéance : ${echeance || '……………………………………'}`, marginX + 5, yPos);
+    // ✅ Soit au Total corrigé : (Taux × Uniter) + Frais de dossier
+    doc.setFont('times', 'bold');
+    doc.setFontSize(12);
+    doc.text(`Soit au Total : ${formatNumber(soitTotal)} Ariary (${totalEnLettres})`, marginX + 5, yPos);
+    doc.text(`( ${formatNumber(taux)} × ${uniter} + ${formatNumber(fraisDossier)} )`, marginX + 5, yPos + 5);
     yPos += lineSpacing + 5;
     
-    // SIGNATURE
+    // Signature
     doc.text(`Je soussigné(e) Mr/Mme ${confirmationNom || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
     
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
+    doc.setFontSize(12);
     doc.text('confirme sous ma responsabilité la sincérité et l\'exactitude des renseignements ci-dessus et', marginX + 5, yPos);
     yPos += lineSpacing;
     doc.text('m\'engage à respecter les obligations prévues par le contrat général de représentation.', marginX + 5, yPos);
-    yPos += lineSpacing + 5;
+    yPos += lineSpacing;
     
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Fait à ${lieuSignature}, le ${dateSignature}`, pageWidth - marginX, yPos, { align: 'right' });
-    yPos += lineSpacing + 5;
+    doc.setFont('times', 'normal');
+    doc.setFontSize(13);
+    doc.text(`Fait à ${lieuSignature}, le ${dateSignature}`, pageWidth - marginX - 5, yPos, { align: 'right' });
+    yPos += lineSpacing;
     
-    doc.text('(Signature)', pageWidth - marginX - 20, yPos, { align: 'center' });
+    doc.setFont('times', 'italic');
+    doc.setFontSize(13);
+    doc.text('(Signature)', pageWidth - marginX - 5, yPos, { align: 'right' });
+    yPos += 15;
+
+    // ========== PAGE 2 ==========
+    doc.addPage();
+    yPos = 25;
+    
+    doc.setFont('times', 'bold');
+    doc.setFontSize(12);
+    doc.text('Dossier à fournir :', marginX, yPos);
+    yPos += 8;
+    
+    doc.setFont('times', 'normal');
+    doc.setFontSize(12);
+    doc.text('• CIN certifié du propriétaire et du représentant légal', marginX + 5, yPos);
+    yPos += lineSpacing;
+    doc.text('• Cif', marginX + 5, yPos);
+    yPos += lineSpacing;
+    doc.text('• Stat', marginX + 5, yPos);
+    yPos += lineSpacing;
+    doc.text('• Autorisation Artec', marginX + 5, yPos);
+    yPos += lineSpacing;
+    doc.text('• Autorisation du Ministère de la Communication', marginX + 5, yPos);
+    yPos += lineSpacing + 20;
+    
+    const bottomMargin = 25;
+    if (yPos < pageHeight - bottomMargin) {
+      const extraSpace = (pageHeight - bottomMargin) - yPos;
+      if (extraSpace > 0) {
+        // Rien à faire, l'espace est déjà suffisant
+      }
+    }
     
     const fileName = `media_${(denomination || 'document').replace(/\s/g, '_')}_${Date.now()}.pdf`;
     doc.save(fileName);
