@@ -56,7 +56,7 @@ router.post('/regions', async (req, res) => {
 // ============================================================
 // PUT /api/regions/:id – Modifier une région (admin requis)
 // ============================================================
-router.put('/regions/:id', verifyAdminToken, async (req, res) => {
+router.put('/regions/:id', requireSuperAdmin, async (req, res) => {
   const { id } = req.params;
   const { nom, telephone } = req.body;
   console.log(`✏️ PUT /regions/${id} - nom:`, nom, 'téléphone:', telephone);
@@ -106,7 +106,7 @@ router.put('/regions/:id', verifyAdminToken, async (req, res) => {
 // ============================================================
 // DELETE /api/regions/:id – Supprimer une région (admin requis)
 // ============================================================
-router.delete('/regions/:id', verifyAdminToken, async (req, res) => {
+router.delete('/regions/:id', requireSuperAdmin, async (req, res) => {
   const { id } = req.params;
   console.log(`🗑️ DELETE /regions/${id}`);
 

@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const pool = require('../database');
-const { verifyAdminToken } = require('../middleware');
+const { authMiddleware } = require('../middleware');
 
 // ============================================
 // GET /api/profile/:userId
@@ -143,7 +143,7 @@ router.put('/profile/:userId', async (req, res) => {
 // ============================================
 // GET /api/profile/me
 // ============================================
-router.get('/profile/me', verifyAdminToken, async (req, res) => {
+router.get('/profile/me', authMiddleware, async (req, res) => {
   try {
     const userId = req.userId;
     
