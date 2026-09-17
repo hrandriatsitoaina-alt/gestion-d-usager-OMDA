@@ -22,14 +22,67 @@ const MainCards = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // ===== ÉTATS POUR LA LANGUE =====
+  const [appLangue, setAppLangue] = useState('fr');
+
+  // ===== CHARGER LA LANGUE =====
+  useEffect(() => {
+    const langue = localStorage.getItem('app-langue') || 'fr';
+    setAppLangue(langue);
+    
+    const handleLangueChange = (event) => {
+      const { langue } = event.detail;
+      setAppLangue(langue);
+    };
+    
+    window.addEventListener('langue-change', handleLangueChange);
+    
+    return () => {
+      window.removeEventListener('langue-change', handleLangueChange);
+    };
+  }, []);
+
+  // ===== FONCTION DE TRADUCTION =====
+  const t = (fr, mg, en) => {
+    switch (appLangue) {
+      case 'mg': return mg || fr;
+      case 'en': return en || fr;
+      default: return fr;
+    }
+  };
+
   // Définition des types – clés utilisées en interne
   const statTypes = [
-    { key: 'hotel', label: 'Hôtel', color: '#4CAF50' },
-    { key: 'grandSurface', label: 'Grande Surface', color: '#2196F3' },
-    { key: 'bus', label: 'Bus', color: '#FF9800' },
-    { key: 'nightclub', label: 'Night Club', color: '#9C27B0' },
-    { key: 'media', label: 'Média', color: '#E91E63' },
-    { key: 'occ', label: 'Occasionnelle', color: '#00BCD4' }
+    { 
+      key: 'hotel', 
+      label: t('Hôtel', 'Trano fandraisam-bahiny', 'Hotel'), 
+      color: '#4CAF50' 
+    },
+    { 
+      key: 'grandSurface', 
+      label: t('Grande Surface', 'Trano fivarotana lehibe', 'Supermarket'), 
+      color: '#2196F3' 
+    },
+    { 
+      key: 'bus', 
+      label: t('Bus', 'Fiarakodia', 'Bus'), 
+      color: '#FF9800' 
+    },
+    { 
+      key: 'nightclub', 
+      label: t('Night Club', 'Kliobina alina', 'Night Club'), 
+      color: '#9C27B0' 
+    },
+    { 
+      key: 'media', 
+      label: t('Média', 'Haino aman-jery', 'Media'), 
+      color: '#E91E63' 
+    },
+    { 
+      key: 'occ', 
+      label: t('Occasionnelle', 'Tsindraindray', 'Occasional'), 
+      color: '#00BCD4' 
+    }
   ];
 
   // Mapping pour l'API – clé utilisée dans l'URL
@@ -72,7 +125,7 @@ const MainCards = () => {
     };
 
     fetchData();
-  }, []);
+  }, [appLangue]);
 
   // Calculs
   const totalGeneral = Object.values(totals).reduce((a, b) => a + b, 0);
@@ -94,10 +147,12 @@ const MainCards = () => {
       <div className="main-card-header">
         <h2>
           <Users size={28} strokeWidth={2} />
-          Gestion des usagers
+          {t('Gestion des usagers', 'Fitandremana ny mpampiasa', 'User management')}
         </h2>
         <p className="main-card-sub">
-          {loading ? 'Chargement...' : `${totalGeneral} usagers enregistrés`}
+          {loading ? t('Chargement...', 'Mandrindra...', 'Loading...') : 
+            t('{count} usagers enregistrés', '{count} mpampiasa voasoratra', '{count} registered users')
+              .replace('{count}', totalGeneral)}
         </p>
       </div>
 
@@ -107,28 +162,28 @@ const MainCards = () => {
           <span className="stat-simple-icon"><Users size={18} /></span>
           <div>
             <div className="stat-simple-number">{totalGeneral}</div>
-            <div className="stat-simple-label">Total usagers</div>
+            <div className="stat-simple-label">{t('Total usagers', 'Mpampiasa rehetra', 'Total users')}</div>
           </div>
         </div>
         <div className="stat-simple-item">
           <span className="stat-simple-icon"><Activity size={18} /></span>
           <div>
             <div className="stat-simple-number">{activeCategories}</div>
-            <div className="stat-simple-label">Catégories actives</div>
+            <div className="stat-simple-label">{t('Catégories actives', 'Sokajy mavitrika', 'Active categories')}</div>
           </div>
         </div>
         <div className="stat-simple-item">
           <span className="stat-simple-icon"><TrendingUp size={18} /></span>
           <div>
             <div className="stat-simple-number">{statTypes.length}</div>
-            <div className="stat-simple-label">Types disponibles</div>
+            <div className="stat-simple-label">{t('Types disponibles', 'Karazana misy', 'Available types')}</div>
           </div>
         </div>
         <div className="stat-simple-item">
           <span className="stat-simple-icon"><Calendar size={18} /></span>
           <div>
             <div className="stat-simple-number">{new Date().getFullYear()}</div>
-            <div className="stat-simple-label">Année en cours</div>
+            <div className="stat-simple-label">{t('Année en cours', 'Taona ity', 'Current year')}</div>
           </div>
         </div>
       </div>
@@ -137,11 +192,15 @@ const MainCards = () => {
       <div className="main-card-actions">
         <button className="btn-primary" onClick={() => navigate('/ajout-usager')}>
           <UserPlus size={18} strokeWidth={2} />
-          Ajouter un usager
+          {t('Ajouter un usager', 'Ampidiro mpampiasa', 'Add user')}
         </button>
         <button className="btn-secondary" onClick={() => navigate('/verification-usager')}>
           <Eye size={18} strokeWidth={2} />
-          Consulter les usagers
+          {t('Consulter les usagers', 'Hijery ny mpampiasa', 'View users')}
+        </button>
+        <button className="btn-secondary" onClick={() => navigate('/repartition-artistes')}>
+          <Music size={18} strokeWidth={2} />
+          {t('Artiste', 'Mpanao mozika', 'Artist')}
         </button>
       </div>
 
@@ -150,7 +209,7 @@ const MainCards = () => {
         <div className="dynamic-chart-header">
           <h5>
             <Activity size={18} strokeWidth={2} />
-            Répartition des usagers par type
+            {t('Répartition des usagers par type', 'Fizarana ny mpampiasa araka ny karazany', 'User distribution by type')}
           </h5>
           <span className="chart-total">
             <Users size={14} strokeWidth={2} />
@@ -159,11 +218,11 @@ const MainCards = () => {
         </div>
 
         {loading ? (
-          <div className="chart-loading">Chargement...</div>
+          <div className="chart-loading">{t('Chargement...', 'Mandrindra...', 'Loading...')}</div>
         ) : error ? (
-          <div className="chart-error">Erreur : {error}</div>
+          <div className="chart-error">{t('Erreur :', 'Hadisoana :', 'Error :')} {error}</div>
         ) : chartData.every(d => d.value === 0) ? (
-          <div className="chart-empty">Aucun usager enregistré</div>
+          <div className="chart-empty">{t('Aucun usager enregistré', 'Tsy misy mpampiasa voasoratra', 'No registered users')}</div>
         ) : (
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
@@ -171,7 +230,7 @@ const MainCards = () => {
               <XAxis dataKey="name" tick={{ fontSize: 11 }} />
               <YAxis allowDecimals={false} />
               <Tooltip
-                formatter={(value) => `${value} usager(s)`}
+                formatter={(value) => t('{value} usager(s)', '{value} mpampiasa', '{value} user(s)').replace('{value}', value)}
                 labelStyle={{ fontWeight: 'bold' }}
               />
               <Bar dataKey="value" radius={[4, 4, 0, 0]} barSize={30}>
@@ -188,11 +247,14 @@ const MainCards = () => {
       <div className="main-card-footer">
         <span className="footer-info">
           <TrendingUp size={14} strokeWidth={2} />
-          Données en temps réel
+          {t('Données en temps réel', 'Data amin\'ny fotoana tena izy', 'Real-time data')}
         </span>
         <span className="footer-date">
           <Calendar size={14} strokeWidth={2} />
-          {new Date().toLocaleDateString()}
+          {new Date().toLocaleDateString(
+            appLangue === 'fr' ? 'fr-FR' : 
+            appLangue === 'mg' ? 'mg-MG' : 'en-US'
+          )}
         </span>
       </div>
     </div>

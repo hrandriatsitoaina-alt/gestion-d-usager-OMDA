@@ -6,7 +6,7 @@ import {
   CreditCard, Calendar, Clock, DollarSign, Hash,
   ArrowLeft, ArrowRight, Save, X, Edit, Briefcase, Home,
   PlusCircle, Bus, Route, Navigation, Truck, CheckCircle,
-  UserPlus, MapPinned
+  UserPlus, MapPinned, Info, BarChart
 } from 'lucide-react';
 import { useToast } from '../../components/Toast';
 
@@ -24,6 +24,7 @@ const BusAjout = ({ onCancel }) => {
   const [montant, setMontant] = useState('');
   const [uniter, setUniter] = useState(1);
   const [soitTotal, setSoitTotal] = useState(0);
+  const [globalTotalCount, setGlobalTotalCount] = useState(0);
 
   const [regionsList, setRegionsList] = useState([]);
   const [newRegion, setNewRegion] = useState('');
@@ -58,7 +59,6 @@ const BusAjout = ({ onCancel }) => {
 
   const getDisplayValue = (rawValue) => formatNumber(rawValue);
   
-  // ✅ CALCUL CORRIGÉ - (Montant × Uniter) + Frais de dossier
   const calculateSoitTotal = () => {
     const fraisVal = parseFloat(fraisDossier) || 0;
     const montantVal = parseFloat(montant) || 0;
@@ -114,6 +114,34 @@ const BusAjout = ({ onCancel }) => {
     }
   };
 
+  const loadGlobalTotal = async () => {
+    try {
+      const currentYear = new Date().getFullYear();
+      const response = await fetch(`http://localhost:3001/api/bus/total-count?year=${currentYear}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setGlobalTotalCount(data.total || 0);
+          console.log(`✅ Total Bus ${currentYear}: ${data.total}`);
+        }
+      } else {
+        const fallbackResponse = await fetch('http://localhost:3001/api/usagers');
+        if (fallbackResponse.ok) {
+          const usagers = await fallbackResponse.json();
+          const currentYear = new Date().getFullYear();
+          const busCount = usagers.filter(u => {
+            const createdAt = new Date(u.created_at);
+            return u.type_usager === 'Bus' && createdAt.getFullYear() === currentYear;
+          }).length;
+          setGlobalTotalCount(busCount);
+          console.log(`✅ Total Bus (fallback) ${currentYear}: ${busCount}`);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Erreur chargement total Bus:', error);
+    }
+  };
+
   const handleAddRegion = async () => {
     const trimmed = newRegion.trim();
     if (!trimmed) {
@@ -160,19 +188,42 @@ const BusAjout = ({ onCancel }) => {
     }
   };
 
-  useEffect(() => {
-    const currentUser = getCurrentUser();
-    if (currentUser) {
-      setUserInfo(prev => ({
-        ...prev,
-        id: currentUser.id,
-        nom: currentUser.nom,
-        prefix: currentUser.prefix,
-        compteurs: currentUser.compteurs || { 'Bus': 0 },
-        anneeEnCours: currentUser.anneeEnCours || new Date().getFullYear()
-      }));
+  const loadUserCounters = async (userId) => {
+    try {
+      const year = new Date().getFullYear();
+      const response = await fetch(`http://localhost:3001/api/users/counters/${userId}?year=${year}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          console.log('✅ Compteurs chargés depuis la base:', data.compteurs);
+          return data.compteurs;
+        }
+      }
+    } catch (error) {
+      console.error('❌ Erreur chargement compteurs:', error);
     }
-    loadRegions();
+    return null;
+  };
+
+  useEffect(() => {
+    const loadUserData = async () => {
+      const currentUser = getCurrentUser();
+      if (currentUser) {
+        const compteurs = await loadUserCounters(currentUser.id);
+
+        setUserInfo(prev => ({
+          ...prev,
+          id: currentUser.id,
+          nom: currentUser.nom,
+          prefix: currentUser.prefix || '',
+          compteurs: compteurs || currentUser.compteurs || { 'Bus': 0 },
+          anneeEnCours: new Date().getFullYear()
+        }));
+      }
+      loadRegions();
+      loadGlobalTotal();
+    };
+    loadUserData();
   }, []);
 
   const handleBusChange = (e) => {
@@ -221,7 +272,6 @@ const BusAjout = ({ onCancel }) => {
     }
   };
 
-  // ✅ HANDLE FINAL SUBMIT CORRIGÉ - comme Hotel et OCC
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
     const currentUser = getCurrentUser();
@@ -259,62 +309,72 @@ const BusAjout = ({ onCancel }) => {
       const result = await response.json();
       
       if (result.success) {
+        const updatedCompteurs = await loadUserCounters(currentUser.id);
+
         const updatedUser = getCurrentUser();
         if (updatedUser) {
-          updatedUser.compteurs = updatedUser.compteurs || {};
-          const nouveauCompteur = (updatedUser.compteurs['Bus'] || 0) + 1;
-          updatedUser.compteurs['Bus'] = nouveauCompteur;
+          updatedUser.compteurs = updatedCompteurs || updatedUser.compteurs || {};
           localStorage.setItem('user', JSON.stringify(updatedUser));
-          
+
           setUserInfo(prev => ({
             ...prev,
-            compteurs: {
-              ...prev.compteurs,
-              'Bus': nouveauCompteur
-            }
+            compteurs: updatedCompteurs || prev.compteurs
           }));
-          
-          console.log(`✅ Compteur Bus incrémenté à ${nouveauCompteur}`);
+
+          console.log(`✅ Compteurs mis à jour:`, updatedCompteurs);
         }
-        
+
+        await loadGlobalTotal();
+
         showToast('✅ Bus ajouté avec succès !', 'success');
-        
+
+        const nouveauCompteur = (userInfo.compteurs?.['Bus'] || 0) + 1;
+        const prefix = userInfo.prefix || '';
+        const currentTrimestre = getTrimestreFromMonth(new Date().getMonth() + 1);
+        const anneeEnCours = new Date().getFullYear();
+
+        // ✅ CORRECTION: S'assurer que toutes les données sont passées correctement
+        const usagerData = {
+          id: result.id,
+          denomination: busData.denomination || 'Sans nom',
+          demandeur: busData.demandeur || '',
+          telephone: busData.telephone || '',
+          region: busData.region || '',
+          adresse_siege: busData.adresseSiege || '',
+          nif_stat: busData.nifStat || '',
+          email: busData.email || '',
+          representant_nom: busData.representantNom || '',
+          representant_adresse: busData.representantAdresse || '',
+          representant_tel: busData.representantTel || '',
+          representant_cin: busData.representantCin || '',
+          representant_cin_delivree: busData.representantCinDelivree || '',
+          representant_cin_lieu: busData.representantCinLieu || '',
+          representant_fonction: busData.representantFonction || '',
+          nombre_vehicules: busData.nombreVehicules || 0,
+          lignes: busData.lignes || '',
+          type_bus: busData.typeBus || '',
+          trajet: busData.trajet || '',
+          horaires: busData.horaires || '',
+          zones_desservies: busData.zonesDesservies || '',
+          a_compter_du: busData.aCompterDu || '',
+          echeance: busData.echeance || '',
+          confirmation_nom: busData.confirmationNom || '',
+          lieu_signature: busData.lieuSignature || '',
+          date_signature: busData.dateSignature || '',
+          // ✅ IMPORTANT: Passer les montants correctement
+          montant_mensuel: montantVal,
+          frais_dossier: fraisVal,
+          montant_total: montantVal,
+          soit_total: total,
+          uniter: uniterVal,
+          numero_dossier_utilisateur: `${prefix} ${nouveauCompteur}/${currentTrimestre}/${anneeEnCours}`
+        };
+
+        console.log('📤 Données envoyées à ConfirmePaiement:', usagerData);
+
         navigate('/confirme-paiement', { 
           state: { 
-            usager: { 
-              id: result.id,
-              denomination: busData.denomination,
-              demandeur: busData.demandeur,
-              telephone: busData.telephone,
-              region: busData.region,
-              adresse_siege: busData.adresseSiege,
-              nif_stat: busData.nifStat,
-              email: busData.email,
-              representant_nom: busData.representantNom,
-              representant_adresse: busData.representantAdresse,
-              representant_tel: busData.representantTel,
-              representant_cin: busData.representantCin,
-              representant_cin_delivree: busData.representantCinDelivree,
-              representant_cin_lieu: busData.representantCinLieu,
-              representant_fonction: busData.representantFonction,
-              nombre_vehicules: busData.nombreVehicules,
-              lignes: busData.lignes,
-              type_bus: busData.typeBus,
-              trajet: busData.trajet,
-              horaires: busData.horaires,
-              zones_desservies: busData.zonesDesservies,
-              a_compter_du: busData.aCompterDu,
-              echeance: busData.echeance,
-              confirmation_nom: busData.confirmationNom,
-              lieu_signature: busData.lieuSignature,
-              date_signature: busData.dateSignature,
-              montant_mensuel: montantVal,
-              frais_dossier: fraisVal,
-              montant_total: montantVal,
-              soit_total: total,
-              uniter: uniterVal,
-              numero_dossier_utilisateur: `${userInfo.prefix || ''} ${(userInfo.compteurs?.['Bus'] || 0) + 1}/${getTrimestreFromMonth(new Date().getMonth() + 1)}/${userInfo.anneeEnCours || new Date().getFullYear()}`
-            }, 
+            usager: usagerData,
             type: 'bus'
           } 
         });
@@ -345,6 +405,12 @@ const BusAjout = ({ onCancel }) => {
           <div className="user-info-row">
             <FileText size={18} strokeWidth={2} />
             <span>Prochain dossier: <strong>{userDossierDisplay}</strong></span>
+          </div>
+          <div className="user-info-row" style={{ fontSize: '12px', color: '#6c757d' }}>
+            <span><BarChart size={14} strokeWidth={2} /> Total dossiers Bus: <strong>{globalTotalCount}</strong></span>
+            <span style={{ marginLeft: '15px' }}>
+              <BarChart size={14} strokeWidth={2} /> Vos dossiers cette année: <strong>{userInfo.compteurs?.['Bus'] || 0}</strong>
+            </span>
           </div>
         </div>
 
@@ -440,6 +506,11 @@ const BusAjout = ({ onCancel }) => {
 
   const renderStep2 = () => (
     <>
+      <div className="info-banner">
+        <Info size={18} strokeWidth={2} />
+        <span>Demandeur : <strong>{busData.demandeur || 'Non renseigné'}</strong> - Dénomination : <strong>{busData.denomination || 'Non renseigné'}</strong></span>
+      </div>
+
       <div className="form-row">
         <div className="form-label"><h2><User size={18} strokeWidth={2} /> Nom et prénoms :</h2></div>
         <div className="form-input">
@@ -487,6 +558,11 @@ const BusAjout = ({ onCancel }) => {
 
   const renderStep3 = () => (
     <>
+      <div className="info-banner">
+        <Info size={18} strokeWidth={2} />
+        <span>Représentant : <strong>{busData.representantNom || 'Non renseigné'}</strong> - CIN : <strong>{busData.representantCin || 'Non renseigné'}</strong></span>
+      </div>
+
       <div className="form-row">
         <div className="form-label"><h2><Bus size={18} strokeWidth={2} /> Nombre de véhicules :</h2></div>
         <div className="form-input">
@@ -536,18 +612,29 @@ const BusAjout = ({ onCancel }) => {
         </div>
       </div>
 
-      {/* <div className="form-row">
-        <div className="form-label"><h2><DollarSign size={18} strokeWidth={2} /> Montant mensuel :</h2></div>
+      <div className="form-row">
+        <div className="form-label"><h2><DollarSign size={18} strokeWidth={2} /> Montant  :</h2></div>
         <div className="form-input">
-          <input type="text" value={getDisplayValue(montant)} onChange={handleMontantChange} className="input-style" placeholder="Montant mensuel en Ar" />
+          <input type="text" value={getDisplayValue(montant)} onChange={handleMontantChange} className="input-style" placeholder="Montant Ar" />
         </div>
-      </div> */}
+      </div>
 
       <div className="form-row">
         <div className="form-label"><h2><Hash size={18} strokeWidth={2} /> Uniter :</h2></div>
         <div className="form-input">
-          <input type="number" min="1" max="9" value={uniter} onChange={(e) => setUniter(Math.min(9, Math.max(1, parseInt(e.target.value) || 1)))} className="input-style" style={{ width: '80px' }} placeholder="1" />
-          <span style={{ marginLeft: '10px', fontSize: '14px', color: '#6c757d' }}>(1 à 9 unités)</span>
+          <input
+            type="number"
+            min="1"
+            value={uniter}
+            onChange={(e) => {
+              const val = parseInt(e.target.value);
+              setUniter(isNaN(val) || val < 1 ? 1 : val);
+            }}
+            className="input-style"
+            style={{ width: '100px' }}
+            placeholder="1"
+          />
+          <span style={{ marginLeft: '10px', fontSize: '14px', color: '#6c757d' }}>(nombre d'unités)</span>
         </div>
       </div>
 
@@ -615,6 +702,8 @@ const BusAjout = ({ onCancel }) => {
         <div className="user-info-recap">
           <p><Users size={16} strokeWidth={2} /> Utilisateur: <strong>{userInfo.nom}</strong> ({userInfo.prefix})</p>
           <p><FileText size={16} strokeWidth={2} /> Prochain dossier: <strong>{userDossierDisplay}</strong></p>
+          <p><BarChart size={16} strokeWidth={2} /> Total dossiers Bus: <strong>{globalTotalCount}</strong></p>
+          <p><BarChart size={16} strokeWidth={2} /> Vos dossiers cette année: <strong>{userInfo.compteurs?.['Bus'] || 0}</strong></p>
         </div>
         <table className="recap-table"><tbody>
           <tr><td><Users size={16} strokeWidth={2} /> Demandeur</td><td>{busData.demandeur || '-'}</td></tr>
@@ -627,6 +716,9 @@ const BusAjout = ({ onCancel }) => {
           <tr><td><DollarSign size={16} strokeWidth={2} /> Montant mensuel</td><td>{formatNumber(montantVal)} Ar/mois</td></tr>
           <tr><td><Hash size={16} strokeWidth={2} /> Uniter</td><td>{uniterVal}</td></tr>
           <tr><td><DollarSign size={16} strokeWidth={2} /> Soit Total</td><td><strong style={{ color: '#28a745' }}>{formatNumber(total)} Ar</strong></td></tr>
+          <tr><td><User size={16} strokeWidth={2} /> Représentant</td><td>{busData.representantNom || '-'}</td></tr>
+          <tr><td><CreditCard size={16} strokeWidth={2} /> CIN</td><td>{busData.representantCin || '-'}</td></tr>
+          <tr><td><Edit size={16} strokeWidth={2} /> Signataire</td><td>{busData.confirmationNom || '-'}</td></tr>
         </tbody></table>
       </div>
     );

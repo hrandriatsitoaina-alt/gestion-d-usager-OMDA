@@ -3,49 +3,70 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { QRCodeCanvas } from 'qrcode.react';
 import html2canvas from 'html2canvas';
+import {
+  FileText, Receipt, QrCode, Download, Printer, CheckCircle, XCircle,
+  Info, AlertCircle, Building2, User, Phone, MapPin, Calendar, Star,
+  Hotel, Store, Bus, PartyPopper, Tv2, Ticket, File, ArrowLeft,
+  Clock, CreditCard, FileCheck, Loader2, FileSignature,
+  Home, FolderOpen, FileArchive, Shield, Settings, Database,
+  BarChart3, PieChart, TrendingUp, Users, DollarSign,
+  ChevronRight, ChevronDown, Plus, Edit3, Trash2, Eye,
+  Table, LayoutGrid, Search, Filter, RefreshCw, Globe,
+  Mail, Headphones, Music, Briefcase, Layers, Box,
+  HardDrive, Cpu, Server, Lock, Key, ShieldCheck,
+  Upload, Copy, Clipboard, Menu, Maximize2, Hash, Banknote,
+  Grid, List, ChevronsRight, Activity, PieChart as PieChartIcon,
+  CreditCard as CreditCardIcon, Wallet, FileSpreadsheet, PieChart as PieChartIcon2,
+  ChevronLeft
+} from 'lucide-react';
 import '../styles/gestion_dossier.css';
 import MiniSidebar from '../components/MiniSidebar';
 
-// Importations des générateurs de PDF
+// Import des générateurs PDF
 import { generateHotelPDF } from './pdf/hotel_pdf';
 import { generateMagasinPDF } from './pdf/magasin_pdf';
 import { generateMediaPDF } from './pdf/media_pdf';
 import { generateNightPDF } from './pdf/night_pdf';
 import { generateBusPDF } from './pdf/bus_pdf';
-import { generateOccPDF } from './pdf/occ_pdf';
-import { generateFacturePDF } from './pdf/facture_pdf';
+import generateContratOccPDF from './pdf/generateContratOccPDF'; 
+import { generateFacturePDF } from './pdf/facture_pdf_g';
+import { generateBilanGlobalPDF } from './pdf/bilanGlobal_pdf';
+
+const API_BASE = 'http://localhost:3001/api';
 
 const GestionDossier = () => {
   const navigate = useNavigate();
   const qrRef = useRef(null);
-  
-  // Navigation
+
+  // États principaux
   const [currentPath, setCurrentPath] = useState('OMDA /');
   const [viewMode, setViewMode] = useState('root');
+  const [displayMode, setDisplayMode] = useState('grid');
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  
-  // États des usagers
+
+  // États des données
   const [usagers, setUsagers] = useState([]);
   const [filteredUsagers, setFilteredUsagers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [notification, setNotification] = useState(null);
 
-  // Modale d'impression
-  const [showPrintModal, setShowPrintModal] = useState(false);
+  // États des modales
   const [showQrModal, setShowQrModal] = useState(false);
   const [showUtilityModal, setShowUtilityModal] = useState(false);
   const [selectedUtility, setSelectedUtility] = useState(null);
-  const [activeUsager, setActiveUsager] = useState(null);
   const [qrCodeData, setQrCodeData] = useState(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [selectedUsagerForDetails, setSelectedUsagerForDetails] = useState(null);
   const [showUsagerDetails, setShowUsagerDetails] = useState(false);
-
+  const [showStatsModal, setShowStatsModal] = useState(false);
+  const [statsData, setStatsData] = useState(null);
+  const [processingDoc, setProcessingDoc] = useState(null);
   const [validatedDossiers, setValidatedDossiers] = useState({});
   const [stats, setStats] = useState(null);
   const [qrCompteur, setQrCompteur] = useState(1);
+  const [bilanData, setBilanData] = useState(null);
 
   // Mapping des catégories
   const categoryMapping = {
@@ -58,136 +79,176 @@ const GestionDossier = () => {
   };
 
   const typeColors = {
-    'occ': '#f59e0b',
-    'media': '#f43f5e',
-    'grand-surface': '#8b5cf6',
-    'nightclub': '#ec4899',
-    'hotel': '#6366f1',
-    'transport': '#06b6d4'
+    'occ': '#f59e0b', 'media': '#f43f5e', 'grand-surface': '#8b5cf6',
+    'nightclub': '#ec4899', 'hotel': '#6366f1', 'transport': '#06b6d4'
   };
 
   const typeIcons = {
-    'occ': '🎪',
-    'media': '📺',
-    'grand-surface': '🏬',
-    'nightclub': '🎭',
-    'hotel': '🏨',
-    'transport': '🚌'
+    'occ': Ticket, 'media': Tv2, 'grand-surface': Store,
+    'nightclub': PartyPopper, 'hotel': Hotel, 'transport': Bus
   };
 
-  // Dossiers utilitaires avec détails
+  const typeLabels = {
+    'occ': 'Occasionnel',
+    'media': 'Média / Radio',
+    'grand-surface': 'Magasin',
+    'nightclub': 'Night Club',
+    'hotel': 'Hôtel',
+    'transport': 'Transport'
+  };
+
+  // ============================================================
+  // DOCUMENTS DISPONIBLES SELON LE TYPE
+  // ============================================================
+  const getDocumentsForType = (apiType) => {
+    // OCC : seulement Facture et QR Code (pas de Contrat)
+    if (apiType === 'occ') {
+      return ['Facture', 'QR Code'];
+    }
+    // Autres types : Contrat, Facture, QR Code
+    return ['Contrat', 'Facture', 'QR Code'];
+  };
+
+  // Dossiers utilitaires - 6 éléments avec action de génération PDF
   const utilityFolders = [
-    { 
-      id: 'bilan', 
-      name: '📊 Bilan Annuel', 
-      icon: '📊', 
-      color: '#2ecc71', 
-      desc: 'Résumé financier de l\'année',
+    {
+      id: 'bilan_annuel',
+      name: 'Bilan Annuel',
+      icon: BarChart3,
+      color: '#2ecc71',
+      desc: "Résumé financier de l'année",
+      itemCount: 'Générer PDF',
+      pdfAction: 'bilan_global',
       details: {
-        title: 'Bilan Annuel 2025',
-        content: 'Rapport financier complet de l\'Office Malagasy du Droit d\'Auteur pour l\'année 2025.',
+        title: `Bilan Annuel ${new Date().getFullYear()}`,
+        content: "Rapport financier complet de l'Office Malagasy du Droit d'Auteur.",
         sections: [
-          '📈 Recettes totales: 2 450 000 000 Ar',
-          '📉 Dépenses totales: 1 800 000 000 Ar',
-          '💰 Bénéfice net: 650 000 000 Ar',
-          '📊 Nombre de dossiers traités: 1 245',
-          '🏢 Nombre d\'usagers actifs: 3 789'
+          { label: 'Recettes totales', value: 'Voir Bilan Global (PDF)' },
+          { label: 'Dossiers traités (total)', value: 'Voir Bilan Global (PDF)' },
+          { label: 'Dernière génération', value: new Date().toLocaleDateString('fr-FR') }
         ],
-        files: ['Rapport_2024.pdf', 'Statistiques.pdf', 'Graphiques.pdf']
+        files: [
+          { name: 'Bilan_Annuel.pdf', size: 'Généré à la demande', action: 'bilan' }
+        ]
       }
     },
-    { 
-      id: 'rapport', 
-      name: '📈 Rapport Mensuel', 
-      icon: '📈', 
-      color: '#3498db', 
-      desc: 'Statistiques mensuelles',
+    {
+      id: 'bilan_region',
+      name: 'Bilan par Région',
+      icon: MapPin,
+      color: '#3498db',
+      desc: 'Résumé par région et par semestre',
+      itemCount: 'Générer PDF',
+      pdfAction: 'bilan_region',
       details: {
-        title: 'Rapport Mensuel - Juin 2026',
-        content: 'Statistiques et indicateurs de performance pour le mois de juin 2026.',
+        title: `Bilan par Région - ${new Date().getFullYear()}`,
+        content: "Rapport détaillé par région avec répartition semestrielle.",
         sections: [
-          '📊 Dossiers créés: 145',
-          '✅ Dossiers validés: 132',
-          '💰 Revenus du mois: 325 000 000 Ar',
-          '📋 Taux de validation: 91%',
-          '👥 Nouveaux usagers: 28'
+          { label: 'Période', value: 'Année en cours' },
+          { label: 'Source des données', value: 'Table facture_usager' },
+          { label: 'Mise à jour', value: 'Temps réel' }
         ],
-        files: ['Rapport_Mensuel_2026.pdf', 'Statistiques_Mensuelles.pdf', 'Graphiques_Mensuels.pdf']
+        files: [
+          { name: 'Bilan_Region.pdf', size: 'Généré à la demande', action: 'bilan' }
+        ]
       }
     },
-    { 
-      id: 'archive', 
-      name: '📦 Archives', 
-      icon: '📦', 
-      color: '#f39c12', 
-      desc: 'Dossiers anciens archivés',
+    {
+      id: 'paiements',
+      name: 'Paiements',
+      icon: CreditCardIcon,
+      color: '#9b59b6',
+      desc: 'Historique des paiements',
+      itemCount: 'Générer PDF',
+      pdfAction: 'bilan_paiements',
       details: {
-        title: 'Archives OMDA',
-        content: 'Dossiers historiques archivés de l\'année 2022 à 2024.',
+        title: `Historique des Paiements - ${new Date().getFullYear()}`,
+        content: "Liste complète des paiements enregistrés.",
         sections: [
-          '📁 2022: 1 234 dossiers',
-          '📁 2023: 1 567 dossiers',
-          '📁 2024: 1 890 dossiers',
-          '📁 Total archivés: 4 691 dossiers',
-          '💾 Espace utilisé: 2.4 GB'
+          { label: 'Total des paiements', value: 'Voir détails' },
+          { label: 'Dernière mise à jour', value: new Date().toLocaleDateString('fr-FR') }
         ],
-        files: ['Archive_2022.pdf', 'Archive_2023.pdf', 'Archive_2024.pdf']
+        files: [
+          { name: 'Paiements.pdf', size: 'Généré à la demande', action: 'bilan' }
+        ]
       }
     },
-    { 
-      id: 'backup', 
-      name: '💾 Backup', 
-      icon: '💾', 
-      color: '#9b59b6', 
-      desc: 'Sauvegarde des données',
+    {
+      id: 'recettes',
+      name: 'Recettes',
+      icon: Wallet,
+      color: '#f39c12',
+      desc: 'Recettes par catégorie',
+      itemCount: 'Générer PDF',
+      pdfAction: 'bilan_recettes',
       details: {
-        title: 'Sauvegarde OMDA',
-        content: 'Sauvegarde complète des données et configurations.',
+        title: `Recettes - ${new Date().getFullYear()}`,
+        content: "Récapitulatif des recettes par catégorie.",
         sections: [
-          '💾 Dernière sauvegarde: 02/08/2026 15:30',
-          '📊 Base de données: 4.2 GB',
-          '📁 Documents: 1.8 GB',
-          '⚙️ Configuration: 120 MB',
-          '🔄 Backup automatique: Activé'
+          { label: 'Total des recettes', value: 'Voir détails' },
+          { label: 'Dernière mise à jour', value: new Date().toLocaleDateString('fr-FR') }
         ],
-        files: ['Backup_Complet.pdf', 'Backup_DB.pdf', 'Backup_Config.pdf']
+        files: [
+          { name: 'Recettes.pdf', size: 'Généré à la demande', action: 'bilan' }
+        ]
       }
     },
-    { 
-      id: 'config', 
-      name: '⚙️ Configuration', 
-      icon: '⚙️', 
-      color: '#e74c3c', 
-      desc: 'Paramètres système',
+    {
+      id: 'rapport_mensuel',
+      name: 'Rapport Mensuel',
+      icon: FileSpreadsheet,
+      color: '#1abc9c',
+      desc: 'Rapport du mois en cours',
+      itemCount: 'Générer PDF',
+      pdfAction: 'bilan_mensuel',
       details: {
-        title: 'Configuration Système',
-        content: 'Paramètres de configuration de l\'application OMDA.',
+        title: `Rapport Mensuel - ${new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}`,
+        content: "Statistiques et indicateurs de performance du mois en cours.",
         sections: [
-          '⚙️ Version: 2.5.0',
-          '🔧 Environnement: Production',
-          '🗄️ Base de données: PostgreSQL 15',
-          '🌐 Serveur: Ubuntu 22.04 LTS',
-          '🔒 Sécurité: HTTPS avec certificat SSL'
+          { label: 'Période', value: new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) },
+          { label: 'Source des données', value: 'Table facture_usager' },
+          { label: 'Mise à jour', value: 'Temps réel' }
         ],
-        files: ['Config_Generale.pdf', 'Config_Utilisateur.pdf']
+        files: [
+          { name: 'Rapport_Mensuel.pdf', size: 'Généré à la demande', action: 'bilan' }
+        ]
+      }
+    },
+    {
+      id: 'stats_globales',
+      name: 'Statistiques Globales',
+      icon: PieChartIcon2,
+      color: '#e74c3c',
+      desc: 'Statistiques complètes',
+      itemCount: 'Générer PDF',
+      pdfAction: 'bilan_stats',
+      details: {
+        title: `Statistiques Globales - ${new Date().getFullYear()}`,
+        content: "Statistiques complètes de l'OMDA.",
+        sections: [
+          { label: 'Total dossiers', value: 'Voir détails' },
+          { label: 'Total usagers', value: 'Voir détails' },
+          { label: 'Dernière mise à jour', value: new Date().toLocaleDateString('fr-FR') }
+        ],
+        files: [
+          { name: 'Statistiques.pdf', size: 'Généré à la demande', action: 'bilan' }
+        ]
       }
     }
   ];
 
-  // Récupérer l'utilisateur courant
+  // ============================================================
+  // FETCH - Utilisateur courant
+  // ============================================================
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
         const token = localStorage.getItem('userId');
-        const response = await fetch('http://localhost:3001/api/auth/current-user', {
-          headers: {
-            'Authorization': token ? `Bearer ${token}` : ''
-          }
+        const response = await fetch(`${API_BASE}/auth/current-user`, {
+          headers: { 'Authorization': token ? `Bearer ${token}` : '' }
         });
         const data = await response.json();
-        if (data.success && data.user) {
-          setCurrentUser(data.user);
-        }
+        if (data.success && data.user) setCurrentUser(data.user);
       } catch (error) {
         console.error('Erreur récupération utilisateur:', error);
       }
@@ -195,14 +256,37 @@ const GestionDossier = () => {
     fetchCurrentUser();
   }, []);
 
-  // Charger les statistiques
+  // ============================================================
+  // FETCH - Statistiques générales
+  // ============================================================
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await fetch('http://localhost:3001/api/paiements/stats');
+        const response = await fetch(`${API_BASE}/factures`);
         const data = await response.json();
         if (data.success) {
-          setStats(data.stats);
+          const factures = data.factures || [];
+          const typeToCategory = { 'HTL': 'hotel', 'MGS': 'grand-surface', 'RDP': 'media', 'TRP': 'bus', 'NGT': 'nightclub', 'OCC': 'occ' };
+          const parCategorie = {};
+          Object.values(typeToCategory).forEach(cat => { parCategorie[cat] = { total: 0, nouveaux: 0, montant: 0 }; });
+
+          const now = new Date();
+          const debutMois = new Date(now.getFullYear(), now.getMonth(), 1);
+
+          factures.forEach(f => {
+            const cat = typeToCategory[f.ref_client_type];
+            if (!cat) return;
+            parCategorie[cat].total += 1;
+            parCategorie[cat].montant += parseFloat(f.soit_total) || 0;
+            const createdAt = f.created_at ? new Date(f.created_at) : null;
+            if (createdAt && createdAt >= debutMois) parCategorie[cat].nouveaux += 1;
+          });
+
+          setStats(parCategorie);
+          const totalDossiers = factures.length;
+          const totalMontant = factures.reduce((acc, f) => acc + (parseFloat(f.soit_total) || 0), 0);
+
+          setStatsData({ totalDossiers, totalUsagers: totalDossiers, totalPaiements: totalDossiers, totalMontant, parCategorie });
         }
       } catch (error) {
         console.error('Erreur chargement stats:', error);
@@ -211,67 +295,122 @@ const GestionDossier = () => {
     fetchStats();
   }, []);
 
-  // Récupérer le compteur pour le QR Code
-  useEffect(() => {
-    const fetchCompteur = async () => {
-      if (!currentUser || !selectedCategory) return;
-      
-      try {
-        const apiType = categoryMapping[selectedCategory];
-        const typeLabels = {
-          hotel: 'Hôtel',
-          'grand-surface': 'Grand Surface',
-          bus: 'Bus',
-          nightclub: 'Night club',
-          media: 'Média',
-          occ: 'OCC'
-        };
-        const typeName = typeLabels[apiType] || apiType;
-        
-        const response = await fetch(`http://localhost:3001/api/users/dossier-counter/${currentUser.id}/${typeName}`);
-        const data = await response.json();
-        if (data.success) {
-          setQrCompteur(data.compteur + 1);
-        }
-      } catch (error) {
-        console.error('Erreur récupération compteur:', error);
+  // ============================================================
+  // FETCH - Bilan Global complet
+  // ============================================================
+  const fetchBilanData = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE}/bilan/global`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-    };
-    
-    fetchCompteur();
-  }, [currentUser, selectedCategory]);
+      const data = await response.json();
+      if (data.success) {
+        setBilanData(data.data);
+        return data.data;
+      }
+      return null;
+    } catch (error) {
+      console.error('❌ Erreur récupération bilan:', error);
+      setNotification({ type: 'error', message: `❌ Erreur récupération bilan: ${error.message}` });
+      setTimeout(() => setNotification(null), 3000);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  // ============================================================
+  // FETCH - Usagers par catégorie
+  // ============================================================
   const loadUsagersByCategory = useCallback(async (categoryName) => {
     setLoading(true);
     const apiType = categoryMapping[categoryName];
     try {
-      const response = await fetch(`http://localhost:3001/api/usagers/paiements/${apiType}`);
+      console.log(`📊 Chargement des usagers pour: ${categoryName} (${apiType})`);
+      const response = await fetch(`${API_BASE}/factures/type/${apiType}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const data = await response.json();
+      console.log(`📊 Données reçues:`, data);
+      
       if (data.success && data.usagers) {
-        setUsagers(data.usagers);
-        setFilteredUsagers(data.usagers);
+        let usagersEnrichis = data.usagers;
+        if (apiType === 'occ') {
+          usagersEnrichis = await Promise.all(
+            data.usagers.map(async (usager) => {
+              try {
+                const artistesResponse = await fetch(`${API_BASE}/occ/artistes/details/${usager.id}`);
+                if (artistesResponse.ok) {
+                  const artistesData = await artistesResponse.json();
+                  if (artistesData.success && artistesData.artistes) {
+                    return { ...usager, artistes_detail: artistesData.artistes };
+                  }
+                }
+                return usager;
+              } catch (err) {
+                console.error(`❌ Erreur récupération artistes usager ${usager.id}:`, err);
+                return usager;
+              }
+            })
+          );
+        }
+        setUsagers(usagersEnrichis);
+        setFilteredUsagers(usagersEnrichis);
+        console.log(`✅ ${usagersEnrichis.length} usagers chargés pour ${categoryName}`);
       } else {
         setUsagers([]);
         setFilteredUsagers([]);
+        console.warn(`⚠️ Aucun usager trouvé pour ${categoryName}`);
       }
     } catch (error) {
-      console.error('Erreur lors du chargement des usagers:', error);
-      setNotification({ type: 'error', message: '❌ Erreur chargement des usagers' });
+      console.error('❌ Erreur chargement dossiers:', error);
+      setNotification({ type: 'error', message: `❌ Erreur chargement des dossiers: ${error.message}` });
       setTimeout(() => setNotification(null), 3000);
+      setUsagers([]);
+      setFilteredUsagers([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // ============================================================
+  // FETCH - Artistes pour OCC
+  // ============================================================
+  const fetchArtistesForOcc = async (eventId) => {
+    try {
+      const response = await fetch(`${API_BASE}/occ/artistes/details/${eventId}`);
+      if (!response.ok) return [];
+      const data = await response.json();
+      if (data.success && data.artistes) return data.artistes;
+      return [];
+    } catch (error) {
+      console.error('❌ Erreur récupération artistes OCC:', error);
+      return [];
+    }
+  };
+
+  // ============================================================
+  // RECHERCHE
+  // ============================================================
   useEffect(() => {
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
-      const filtered = usagers.filter(u => 
+      const filtered = usagers.filter(u =>
         (u.denomination?.toLowerCase() || '').includes(term) ||
         (u.demandeur?.toLowerCase() || '').includes(term) ||
-        (u.nom_evenement?.toLowerCase() || '').includes(term) ||
+        (u.organisateurs?.toLowerCase() || '').includes(term) ||
         (u.telephone || '').includes(term) ||
-        (u.numero_dossier_utilisateur?.toLowerCase() || '').includes(term)
+        (u.numero_dossier_utilisateur?.toLowerCase() || '').includes(term) ||
+        (u.quittance || '').includes(term) ||
+        (u.region_usager?.toLowerCase() || '').includes(term) ||
+        (u.genre_manifestation?.toLowerCase() || '').includes(term) ||
+        (u.nom_evenement?.toLowerCase() || '').includes(term) ||
+        (u.lieu_evenement?.toLowerCase() || '').includes(term)
       );
       setFilteredUsagers(filtered);
     } else {
@@ -279,6 +418,9 @@ const GestionDossier = () => {
     }
   }, [searchTerm, usagers]);
 
+  // ============================================================
+  // HANDLERS - Navigation
+  // ============================================================
   const handleOpenCategory = (categoryName) => {
     setSelectedCategory(categoryName);
     setViewMode('sub');
@@ -295,255 +437,442 @@ const GestionDossier = () => {
     setFilteredUsagers([]);
   };
 
-  const handleGoDashboard = () => {
-    navigate('/dashboard');
-  };
+  const handleGoDashboard = () => navigate('/dashboard');
 
-  // OUVERTURE D'UN DOSSIER USAGER
-  const handleOpenUsagerFolder = (usager) => {
-    setActiveUsager(usager);
-    setShowPrintModal(true);
-  };
-
-  // OUVERTURE D'UN DOSSIER UTILITAIRE
+  // ============================================================
+  // HANDLERS - Dossiers utilitaires
+  // ============================================================
   const handleOpenUtilityFolder = (folder) => {
     setSelectedUtility(folder);
     setShowUtilityModal(true);
+    if (folder.pdfAction) {
+      handleGenerateUtilityPDF(folder.pdfAction);
+    }
   };
 
-  // Afficher les détails de l'usager
+  const handleGenerateUtilityPDF = async (actionType) => {
+    try {
+      setNotification({ type: 'info', message: `🔄 Génération du PDF...` });
+      
+      const data = await fetchBilanData();
+      if (!data) {
+        setNotification({ type: 'error', message: '❌ Impossible de récupérer les données' });
+        setTimeout(() => setNotification(null), 3000);
+        return;
+      }
+      
+      const options = {
+        annee: new Date().getFullYear(),
+        responsable: currentUser?.nom || 'DAF',
+        dateGeneration: new Date().toLocaleDateString('fr-FR'),
+        actionType: actionType,
+        title: getUtilityTitle(actionType)
+      };
+      
+      const result = await generateBilanGlobalPDF(data, options);
+      
+      setNotification(result
+        ? { type: 'success', message: `✅ PDF généré avec succès` }
+        : { type: 'error', message: '❌ Erreur génération du PDF' });
+      setTimeout(() => setNotification(null), 3000);
+    } catch (error) {
+      console.error('❌ Erreur:', error);
+      setNotification({ type: 'error', message: `❌ Erreur technique: ${error.message}` });
+      setTimeout(() => setNotification(null), 3000);
+    }
+  };
+
+  const getUtilityTitle = (actionType) => {
+    const titles = {
+      'bilan_global': 'Bilan Global',
+      'bilan_region': 'Bilan par Région',
+      'bilan_paiements': 'Historique des Paiements',
+      'bilan_recettes': 'Recettes par Catégorie',
+      'bilan_mensuel': 'Rapport Mensuel',
+      'bilan_stats': 'Statistiques Globales'
+    };
+    return titles[actionType] || 'Bilan OMDA';
+  };
+
+  // ============================================================
+  // HANDLERS - Détails usager
+  // ============================================================
   const handleShowUsagerDetails = (usager) => {
     setSelectedUsagerForDetails(usager);
     setShowUsagerDetails(true);
   };
 
-  // Fonction pour formater la date
+  // ============================================================
+  // HANDLERS - Génération Bilan Global
+  // ============================================================
+  const handleGenerateBilanGlobal = async () => {
+    try {
+      setNotification({ type: 'info', message: '🔄 Génération du Bilan Global...' });
+      
+      const data = await fetchBilanData();
+      if (!data) {
+        setNotification({ type: 'error', message: '❌ Impossible de récupérer les données' });
+        setTimeout(() => setNotification(null), 3000);
+        return;
+      }
+      
+      const result = await generateBilanGlobalPDF(data, {
+        annee: new Date().getFullYear(),
+        responsable: currentUser?.nom || 'DAF',
+        dateGeneration: new Date().toLocaleDateString('fr-FR'),
+        actionType: 'bilan_global',
+        title: 'Bilan Global OMDA'
+      });
+      
+      setNotification(result
+        ? { type: 'success', message: '✅ Bilan Global généré avec succès' }
+        : { type: 'error', message: '❌ Erreur génération du Bilan Global' });
+      setTimeout(() => setNotification(null), 3000);
+    } catch (error) {
+      console.error('❌ Erreur:', error);
+      setNotification({ type: 'error', message: `❌ Erreur technique: ${error.message}` });
+      setTimeout(() => setNotification(null), 3000);
+    }
+  };
+
+  // ============================================================
+  // FORMATAGE
+  // ============================================================
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return '';
+      return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    } catch { return ''; }
+  };
+
   const formatDateForQR = (dateString) => {
     if (!dateString) return 'Date non spécifiée';
     try {
       const date = new Date(dateString);
       if (isNaN(date.getTime())) return 'Date invalide';
-      return date.toLocaleDateString('fr-FR', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric'
-      });
-    } catch {
-      return 'Date invalide';
-    }
+      return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+    } catch { return 'Date invalide'; }
   };
 
-  // Fonction pour formater la date en JJ/MM/AAAA
   const formatDateForReference = () => {
     const now = new Date();
-    const day = String(now.getDate()).padStart(2, '0');
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const year = now.getFullYear();
-    return `${day}/${month}/${year}`;
+    return `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
   };
 
-  // Génération du texte pour le QR code
+  const formatMontant = (valeur) => {
+    const n = Math.round(Number(valeur) || 0);
+    return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  };
+
+  // ============================================================
+  // NORMALISATION pour contrat OCC - CORRIGÉE
+  // ============================================================
+  const normalizeFactureForContrat = (f, apiType) => {
+    // S'assurer que toutes les données sont présentes
+    const safeData = {
+      id: f?.id || 0,
+      denomination: f?.denomination || f?.nom || f?.nom_evenement || '',
+      demandeur: f?.demandeur || f?.organisateurs || '',
+      telephone: f?.telephone || '',
+      email: f?.email || '',
+      adresse: f?.adresse || f?.siege || f?.adresse_siege || f?.domicile || '',
+      siege: f?.siege || f?.adresse || '',
+      adresse_siege: f?.adresse_siege || f?.adresse || f?.siege || '',
+      nif: f?.nif || '',
+      stat: f?.stat || '',
+      nif_stat: f?.nif_stat || [f?.nif, f?.stat].filter(Boolean).join(' / '),
+      montant_mensuel: parseFloat(f?.montant_mensuel || f?.montant || 0),
+      frais_dossier: parseFloat(f?.frais_dossier || 0),
+      uniter: parseInt(f?.uniter) || 1,
+      region: f?.region || f?.region_usager || '',
+      region_usager: f?.region_usager || f?.region || '',
+      created_at: f?.created_at || f?.date_ajout || new Date().toISOString(),
+      date_ajout: f?.date_ajout || f?.created_at || new Date().toISOString(),
+      numero_dossier_utilisateur: f?.numero_dossier_utilisateur || '',
+      quittance: f?.quittance || '',
+      soit_total: parseFloat(f?.soit_total || f?.montant_total || f?.montant_mensuel || 0),
+      montant_total: parseFloat(f?.montant_total || f?.soit_total || f?.montant_mensuel || 0),
+      moyens_communication: f?.moyens_communication || {},
+      total: f?.total || '',
+      a_compter_du: f?.a_compter_du || null,
+      echeance: f?.echeance || null,
+      confirmation_nom: f?.confirmation_nom || f?.demandeur || '',
+      date_signature: f?.date_signature || null,
+      lieu_signature: f?.lieu_ajout || 'Antananarivo',
+      lieu_ajout: f?.lieu_ajout || 'Antananarivo',
+      etoiles: f?.etoiles || '',
+      ravinala: f?.ravinala || false,
+      nombre_magasins: parseInt(f?.nombre_magasins) || 0,
+      nombre_vehicules: parseInt(f?.nombre_vehicules) || 0,
+      jauge_max: parseInt(f?.jauge_max) || 0,
+      lignes: f?.lignes || '',
+      type_bus: f?.type_bus || '',
+      trajet: f?.trajet || '',
+      horaires: f?.horaires || '',
+      zones_desservies: f?.zones_desservies || '',
+      activite: f?.activite || '',
+      representant_par: f?.representant_par || '',
+      organisateurs: f?.organisateurs || f?.demandeur || '',
+      genre_manifestation: f?.genre_manifestation || '',
+      date_evenement: f?.date_evenement || null,
+      lieu_evenement: f?.lieu_evenement || '',
+      nom_evenement: f?.nom_evenement || '',
+      artistes: f?.artistes || '',
+      artistes_detail: f?.artistes_detail || [],
+      proprietaire_nom: f?.demandeur || f?.representant_nom || '',
+      proprietaire_adresse: f?.adresse || '',
+      proprietaire_tel: f?.telephone || '',
+      proprietaire_cin: f?.representant_cin || '',
+      proprietaire_cin_delivree: f?.representant_cin_delivree || null,
+      proprietaire_cin_lieu: f?.representant_cin_lieu || '',
+      frequence: f?.frequence || '',
+      canal: f?.canal || '',
+      taux: parseFloat(f?.taux || 0),
+      personne_recu: f?.personne_recu || '',
+      is_retard: f?.is_retard || false,
+      montant_retard: parseFloat(f?.montant_retard || 0),
+      ref_usager: f?.ref_usager || f?.id || 0,
+      ref_client_type: f?.ref_client_type || '',
+      cin: f?.cin || f?.representant_cin || '',
+      representant_cin: f?.representant_cin || f?.cin || '',
+      cin_delivree: f?.cin_delivree || f?.representant_cin_delivree || '',
+      representant_cin_delivree: f?.representant_cin_delivree || f?.cin_delivree || '',
+      cin_lieu: f?.cin_lieu || f?.representant_cin_lieu || '',
+      representant_cin_lieu: f?.representant_cin_lieu || f?.cin_lieu || '',
+      domicile: f?.domicile || f?.adresse || '',
+      nom_signataire: f?.nom_signataire || f?.confirmation_nom || '',
+      // Champs supplémentaires pour OCC
+      organisateurs_occ: f?.organisateurs || f?.demandeur || '',
+      representant_par_occ: f?.representant_par || '',
+      genre_manifestation_occ: f?.genre_manifestation || '',
+      artistes_occ: f?.artistes || '',
+      artistes_detail_occ: f?.artistes_detail || [],
+      date_evenement_occ: f?.date_evenement || null,
+      lieu_evenement_occ: f?.lieu_evenement || '',
+      telephone_occ: f?.telephone || '',
+      adresse_occ: f?.adresse || f?.domicile || '',
+      cin_occ: f?.representant_cin || f?.cin || '',
+      cin_delivree_occ: f?.representant_cin_delivree || f?.cin_delivree || '',
+      cin_lieu_occ: f?.representant_cin_lieu || f?.cin_lieu || '',
+      lieu_ajout_occ: f?.lieu_ajout || 'Antananarivo',
+      confirmation_nom_occ: f?.confirmation_nom || ''
+    };
+
+    // Pour OCC, s'assurer que les champs spécifiques sont bien remplis
+    if (apiType === 'occ') {
+      safeData.organisateurs = safeData.organisateurs_occ || safeData.organisateurs;
+      safeData.representant_par = safeData.representant_par_occ || safeData.representant_par;
+      safeData.genre_manifestation = safeData.genre_manifestation_occ || safeData.genre_manifestation;
+      safeData.artistes = safeData.artistes_occ || safeData.artistes;
+      safeData.artistes_detail = safeData.artistes_detail_occ || safeData.artistes_detail;
+      safeData.date_evenement = safeData.date_evenement_occ || safeData.date_evenement;
+      safeData.lieu_evenement = safeData.lieu_evenement_occ || safeData.lieu_evenement;
+      safeData.telephone = safeData.telephone_occ || safeData.telephone;
+      safeData.adresse = safeData.adresse_occ || safeData.adresse;
+      safeData.domicile = safeData.adresse_occ || safeData.domicile;
+      safeData.representant_cin = safeData.cin_occ || safeData.representant_cin;
+      safeData.cin = safeData.cin_occ || safeData.cin;
+      safeData.representant_cin_delivree = safeData.cin_delivree_occ || safeData.representant_cin_delivree;
+      safeData.cin_delivree = safeData.cin_delivree_occ || safeData.cin_delivree;
+      safeData.representant_cin_lieu = safeData.cin_lieu_occ || safeData.representant_cin_lieu;
+      safeData.cin_lieu = safeData.cin_lieu_occ || safeData.cin_lieu;
+      safeData.lieu_ajout = safeData.lieu_ajout_occ || safeData.lieu_ajout;
+      safeData.confirmation_nom = safeData.confirmation_nom_occ || safeData.confirmation_nom;
+      safeData.nom_signataire = safeData.confirmation_nom_occ || safeData.nom_signataire;
+    }
+
+    return safeData;
+  };
+
+  // ============================================================
+  // GÉNÉRATION QR CODE
+  // ============================================================
   const generateQRTextContent = (usager, type) => {
     if (!usager) return '© OMDA - Document officiel';
-    
     const dateStr = formatDateForReference();
     const compteurValue = qrCompteur || usager.id || 1;
-    const andReference = `AND ${dateStr}-${compteurValue}`;
-    
-    let typePrefix = '';
+    const numeroDossier = usager.numero_dossier_utilisateur || `REF-${usager.id}`;
 
-    switch(type) {
-      case 'occ':
-        typePrefix = 'OCC';
+    switch (type) {
+      case 'occ': {
         const organisateurs = usager.organisateurs || usager.demandeur || 'Non spécifié';
         let artistesStr = 'Non spécifié';
         if (usager.artistes_detail && usager.artistes_detail.length > 0) {
-          artistesStr = usager.artistes_detail.map(a => a.nom).join(', ');
-        } else if (usager.artistesList && usager.artistesList.length > 0) {
-          artistesStr = usager.artistesList.map(a => a.nom).join(', ');
-        } else if (usager.artistes && usager.artistes !== '' && usager.artistes !== 'Non spécifié') {
+          artistesStr = usager.artistes_detail.map(a => {
+            if (a.prenom && a.nom) return `${a.prenom} ${a.nom}`;
+            return a.nom || a;
+          }).join(', ');
+        } else if (usager.artistes) {
           artistesStr = usager.artistes;
         }
         const lieu = usager.lieu_evenement || usager.adresse || 'Lieu non spécifié';
         const dateEvent = usager.date_evenement ? formatDateForQR(usager.date_evenement) : 'Date non spécifiée';
-        return `© OMDA affirme un événement : ${typePrefix} : Organisateurs: ${organisateurs}, Artistes: ${artistesStr}, Lieu: ${lieu}, Date événement: ${dateEvent}, ${andReference}`;
-
+        return `OMDA affirme un événement OCC\nOrganisateur : ${organisateurs}\nArtistes : ${artistesStr}\nLieu : ${lieu}\nDate : ${dateEvent}\nRef : ${numeroDossier}\n© OMDA - Tel: 034 05 533 88`;
+      }
       case 'hotel':
-        typePrefix = 'Hôtel';
-        const nomHotel = usager.denomination || usager.nom || 'HÔTEL';
-        const adresseHotel = usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
-        const etoiles = usager.etoiles || 'Non spécifié';
-        let anneePaiementHotel = new Date().getFullYear();
-        if (usager.annee_dernier_paiement) {
-          anneePaiementHotel = usager.annee_dernier_paiement;
-        } else if (usager.paiements && usager.paiements.length > 0) {
-          const dernierPaiement = usager.paiements.sort((a, b) => 
-            new Date(b.date_paiement) - new Date(a.date_paiement)
-          )[0];
-          if (dernierPaiement) {
-            anneePaiementHotel = new Date(dernierPaiement.date_paiement).getFullYear();
-          }
-        }
-        return `${typePrefix} : ${nomHotel}, Adresse: ${adresseHotel}, Étoiles: ${etoiles}, Validation année: ${anneePaiementHotel}, ${andReference}`;
-
+        return `OMDA affirme un établissement HOTEL\nNom : ${usager.denomination || usager.demandeur || 'HÔTEL'}\nAdresse: ${usager.adresse || usager.siege || 'N/A'}\nÉtoiles: ${usager.etoiles || 'N/A'}\nRef: ${numeroDossier}\n© OMDA - Tel: 034 05 533 88`;
       case 'grand-surface':
-        typePrefix = 'Grande Surface';
-        const nomGS = usager.denomination || usager.nom || 'GRANDE SURFACE';
-        const adresseGS = usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
-        const nbMagasins = usager.nombre_magasins || 0;
-        let anneePaiementGS = new Date().getFullYear();
-        if (usager.annee_dernier_paiement) {
-          anneePaiementGS = usager.annee_dernier_paiement;
-        } else if (usager.paiements && usager.paiements.length > 0) {
-          const dernierPaiement = usager.paiements.sort((a, b) => 
-            new Date(b.date_paiement) - new Date(a.date_paiement)
-          )[0];
-          if (dernierPaiement) {
-            anneePaiementGS = new Date(dernierPaiement.date_paiement).getFullYear();
-          }
-        }
-        return `${typePrefix} : ${nomGS}, Adresse: ${adresseGS}, Nb magasins: ${nbMagasins}, Validation année: ${anneePaiementGS}, ${andReference}`;
-
+        return `OMDA affirme un établissement MAGASIN\nNom : ${usager.denomination || usager.demandeur || 'N/A'}\nAdresse: ${usager.adresse || 'N/A'}\nNb magasins: ${usager.nombre_magasins || 0}\nRef: ${numeroDossier}\n© OMDA - Tel: 034 05 533 88`;
       case 'bus':
-        typePrefix = 'Bus';
-        const nomBus = usager.denomination || usager.nom || 'ENTREPRISE DE BUS';
-        const adresseBus = usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
-        const typeBus = usager.type_bus || 'Non spécifié';
-        const nbBus = usager.nombre_vehicules || 0;
-        const lignes = usager.lignes || 'Non spécifiées';
-        let anneePaiementBus = new Date().getFullYear();
-        if (usager.annee_dernier_paiement) {
-          anneePaiementBus = usager.annee_dernier_paiement;
-        } else if (usager.paiements && usager.paiements.length > 0) {
-          const dernierPaiement = usager.paiements.sort((a, b) => 
-            new Date(b.date_paiement) - new Date(a.date_paiement)
-          )[0];
-          if (dernierPaiement) {
-            anneePaiementBus = new Date(dernierPaiement.date_paiement).getFullYear();
-          }
-        }
-        return `${typePrefix} : ${nomBus}, type: ${typeBus}, Nb bus: ${nbBus}, Lignes: ${lignes}, Validation année: ${anneePaiementBus}, ${andReference}`;
-
+        return `OMDA affirme une société BUS\nNom : ${usager.denomination || usager.demandeur || 'N/A'}\nType: ${usager.type_bus || 'N/A'}\nNb bus: ${usager.nombre_vehicules || 0}\nLignes: ${usager.lignes || 'N/A'}\nRef: ${numeroDossier}\n© OMDA - Tel: 034 05 533 88`;
       case 'nightclub':
-        typePrefix = 'Night Club';
-        const nomNC = usager.denomination || usager.nom || 'NIGHT CLUB';
-        const adresseNC = usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
-        const jauge = usager.jauge_max || 0;
-        const horaires = usager.horaires || 'Non spécifiés';
-        let anneePaiementNC = new Date().getFullYear();
-        if (usager.annee_dernier_paiement) {
-          anneePaiementNC = usager.annee_dernier_paiement;
-        } else if (usager.paiements && usager.paiements.length > 0) {
-          const dernierPaiement = usager.paiements.sort((a, b) => 
-            new Date(b.date_paiement) - new Date(a.date_paiement)
-          )[0];
-          if (dernierPaiement) {
-            anneePaiementNC = new Date(dernierPaiement.date_paiement).getFullYear();
-          }
-        }
-        return `${typePrefix} : ${nomNC}, Adresse: ${adresseNC}, Jauge: ${jauge}, Horaires: ${horaires}, Validation année: ${anneePaiementNC}, ${andReference}`;
-
+        return `OMDA affirme un établissement NIGHT CLUB\nNom : ${usager.denomination || usager.demandeur || 'N/A'}\nAdresse: ${usager.adresse || 'N/A'}\nJauge: ${usager.jauge_max || 0}\nHoraires: ${usager.horaires || 'N/A'}\nRef: ${numeroDossier}\n© OMDA - Tel: 034 05 533 88`;
       case 'media':
-        typePrefix = 'Média';
-        const nomMedia = usager.denomination || usager.nom || 'MÉDIA';
-        const adresseMedia = usager.siege || usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
-        const canal = usager.canal || usager.frequence || 'Non spécifié';
-        let anneePaiementMedia = new Date().getFullYear();
-        if (usager.annee_dernier_paiement) {
-          anneePaiementMedia = usager.annee_dernier_paiement;
-        } else if (usager.paiements && usager.paiements.length > 0) {
-          const dernierPaiement = usager.paiements.sort((a, b) => 
-            new Date(b.date_paiement) - new Date(a.date_paiement)
-          )[0];
-          if (dernierPaiement) {
-            anneePaiementMedia = new Date(dernierPaiement.date_paiement).getFullYear();
-          }
-        }
-        return `${typePrefix} : ${nomMedia}, Adresse: ${adresseMedia}, Canal/Fréquence: ${canal}, Validation année: ${anneePaiementMedia}, ${andReference}`;
-
+        return `OMDA affirme une station MEDIA\nNom : ${usager.denomination || usager.demandeur || 'N/A'}\nAdresse: ${usager.siege || usager.adresse || 'N/A'}\nCanal/Fréquence: ${usager.canal || usager.frequence || 'N/A'}\nRef: ${numeroDossier}\n© OMDA - Tel: 034 05 533 88`;
       default:
-        return `© OMDA - Document officiel, ${andReference}`;
+        return `© OMDA - Document officiel\nRef: ${numeroDossier}\n© OMDA - Tel: 034 05 533 88`;
     }
   };
 
-  // OUVERTURE D'UN DOCUMENT SPÉCIFIQUE
+  // ============================================================
+  // GÉNÉRATION DOCUMENTS - CORRIGÉE
+  // ============================================================
   const handleOpenDocument = async (usager, docType) => {
     if (!usager) return;
-
     const apiType = categoryMapping[selectedCategory] || 'hotel';
-    const pdfData = {
-      date: usager.created_at || new Date().toISOString().split('T')[0],
-      annee: new Date().getFullYear(),
-      montant: usager.montant_mensuel || usager.montant_total || 0,
-      nombreMois: 1,
-      montantMensuel: usager.montant_mensuel || 0
-    };
+    setProcessingDoc({ usagerId: usager.id, docType });
 
     try {
       setNotification({ type: 'info', message: `🔄 Génération du ${docType}...` });
 
-      switch(docType) {
+      // ✅ S'assurer que toutes les données de l'usager sont complètes
+      const usagerComplet = {
+        ...usager,
+        // S'assurer que les champs obligatoires sont présents
+        denomination: usager.denomination || usager.nom || usager.nom_evenement || 'Sans nom',
+        demandeur: usager.demandeur || usager.organisateurs || '',
+        telephone: usager.telephone || '',
+        email: usager.email || '',
+        adresse: usager.adresse || usager.siege || usager.adresse_siege || usager.domicile || '',
+        region: usager.region || usager.region_usager || '',
+        montant_mensuel: parseFloat(usager.montant_mensuel || usager.montant || 0),
+        frais_dossier: parseFloat(usager.frais_dossier || 0),
+        uniter: parseInt(usager.uniter) || 1,
+        soit_total: parseFloat(usager.soit_total || usager.montant_total || usager.montant_mensuel || 0),
+        // Pour OCC
+        organisateurs: usager.organisateurs || usager.demandeur || '',
+        representant_par: usager.representant_par || '',
+        genre_manifestation: usager.genre_manifestation || '',
+        artistes: usager.artistes || '',
+        artistes_detail: usager.artistes_detail || [],
+        date_evenement: usager.date_evenement || null,
+        lieu_evenement: usager.lieu_evenement || '',
+        lieu_ajout: usager.lieu_ajout || 'Antananarivo',
+        confirmation_nom: usager.confirmation_nom || usager.demandeur || '',
+        representant_cin: usager.representant_cin || usager.cin || '',
+        representant_cin_delivree: usager.representant_cin_delivree || usager.cin_delivree || '',
+        representant_cin_lieu: usager.representant_cin_lieu || usager.cin_lieu || '',
+        numero_dossier_utilisateur: usager.numero_dossier_utilisateur || '',
+        numero_dossier_global: usager.numero_dossier_global || '',
+        quittance: usager.quittance || '',
+        personne_recu: usager.personne_recu || '',
+        is_retard: usager.is_retard || false,
+        montant_retard: parseFloat(usager.montant_retard || 0),
+        // Pour Hôtel
+        etoiles: usager.etoiles || '',
+        // Pour Grand Surface
+        nombre_magasins: parseInt(usager.nombre_magasins) || 0,
+        // Pour Bus
+        nombre_vehicules: parseInt(usager.nombre_vehicules) || 0,
+        lignes: usager.lignes || '',
+        type_bus: usager.type_bus || '',
+        trajet: usager.trajet || '',
+        // Pour Night Club
+        jauge_max: parseInt(usager.jauge_max) || 0,
+        horaires: usager.horaires || '',
+        // Pour Média
+        frequence: usager.frequence || '',
+        canal: usager.canal || '',
+        siege: usager.siege || usager.adresse || '',
+        nif: usager.nif || '',
+        stat: usager.stat || '',
+        taux: parseFloat(usager.taux || 0),
+        // Dates
+        created_at: usager.created_at || usager.date_ajout || new Date().toISOString(),
+        date_ajout: usager.date_ajout || usager.created_at || new Date().toISOString(),
+        a_compter_du: usager.a_compter_du || null,
+        echeance: usager.echeance || null,
+        date_signature: usager.date_signature || null,
+        // Références
+        ref_usager: usager.ref_usager || usager.id || 0,
+        ref_client_type: usager.ref_client_type || apiType.toUpperCase(),
+        type_usager: usager.type_usager || apiType
+      };
+
+      console.log('📄 Génération pour:', usagerComplet.denomination);
+
+      switch (docType) {
         case 'Contrat':
-          switch(apiType) {
-            case 'hotel': generateHotelPDF(usager, pdfData); break;
-            case 'grand-surface': generateMagasinPDF(usager, pdfData); break;
-            case 'media': generateMediaPDF(usager, pdfData); break;
-            case 'nightclub': generateNightPDF(usager, pdfData); break;
-            case 'bus': generateBusPDF(usager, pdfData); break;
-            case 'occ': await generateOccPDF(usager, pdfData); break;
-            default: generateHotelPDF(usager, pdfData);
+          // UNIQUEMENT POUR LES TYPES NON OCC
+          if (apiType === 'occ') {
+            // OCC n'a pas de contrat, on génère la facture à la place
+            await generateFacturePDF(usagerComplet, false);
+          } else {
+            const normalizedData = normalizeFactureForContrat(usagerComplet, apiType);
+            switch (apiType) {
+              case 'hotel':
+                await generateHotelPDF(normalizedData);
+                break;
+              case 'grand-surface':
+                await generateMagasinPDF(normalizedData);
+                break;
+              case 'media':
+                await generateMediaPDF(normalizedData);
+                break;
+              case 'nightclub':
+                await generateNightPDF(normalizedData);
+                break;
+              case 'bus':
+                await generateBusPDF(normalizedData);
+                break;
+              default:
+                throw new Error(`Type de contrat non supporté: ${apiType}`);
+            }
           }
           break;
+
         case 'Facture':
-          await generateFacturePDF(usager, pdfData, apiType);
+          // TOUS LES TYPES utilisent le même générateur de facture
+          await generateFacturePDF(usagerComplet, false);
           break;
-        case 'QR Code':
-          const qrText = generateQRTextContent(usager, apiType);
-          setQrCodeData({ usager, apiType, qrText });
+
+        case 'QR Code': {
+          const qrText = generateQRTextContent(usagerComplet, apiType);
+          setQrCodeData({ usager: usagerComplet, apiType, qrText });
           setShowQrModal(true);
+          setProcessingDoc(null);
           return;
+        }
         default:
           break;
       }
 
-      setValidatedDossiers(prev => ({
-        ...prev,
-        [usager.id]: true
-      }));
-
+      setValidatedDossiers(prev => ({ ...prev, [`${usager.id}_${docType}`]: true }));
       setNotification({ type: 'success', message: `✅ ${docType} généré avec succès` });
       setTimeout(() => setNotification(null), 3000);
     } catch (error) {
-      console.error('Erreur:', error);
-      setNotification({ type: 'error', message: `❌ Erreur génération ${docType}` });
-      setTimeout(() => setNotification(null), 3000);
+      console.error(`Erreur génération ${docType}:`, error);
+      setNotification({ type: 'error', message: `❌ Erreur génération ${docType} : ${error.message}` });
+      setTimeout(() => setNotification(null), 5000);
+    } finally {
+      setProcessingDoc(null);
     }
   };
 
-  // Téléchargement du QR Code
+  // ============================================================
+  // HANDLERS - QR Code
+  // ============================================================
   const handleDownloadQR = async () => {
-    if (!qrRef.current) {
-      alert('QR code non disponible');
-      return;
-    }
-    
+    if (!qrRef.current) { alert('QR code non disponible'); return; }
     setIsDownloading(true);
-    
     try {
-      const canvas = await html2canvas(qrRef.current, {
-        scale: 3,
-        backgroundColor: '#ffffff',
-        useCORS: true,
-        allowTaint: true,
-        logging: false
-      });
-      
+      const canvas = await html2canvas(qrRef.current, { scale: 3, backgroundColor: '#ffffff', useCORS: true, allowTaint: true, logging: false });
       const link = document.createElement('a');
-      const timestamp = new Date().toISOString().split('T')[0];
-      link.download = `qr-code-omda-${timestamp}.png`;
+      link.download = `qr-code-omda-${new Date().toISOString().split('T')[0]}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
-      
       setNotification({ type: 'success', message: '✅ QR Code téléchargé avec succès' });
       setTimeout(() => setNotification(null), 3000);
     } catch (error) {
@@ -555,234 +884,226 @@ const GestionDossier = () => {
     }
   };
 
-  // Impression du QR Code
-  const handlePrintQR = () => {
-    window.print();
-  };
+  const handlePrintQR = () => window.print();
+  const handlePrintUtility = () => window.print();
 
-  // Impression du document utilitaire
-  const handlePrintUtility = () => {
-    window.print();
-  };
-
+  // ============================================================
+  // STATS par catégorie
+  // ============================================================
   const getCategoryStats = (categoryName) => {
     const apiType = categoryMapping[categoryName];
-    if (stats && stats[apiType]) {
-      return {
-        total: stats[apiType].total || 0,
-        new: stats[apiType].nouveaux || 0
-      };
-    }
+    if (stats && stats[apiType]) return { total: stats[apiType].total || 0, new: stats[apiType].nouveaux || 0 };
     return { total: 0, new: 0 };
   };
 
   const totalDossiers = stats ? Object.values(stats).reduce((acc, s) => acc + (s.total || 0), 0) : 0;
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  };
-
-  // Fonction pour obtenir les informations spécifiques à l'usager
-  const getUsagerInfo = (usager, type) => {
-    const info = {
-      nom: usager.denomination || usager.demandeur || usager.nom_evenement || 'ENTREPRISE',
-      lieu: '',
-      date: '',
-      details: [],
-      telephone: usager.telephone || 'Non spécifié',
-      email: usager.email || 'Non spécifié',
-      numero_dossier: usager.numero_dossier_utilisateur || 'Non spécifié'
-    };
-
-    switch(type) {
-      case 'occ':
-        info.nom = usager.denomination || usager.demandeur || usager.nom_evenement || 'ÉVÉNEMENT';
-        info.lieu = usager.lieu_evenement || 'Lieu non spécifié';
-        info.date = formatDateForQR(usager.date_evenement);
-        if (usager.organisateurs) info.details.push(`Organisateurs: ${usager.organisateurs}`);
-        if (usager.artistes_detail?.length > 0) {
-          info.details.push(`Artistes: ${usager.artistes_detail.map(a => a.nom).join(', ')}`);
-        } else if (usager.artistesList?.length > 0) {
-          info.details.push(`Artistes: ${usager.artistesList.map(a => a.nom).join(', ')}`);
-        } else if (usager.artistes && usager.artistes !== 'Non spécifié') {
-          info.details.push(`Artistes: ${usager.artistes}`);
-        }
-        if (usager.genre_manifestation) info.details.push(`Genre: ${usager.genre_manifestation}`);
-        break;
-      case 'hotel':
-        info.nom = usager.denomination || usager.nom || 'HÔTEL';
-        info.lieu = usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
-        info.date = formatDateForQR(usager.created_at);
-        if (usager.etoiles) info.details.push(`Étoiles: ${usager.etoiles}⭐`);
-        break;
-      case 'grand-surface':
-        info.nom = usager.denomination || usager.nom || 'GRANDE SURFACE';
-        info.lieu = usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
-        info.date = formatDateForQR(usager.created_at);
-        if (usager.nombre_magasins) info.details.push(`Nb magasins: ${usager.nombre_magasins}`);
-        break;
-      case 'bus':
-        info.nom = usager.denomination || usager.nom || 'ENTREPRISE DE BUS';
-        info.lieu = usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
-        info.date = formatDateForQR(usager.created_at);
-        if (usager.nombre_vehicules) info.details.push(`Nb bus: ${usager.nombre_vehicules}`);
-        if (usager.lignes) info.details.push(`Lignes: ${usager.lignes}`);
-        break;
-      case 'nightclub':
-        info.nom = usager.denomination || usager.nom || 'NIGHT CLUB';
-        info.lieu = usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
-        info.date = formatDateForQR(usager.created_at);
-        if (usager.jauge_max) info.details.push(`Jauge: ${usager.jauge_max}`);
-        if (usager.horaires) info.details.push(`Horaires: ${usager.horaires}`);
-        break;
-      case 'media':
-        info.nom = usager.denomination || usager.nom || 'MÉDIA';
-        info.lieu = usager.siege || usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
-        info.date = formatDateForQR(usager.created_at);
-        if (usager.canal) info.details.push(`Canal: ${usager.canal}`);
-        break;
-    }
-
-    return info;
-  };
-
-  // Icône DOSSIER WINDOWS
-  const FolderIcon = ({ color = '#f5c842', size = 32 }) => (
-    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke={color} strokeWidth="1.5">
-      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+  // ============================================================
+  // ICÔNE DOSSIER
+  // ============================================================
+  const FolderIcon = ({ color = '#ffc857', size = 40 }) => (
+    <svg viewBox="0 0 24 24" width={size} height={size}>
+      <path fill={color} d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+      <path fill="#000" opacity="0.08" d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" transform="translate(0,1)"/>
     </svg>
   );
 
-  // Icône DOCUMENT PDF
-  const PdfIcon = ({ size = 24 }) => (
-    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="#e74c3c" strokeWidth="1.5">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/>
-      <path d="M14 2v6h6"/>
-      <path d="M9 15l2 2 4-4"/>
-    </svg>
+  // ============================================================
+  // RENDU - FLEC (bouton de retour visible)
+  // ============================================================
+  const renderNavigationFlec = () => (
+    <div className="navigation-flec">
+      <div className="flec-container">
+        <button 
+          className={`flec-back-btn ${viewMode === 'root' ? 'flec-back-btn-disabled' : ''}`}
+          onClick={handleGoBack}
+          disabled={viewMode === 'root'}
+          title="Retour à la racine"
+        >
+          <ChevronLeft size={18} className="flec-back-icon" />
+          <span className="flec-back-text">Retour</span>
+        </button>
+
+        <div className="flec-separator">|</div>
+
+        <div className="flec-path">
+          <span className="flec-home">
+            <Home size={14} />
+          </span>
+          {currentPath.split('/').filter(Boolean).map((seg, i, arr) => (
+            <React.Fragment key={i}>
+              <ChevronRight size={12} className="flec-sep" />
+              <span className={`flec-seg ${i === arr.length - 1 ? 'flec-seg-active' : ''}`}>
+                {seg.trim()}
+              </span>
+            </React.Fragment>
+          ))}
+        </div>
+
+        <div className="flec-indicator">
+          <div className="flec-dot"></div>
+          <span className="flec-count">
+            {viewMode === 'root' ? 'Racine' : `${filteredUsagers.length} dossier${filteredUsagers.length > 1 ? 's' : ''}`}
+          </span>
+        </div>
+      </div>
+    </div>
   );
 
+  // ============================================================
+  // RENDU PRINCIPAL
+  // ============================================================
   return (
     <>
       <MiniSidebar />
-      
       <main className="contenu-gestion-dossier">
         {notification && (
           <div className={`notification ${notification.type}`}>
             <div className="notification-content">
-              <span className="notification-icon">
-                {notification.type === 'success' ? '✅' : notification.type === 'info' ? 'ℹ️' : '❌'}
-              </span>
+              <span className="notification-icon">{notification.type === 'success' ? '✅' : notification.type === 'info' ? 'ℹ️' : '❌'}</span>
               <span className="notification-message">{notification.message}</span>
               <button className="notification-close" onClick={() => setNotification(null)}>✕</button>
             </div>
           </div>
         )}
 
+        {renderNavigationFlec()}
+
+        <div className="explorer-titlebar">
+          <div className="explorer-titlebar-left">
+            <FolderOpen size={18} />
+            <span>Gestion des dossiers — OMDA</span>
+          </div>
+          <div className="explorer-titlebar-right">
+            <span className="total-dossiers-pill">{totalDossiers} dossier{totalDossiers > 1 ? 's' : ''}</span>
+          </div>
+        </div>
+
+        <div className="explorer-ribbon">
+          <button className="ribbon-btn" onClick={handleGenerateBilanGlobal}>
+            <FileText size={16} /> <span>Bilan PDF</span>
+          </button>
+          <button className="ribbon-btn" onClick={() => setShowStatsModal(true)}>
+            <TrendingUp size={16} /> <span>Statistiques</span>
+          </button>
+          <div className="ribbon-sep" />
+          <div className="ribbon-view-toggle">
+            <button className={displayMode === 'grid' ? 'active' : ''} onClick={() => setDisplayMode('grid')} title="Vue grille">
+              <Grid size={15} />
+            </button>
+            <button className={displayMode === 'list' ? 'active' : ''} onClick={() => setDisplayMode('list')} title="Vue liste">
+              <List size={15} />
+            </button>
+          </div>
+          <div className="ribbon-spacer" />
+          <button className="ribbon-btn dashboard-btn" onClick={handleGoDashboard}>
+            <ArrowLeft size={16} /> <span>Retour Dashboard</span>
+          </button>
+        </div>
+
+        <div className="windows-explorer-bar">
+          <div className="explorer-nav">
+            <h1></h1>
+            <button 
+              onClick={handleGoBack} 
+              disabled={viewMode === 'root'} 
+              className={`nav-btn ${viewMode === 'root' ? 'nav-btn-disabled' : ''}`}
+            >
+              <ArrowLeft size={18} />
+            </button>
+          </div>
+          <div className="explorer-address">
+            <span className="address-icon"><FolderOpen size={16} /></span>
+            {currentPath.split('/').filter(Boolean).map((seg, i, arr) => (
+              <React.Fragment key={i}>
+                <span className="breadcrumb-seg">{seg.trim()}</span>
+                {i < arr.length - 1 && <ChevronsRight size={12} className="breadcrumb-sep" />}
+              </React.Fragment>
+            ))}
+          </div>
+          <div className="explorer-search">
+            <Search size={16} className="search-icon-header" />
+            <input 
+              type="text" 
+              placeholder="Rechercher (nom, quittance, région...)" 
+              value={searchTerm} 
+              onChange={(e) => setSearchTerm(e.target.value)} 
+              className="search-input" 
+            />
+          </div>
+        </div>
+
         <div className="dossier-dashboard">
-          
-          {/* HEADER SIMPLIFIÉ */}
-          <div className="dashboard-header-simple">
-            <div className="header-left">
-              <button className="btn-dashboard" onClick={handleGoDashboard}>
-                ← Retour Dashboard
-              </button>
-              <h1>📂 Gestion des dossiers</h1>
-            </div>
-            <div className="header-right">
-              <span className="total-dossiers">Total: {totalDossiers} dossiers</span>
-            </div>
-          </div>
-
-          {/* BARRE D'EXPLORATEUR WINDOWS */}
-          <div className="windows-explorer-bar">
-            <div className="explorer-nav">
-              <button 
-                onClick={handleGoBack} 
-                disabled={viewMode === 'root'} 
-                className={`nav-btn ${viewMode === 'root' ? 'nav-btn-disabled' : ''}`}
-              >
-                ←
-              </button>
-            </div>
-            
-            <div className="explorer-address">
-              <span className="address-icon">📁</span>
-              <input 
-                type="text" 
-                value={currentPath} 
-                onChange={(e) => setCurrentPath(e.target.value)} 
-                className="address-input"
-                readOnly
-              />
-            </div>
-
-            <div className="explorer-search">
-              <input 
-                type="text" 
-                placeholder="Rechercher..." 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="search-input"
-              />
-            </div>
-          </div>
-
-          {/* VUE RACINE */}
           {viewMode === 'root' && (
             <div className="root-view">
-              {/* DOSSIERS UTILITAIRES (BILAN) */}
               <div className="section-utility-folders">
-                <h2 className="section-title">📁 Dossiers Utilitaires</h2>
-                <div className="utility-folders-grid">
-                  {utilityFolders.map((folder) => (
-                    <div 
-                      key={folder.id} 
-                      className="utility-folder"
-                      style={{ borderLeftColor: folder.color }}
-                      onClick={() => handleOpenUtilityFolder(folder)}
-                    >
-                      <div className="folder-tab" style={{ background: folder.color }}></div>
-                      <div className="folder-icon" style={{ color: folder.color }}>
-                        <span style={{ fontSize: '28px' }}>{folder.icon}</span>
+                <h2 className="section-title"><Briefcase size={20} /> Dossiers Utilitaires</h2>
+                <div className={displayMode === 'grid' ? 'utility-folders-grid' : 'explorer-list'}>
+                  {utilityFolders.map((folder) => {
+                    const IconComponent = folder.icon;
+                    return displayMode === 'grid' ? (
+                      <div 
+                        key={folder.id} 
+                        className="explorer-item" 
+                        onDoubleClick={() => handleOpenUtilityFolder(folder)}
+                        onClick={() => handleOpenUtilityFolder(folder)}
+                      >
+                        <div className="explorer-item-icon">
+                          <IconComponent size={40} color={folder.color} strokeWidth={1.4} />
+                        </div>
+                        <div className="explorer-item-name">{folder.name}</div>
+                        <div className="explorer-item-sub">{folder.itemCount}</div>
                       </div>
-                      <h3 className="folder-name">{folder.name}</h3>
-                      <p className="folder-stats">{folder.desc}</p>
-                    </div>
-                  ))}
+                    ) : (
+                      <div 
+                        key={folder.id} 
+                        className="explorer-list-row" 
+                        onClick={() => handleOpenUtilityFolder(folder)}
+                      >
+                        <IconComponent size={20} color={folder.color} />
+                        <span className="row-name">{folder.name}</span>
+                        <span className="row-desc">{folder.desc}</span>
+                        <span className="row-meta">{folder.itemCount}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
               <div className="section-divider"></div>
 
-              {/* DOSSIERS USAGERS */}
               <div className="section-dossiers-usagers">
-                <h2 className="section-title">📁 Dossiers Usagers</h2>
-                <div className="dossiers-grid-usagers">
+                <h2 className="section-title"><Users size={20} /> Dossiers Usagers</h2>
+                <div className={displayMode === 'grid' ? 'utility-folders-grid' : 'explorer-list'}>
                   {Object.keys(categoryMapping).map((catName) => {
-                    const stats = getCategoryStats(catName);
+                    const statsCat = getCategoryStats(catName);
                     const apiType = categoryMapping[catName];
                     const color = typeColors[apiType] || '#6366f1';
-                    const icon = typeIcons[apiType] || '📁';
-                    
-                    return (
+                    const IconComponent = typeIcons[apiType] || FolderOpen;
+
+                    return displayMode === 'grid' ? (
                       <div 
                         key={catName} 
-                        className="dossier-folder-usager"
+                        className="explorer-item" 
+                        onDoubleClick={() => handleOpenCategory(catName)}
                         onClick={() => handleOpenCategory(catName)}
-                        style={{ borderLeftColor: color }}
                       >
-                        <div className="folder-tab" style={{ background: color }}></div>
-                        <div className="folder-icon" style={{ color: color }}>
-                          <span style={{ fontSize: '28px' }}>{icon}</span>
+                        <div className="explorer-item-icon">
+                          <FolderIcon size={40} color={color} />
                         </div>
-                        <h3 className="folder-name">{catName}</h3>
-                        <p className="folder-stats">
-                          {stats.total} Dossier{stats.total > 1 ? 's' : ''} 
-                          {stats.new > 0 && ` • ${stats.new} Nouveau`}
-                        </p>
+                        <div className="explorer-item-name">{catName}</div>
+                        <div className="explorer-item-sub">{statsCat.total} dossier{statsCat.total > 1 ? 's' : ''}</div>
+                      </div>
+                    ) : (
+                      <div 
+                        key={catName} 
+                        className="explorer-list-row" 
+                        onClick={() => handleOpenCategory(catName)}
+                      >
+                        <IconComponent size={20} color={color} />
+                        <span className="row-name">{catName}</span>
+                        <span className="row-desc">{statsCat.total} dossier(s){statsCat.new > 0 ? ` • ${statsCat.new} ce mois` : ''}</span>
+                        <span className="row-meta">→</span>
                       </div>
                     );
                   })}
@@ -791,14 +1112,11 @@ const GestionDossier = () => {
             </div>
           )}
 
-          {/* VUE SOUS-DOSSIER */}
           {viewMode === 'sub' && (
             <div className="sub-view">
               <div className="filters-bar">
                 <div className="filters-left">
-                  <span className="filter-count">
-                    {filteredUsagers.length} Dossier{filteredUsagers.length > 1 ? 's' : ''}
-                  </span>
+                  <span className="filter-count"><FileText size={16} /> {filteredUsagers.length} Dossier{filteredUsagers.length > 1 ? 's' : ''}</span>
                   <span className="filter-category">{selectedCategory}</span>
                 </div>
                 <div className="filters-right">
@@ -813,67 +1131,97 @@ const GestionDossier = () => {
                 </div>
               ) : filteredUsagers.length === 0 ? (
                 <div className="empty-state">
-                  <div className="empty-icon">📭</div>
+                  <div className="empty-icon"><FolderOpen size={48} /></div>
                   <p>Aucun dossier trouvé</p>
                 </div>
               ) : (
                 <div className="usagers-grid">
                   {filteredUsagers.map((usager) => {
-                    const nomDossier = usager.denomination || usager.nom_evenement || usager.demandeur || 'Sans nom';
-                    const dateDossier = formatDate(usager.created_at) || new Date().toLocaleDateString('fr-FR');
-                    const isPrinted = validatedDossiers[usager.id] || false;
                     const apiType = categoryMapping[selectedCategory] || 'hotel';
-                    const info = getUsagerInfo(usager, apiType);
+                    const nomDossier = usager.denomination || usager.organisateurs || usager.demandeur || usager.nom_evenement || 'Sans nom';
+                    const dateDossier = formatDate(usager.date_ajout || usager.created_at) || new Date().toLocaleDateString('fr-FR');
+                    const color = typeColors[apiType] || '#6366f1';
                     
+                    let artistesStr = '';
+                    if (apiType === 'occ') {
+                      if (usager.artistes_detail && usager.artistes_detail.length > 0) {
+                        artistesStr = usager.artistes_detail.map(a => {
+                          if (a.prenom && a.nom) return `${a.prenom} ${a.nom}`;
+                          return a.nom || a;
+                        }).join(', ');
+                      } else if (usager.artistes) {
+                        artistesStr = usager.artistes;
+                      }
+                    }
+
+                    // ✅ Utiliser getDocumentsForType pour déterminer les documents
+                    const documents = getDocumentsForType(apiType);
+
                     return (
-                      <div 
-                        key={usager.id} 
-                        className={`usager-folder ${isPrinted ? 'folder-validated' : ''}`}
-                      >
-                        <div className="folder-tab-doc" style={{ background: '#f5c842' }}></div>
+                      <div key={usager.id} className="usager-folder">
+                        <div className="folder-tab-doc" style={{ background: color }}></div>
                         <div className="folder-content-doc">
-                          <div className="folder-icon-doc">
-                            <FolderIcon size={28} />
-                          </div>
+                          <div className="folder-icon-doc"><FolderIcon size={28} color={color} /></div>
                           <div className="folder-info-doc">
                             <h4 className="folder-title-doc" onClick={() => handleShowUsagerDetails(usager)}>
                               {nomDossier}
-                              <span className="info-icon">ℹ️</span>
+                              <span className="info-icon"><Info size={14} /></span>
                             </h4>
-                            <p className="folder-date-doc">📅 {dateDossier}</p>
-                            {isPrinted && <span className="badge-valid">✅ Validé</span>}
+                            <p className="folder-date-doc"><Calendar size={14} /> {dateDossier}</p>
+                            <p className="folder-meta-doc"><Hash size={12} /> Quittance: {usager.quittance || '-'}</p>
+                            <p className="folder-meta-doc"><Banknote size={12} /> {formatMontant(usager.soit_total || usager.montant_mensuel || 0)} Ar</p>
+                            {usager.region_usager && (
+                              <p className="folder-meta-doc"><MapPin size={12} /> {usager.region_usager}</p>
+                            )}
+                            {apiType === 'occ' && usager.date_evenement && (
+                              <p className="folder-meta-doc"><Calendar size={12} /> Événement: {formatDate(usager.date_evenement)}</p>
+                            )}
+                            {apiType === 'occ' && usager.lieu_evenement && (
+                              <p className="folder-meta-doc"><MapPin size={12} /> Lieu: {usager.lieu_evenement}</p>
+                            )}
+                            {apiType === 'occ' && artistesStr && (
+                              <p className="folder-meta-doc"><User size={12} /> Artistes: {artistesStr}</p>
+                            )}
+                            {apiType === 'hotel' && usager.etoiles && (
+                              <p className="folder-meta-doc"><Star size={12} /> {'⭐'.repeat(parseInt(usager.etoiles) || 0)}</p>
+                            )}
+                            {apiType === 'grand-surface' && usager.nombre_magasins > 0 && (
+                              <p className="folder-meta-doc"><Store size={12} /> {usager.nombre_magasins} magasin(s)</p>
+                            )}
+                            {apiType === 'bus' && usager.nombre_vehicules > 0 && (
+                              <p className="folder-meta-doc"><Bus size={12} /> {usager.nombre_vehicules} véhicule(s)</p>
+                            )}
+                            {apiType === 'nightclub' && usager.jauge_max > 0 && (
+                              <p className="folder-meta-doc"><Users size={12} /> Jauge: {usager.jauge_max} pers.</p>
+                            )}
+                            {apiType === 'media' && usager.frequence && (
+                              <p className="folder-meta-doc"><Tv2 size={12} /> {usager.frequence}</p>
+                            )}
                           </div>
                           <div className="folder-documents-doc">
-                            <div 
-                              className="doc-item-doc"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenDocument(usager, 'Contrat');
-                              }}
-                            >
-                              <PdfIcon size={20} />
-                              <span>Contrat.pdf</span>
-                            </div>
-                            <div 
-                              className="doc-item-doc"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenDocument(usager, 'Facture');
-                              }}
-                            >
-                              <PdfIcon size={20} />
-                              <span>Facture.pdf</span>
-                            </div>
-                            <div 
-                              className="doc-item-doc"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenDocument(usager, 'QR Code');
-                              }}
-                            >
-                              <span style={{ fontSize: '18px' }}>📱</span>
-                              <span>QR Code</span>
-                            </div>
+                            {documents.map((docType) => {
+                              const isProcessing = processingDoc?.usagerId === usager.id && processingDoc?.docType === docType;
+                              const icons = { 
+                                'Contrat': FileSignature, 
+                                'Facture': Receipt, 
+                                'QR Code': QrCode 
+                              };
+                              const DocIcon = icons[docType];
+                              return (
+                                <div 
+                                  key={docType} 
+                                  className={`doc-item-doc ${isProcessing ? 'processing' : ''}`}
+                                  onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    if (!isProcessing) handleOpenDocument(usager, docType); 
+                                  }}
+                                  style={{ cursor: isProcessing ? 'wait' : 'pointer', opacity: isProcessing ? 0.6 : 1 }}
+                                >
+                                  {isProcessing ? <Loader2 size={18} className="spinner-icon" /> : <DocIcon size={18} />}
+                                  <span>{docType}</span>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       </div>
@@ -885,166 +1233,71 @@ const GestionDossier = () => {
           )}
         </div>
 
-        {/* MODALE DOSSIER USAGER */}
-        {showPrintModal && activeUsager && (
-          <div className="modal-overlay" onClick={() => setShowPrintModal(false)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        {/* ===== MODALES ===== */}
+        {showStatsModal && statsData && (
+          <div className="modal-overlay" onClick={() => setShowStatsModal(false)}>
+            <div className="modal-content stats-modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h3>📂 {activeUsager.denomination || activeUsager.nom_evenement || 'Dossier'}</h3>
-                <button className="modal-close" onClick={() => setShowPrintModal(false)}>✕</button>
+                <h3><TrendingUp size={20} /> Statistiques Globales</h3>
+                <button className="modal-close" onClick={() => setShowStatsModal(false)}>✕</button>
               </div>
-              
-              {/* AFFICHAGE DES INFORMATIONS DE L'USAGER */}
-              <div className="usager-info-section">
-                <div className="usager-info-row">
-                  <span className="usager-info-label">📋 Nom:</span>
-                  <span className="usager-info-value">{activeUsager.denomination || activeUsager.demandeur || activeUsager.nom_evenement || 'Non spécifié'}</span>
+              <div className="stats-content">
+                <div className="stats-grid">
+                  <div className="stats-card">
+                    <div className="stats-icon"><FolderOpen size={24} color="#6366f1" /></div>
+                    <div className="stats-number">{statsData.totalDossiers.toLocaleString('fr-FR')}</div>
+                    <div className="stats-label">Total Dossiers</div>
+                  </div>
+                  <div className="stats-card">
+                    <div className="stats-icon"><DollarSign size={24} color="#2ecc71" /></div>
+                    <div className="stats-number">{formatMontant(statsData.totalMontant)} Ar</div>
+                    <div className="stats-label">Montant Total</div>
+                  </div>
+                  <div className="stats-card">
+                    <div className="stats-icon"><FileText size={24} color="#3498db" /></div>
+                    <div className="stats-number">{statsData.totalPaiements.toLocaleString('fr-FR')}</div>
+                    <div className="stats-label">Total Factures</div>
+                  </div>
                 </div>
-                <div className="usager-info-row">
-                  <span className="usager-info-label">📞 Téléphone:</span>
-                  <span className="usager-info-value">{activeUsager.telephone || 'Non spécifié'}</span>
-                </div>
-                <div className="usager-info-row">
-                  <span className="usager-info-label">📧 Email:</span>
-                  <span className="usager-info-value">{activeUsager.email || 'Non spécifié'}</span>
-                </div>
-                <div className="usager-info-row">
-                  <span className="usager-info-label">📍 Adresse:</span>
-                  <span className="usager-info-value">{activeUsager.adresse || activeUsager.adresse_siege || activeUsager.ville || 'Non spécifié'}</span>
-                </div>
-                <div className="usager-info-row">
-                  <span className="usager-info-label">📁 N° Dossier:</span>
-                  <span className="usager-info-value">{activeUsager.numero_dossier_utilisateur || 'Non spécifié'}</span>
-                </div>
-                {activeUsager.organisateurs && (
-                  <div className="usager-info-row">
-                    <span className="usager-info-label">👥 Organisateurs:</span>
-                    <span className="usager-info-value">{activeUsager.organisateurs}</span>
-                  </div>
-                )}
-                {activeUsager.artistes && activeUsager.artistes !== 'Non spécifié' && (
-                  <div className="usager-info-row">
-                    <span className="usager-info-label">🎤 Artistes:</span>
-                    <span className="usager-info-value">{activeUsager.artistes}</span>
-                  </div>
-                )}
-                {activeUsager.lieu_evenement && (
-                  <div className="usager-info-row">
-                    <span className="usager-info-label">📍 Lieu événement:</span>
-                    <span className="usager-info-value">{activeUsager.lieu_evenement}</span>
-                  </div>
-                )}
-                {activeUsager.date_evenement && (
-                  <div className="usager-info-row">
-                    <span className="usager-info-label">📅 Date événement:</span>
-                    <span className="usager-info-value">{formatDateForQR(activeUsager.date_evenement)}</span>
-                  </div>
-                )}
-                {activeUsager.etoiles && (
-                  <div className="usager-info-row">
-                    <span className="usager-info-label">⭐ Étoiles:</span>
-                    <span className="usager-info-value">{activeUsager.etoiles}</span>
-                  </div>
-                )}
-                {activeUsager.nombre_magasins && (
-                  <div className="usager-info-row">
-                    <span className="usager-info-label">🏪 Nb magasins:</span>
-                    <span className="usager-info-value">{activeUsager.nombre_magasins}</span>
-                  </div>
-                )}
-                {activeUsager.nombre_vehicules && (
-                  <div className="usager-info-row">
-                    <span className="usager-info-label">🚌 Nb véhicules:</span>
-                    <span className="usager-info-value">{activeUsager.nombre_vehicules}</span>
-                  </div>
-                )}
-                {activeUsager.jauge_max && (
-                  <div className="usager-info-row">
-                    <span className="usager-info-label">👥 Jauge max:</span>
-                    <span className="usager-info-value">{activeUsager.jauge_max}</span>
-                  </div>
-                )}
-                {activeUsager.canal && (
-                  <div className="usager-info-row">
-                    <span className="usager-info-label">📻 Canal:</span>
-                    <span className="usager-info-value">{activeUsager.canal}</span>
-                  </div>
-                )}
-              </div>
-              
-              <p className="modal-subtitle">
-                Documents disponibles pour <strong>{activeUsager.denomination || activeUsager.demandeur || 'cet usager'}</strong>
-              </p>
-              
-              <div className="modal-documents-list">
-                <div 
-                  className="modal-doc-item"
-                  onClick={() => handleOpenDocument(activeUsager, 'Contrat')}
-                >
-                  <PdfIcon size={28} />
-                  <div className="doc-info">
-                    <span className="doc-name">📄 Contrat de représentation</span>
-                    <span className="doc-size">PDF • Cliquer pour générer</span>
-                  </div>
-                  <button className="doc-open-btn">📄 Ouvrir</button>
-                </div>
-
-                <div 
-                  className="modal-doc-item"
-                  onClick={() => handleOpenDocument(activeUsager, 'Facture')}
-                >
-                  <PdfIcon size={28} />
-                  <div className="doc-info">
-                    <span className="doc-name">🧾 Facture officielle</span>
-                    <span className="doc-size">PDF • Cliquer pour générer</span>
-                  </div>
-                  <button className="doc-open-btn">📄 Ouvrir</button>
-                </div>
-
-                <div 
-                  className="modal-doc-item"
-                  onClick={() => handleOpenDocument(activeUsager, 'QR Code')}
-                >
-                  <span style={{ fontSize: '28px' }}>📱</span>
-                  <div className="doc-info">
-                    <span className="doc-name">🔐 QR Code sécurisé</span>
-                    <span className="doc-size">PNG • Cliquer pour générer</span>
-                  </div>
-                  <button className="doc-open-btn">📱 Générer</button>
+                <div className="stats-categories">
+                  <h4>Par Catégorie</h4>
+                  {Object.entries(statsData.parCategorie || {}).map(([key, value]) => {
+                    const labels = { 
+                      hotel: '🏨 Hôtel', 
+                      'grand-surface': '🏬 Grande Surface', 
+                      bus: '🚌 Transport', 
+                      nightclub: '🎭 Night Club', 
+                      media: '📺 Média', 
+                      occ: '🎪 Occasionnel' 
+                    };
+                    return (
+                      <div key={key} className="stats-category-item">
+                        <span className="stats-category-name">{labels[key] || key}</span>
+                        <span className="stats-category-total">{value.total || 0} dossiers</span>
+                        <span className="stats-category-montant">{formatMontant(value.montant)} Ar</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-
               <div className="modal-actions">
-                <button 
-                  onClick={() => setShowPrintModal(false)} 
-                  className="btn-cancel"
-                >
-                  Fermer
-                </button>
-                <button 
-                  onClick={() => {
-                    handleOpenDocument(activeUsager, 'Contrat');
-                    setTimeout(() => handleOpenDocument(activeUsager, 'Facture'), 500);
-                    setTimeout(() => handleOpenDocument(activeUsager, 'QR Code'), 1000);
-                  }} 
-                  className="btn-print"
-                >
-                  🖨️ Tout générer
+                <button className="btn-cancel" onClick={() => setShowStatsModal(false)}>Fermer</button>
+                <button className="btn-print" onClick={handleGenerateBilanGlobal}>
+                  <FileText size={18} /> Exporter PDF
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* MODALE QR CODE AVEC LOGO AU CENTRE */}
         {showQrModal && qrCodeData && (
           <div className="modal-overlay qr-modal-overlay" onClick={() => setShowQrModal(false)}>
             <div className="modal-content qr-modal-content" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header qr-modal-header">
-                <h3>📱 QR Code</h3>
-                <button className="modal-close" onClick={() => setShowQrModal(false)}>✕</button>
+                <h3><QrCode size={20} /> QR Code OMDA</h3>
+                <button className="modal-close" onClick={() => setShowQrModal(false)}>×</button>
               </div>
-              
+
               <div className="qr-body">
                 <div className="qr-preview-container" ref={qrRef}>
                   <div className="qr-code-wrapper-only">
@@ -1052,45 +1305,48 @@ const GestionDossier = () => {
                       <div className="qr-code-container">
                         <QRCodeCanvas
                           value={qrCodeData.qrText}
-                          size={220}
+                          size={240}
                           bgColor="#ffffff"
                           fgColor="#dc2626"
-                          level="H"
+                          level="L"
                           includeMargin={true}
                         />
-                        {/* Logo OMDA au centre */}
                         <div className="qr-logo-styled">
                           <div className="qr-logo-circle">
                             <img src="/logo.ico" alt="OMDA" className="qr-logo-img" />
                           </div>
                         </div>
                       </div>
-                      <div className="qr-omda-footer">
-                        OFFICE MALAGASY DU DROIT D'AUTEUR
-                      </div>
+                      <div className="qr-omda-footer">OFFICE MALAGASY DU<br />DROIT D'AUTEUR</div>
                     </div>
                   </div>
                 </div>
 
+                <div className="qr-data-preview">
+                  <p className="qr-data-title">📋 Contenu :</p>
+                  <div className="qr-data-content">
+                    {qrCodeData.qrText.split('\n').map((line, index) => {
+                      if (!line.trim()) return null;
+                      if (line.toLowerCase().includes('artistes')) {
+                        return <div key={index} className="qr-artist-line"><strong>{line}</strong></div>;
+                      }
+                      return <div key={index}>{line}</div>;
+                    })}
+                  </div>
+                </div>
+
                 <div className="qr-actions-only">
-                  <button 
-                    className="btn-cancel" 
-                    onClick={() => setShowQrModal(false)}
-                  >
-                    Fermer
-                  </button>
-                  <button 
-                    className="btn-print-qr-only"
-                    onClick={handlePrintQR}
-                  >
-                    🖨️ Imprimer
-                  </button>
-                  <button 
+                  <button className="btn-cancel" onClick={() => setShowQrModal(false)}>Fermer</button>
+                  <button
                     className="btn-download-qr-only"
                     onClick={handleDownloadQR}
                     disabled={isDownloading}
                   >
-                    {isDownloading ? '⏳ Téléchargement...' : '📥 Télécharger'}
+                    {isDownloading ? (
+                      <><Loader2 size={18} className="spinner" /> Téléchargement...</>
+                    ) : (
+                      <><Download size={18} /> Télécharger</>
+                    )}
                   </button>
                 </div>
               </div>
@@ -1098,39 +1354,55 @@ const GestionDossier = () => {
           </div>
         )}
 
-        {/* MODALE DOSSIER UTILITAIRE */}
         {showUtilityModal && selectedUtility && (
           <div className="modal-overlay utility-modal-overlay" onClick={() => setShowUtilityModal(false)}>
             <div className="modal-content utility-modal-content" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header utility-modal-header">
-                <h3>{selectedUtility.name}</h3>
-                <button className="modal-close" onClick={() => setShowUtilityModal(false)}>✕</button>
+              <div className="modal-header utility-modal-header" style={{ borderBottom: `3px solid ${selectedUtility.color}` }}>
+                <h3><selectedUtility.icon size={20} color={selectedUtility.color} /> {selectedUtility.name}</h3>
+                <button className="modal-close" onClick={() => setShowUtilityModal(false)}>×</button>
               </div>
-              
+
               <div className="utility-body" id="utility-print-content">
                 <div className="utility-header">
-                  <div className="utility-icon-large">{selectedUtility.icon}</div>
-                  <h2>{selectedUtility.details.title}</h2>
-                  <p className="utility-description">{selectedUtility.details.content}</p>
-                </div>
-                
-                <div className="utility-sections">
-                  {selectedUtility.details.sections.map((section, index) => (
-                    <div key={index} className="utility-section-item">
-                      {section}
-                    </div>
-                  ))}
+                  <div className="utility-icon-large" style={{ background: `${selectedUtility.color}15` }}>
+                    <selectedUtility.icon size={40} color={selectedUtility.color} />
+                  </div>
+                  <div>
+                    <h2>{selectedUtility.details.title}</h2>
+                    {selectedUtility.details.content && (
+                      <p className="utility-description">{selectedUtility.details.content}</p>
+                    )}
+                  </div>
                 </div>
 
-                <div className="utility-files-list">
-                  <h4>📄 Documents disponibles</h4>
-                  {selectedUtility.details.files.map((file, index) => (
-                    <div key={index} className="utility-file-item">
-                      <PdfIcon size={20} />
-                      <span>{file}</span>
-                    </div>
-                  ))}
-                </div>
+                {selectedUtility.details.sections.length > 0 && (
+                  <div className="utility-info-table">
+                    {selectedUtility.details.sections.map((s, i) => (
+                      <div key={i} className="utility-info-row">
+                        <span className="utility-info-label">{s.label}</span>
+                        <span className="utility-info-value">{s.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {selectedUtility.details.files.length > 0 && (
+                  <div className="utility-files-list">
+                    <h4><FileText size={16} /> Documents disponibles</h4>
+                    {selectedUtility.details.files.map((file, index) => (
+                      <div 
+                        key={index} 
+                        className="utility-file-item" 
+                        onClick={() => file.action === 'bilan' && handleGenerateUtilityPDF(selectedUtility.pdfAction)}
+                      >
+                        <FileSignature size={16} color="#e74c3c" />
+                        <span className="file-name">{file.name}</span>
+                        <span className="file-meta">{file.size}</span>
+                        <Download size={14} className="file-download-icon" />
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 <div className="utility-footer">
                   <p>© OMDA - {new Date().getFullYear()} - Tous droits réservés</p>
@@ -1138,210 +1410,138 @@ const GestionDossier = () => {
               </div>
 
               <div className="modal-actions utility-actions">
-                <button 
-                  onClick={() => setShowUtilityModal(false)} 
-                  className="btn-cancel"
-                >
-                  Fermer
-                </button>
-                <button 
-                  onClick={handlePrintUtility}
-                  className="btn-print"
-                >
-                  🖨️ Imprimer
-                </button>
+                <button onClick={() => setShowUtilityModal(false)} className="btn-cancel">Fermer</button>
+                <button onClick={handlePrintUtility} className="btn-print"><Printer size={16} /> Imprimer</button>
               </div>
             </div>
           </div>
         )}
 
-        {/* MODALE DÉTAILS USAGER */}
         {showUsagerDetails && selectedUsagerForDetails && (
           <div className="modal-overlay" onClick={() => setShowUsagerDetails(false)}>
             <div className="modal-content details-modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h3>📋 Détails de l'usager</h3>
+                <h3><User size={20} /> Détails du dossier</h3>
                 <button className="modal-close" onClick={() => setShowUsagerDetails(false)}>✕</button>
               </div>
-              
               <div className="details-content">
                 <div className="details-row">
-                  <span className="details-label">Nom / Dénomination</span>
-                  <span className="details-value">{selectedUsagerForDetails.denomination || selectedUsagerForDetails.demandeur || selectedUsagerForDetails.nom_evenement || 'Non spécifié'}</span>
+                  <span className="details-label"><User size={16} /> Nom / Dénomination</span>
+                  <span className="details-value">{selectedUsagerForDetails.denomination || selectedUsagerForDetails.demandeur || selectedUsagerForDetails.organisateurs || selectedUsagerForDetails.nom_evenement || 'Non spécifié'}</span>
                 </div>
                 <div className="details-row">
-                  <span className="details-label">Téléphone</span>
+                  <span className="details-label"><Phone size={16} /> Téléphone</span>
                   <span className="details-value">{selectedUsagerForDetails.telephone || 'Non spécifié'}</span>
                 </div>
                 <div className="details-row">
-                  <span className="details-label">Email</span>
+                  <span className="details-label"><Mail size={16} /> Email</span>
                   <span className="details-value">{selectedUsagerForDetails.email || 'Non spécifié'}</span>
                 </div>
                 <div className="details-row">
-                  <span className="details-label">N° Dossier</span>
+                  <span className="details-label"><MapPin size={16} /> Adresse</span>
+                  <span className="details-value">{selectedUsagerForDetails.adresse || selectedUsagerForDetails.siege || selectedUsagerForDetails.adresse_siege || 'Non spécifié'}</span>
+                </div>
+                <div className="details-row">
+                  <span className="details-label"><MapPin size={16} /> Région</span>
+                  <span className="details-value">{selectedUsagerForDetails.region_usager || selectedUsagerForDetails.region || 'Non spécifié'}</span>
+                </div>
+                <div className="details-row">
+                  <span className="details-label"><FileText size={16} /> N° Dossier</span>
                   <span className="details-value">{selectedUsagerForDetails.numero_dossier_utilisateur || 'Non spécifié'}</span>
                 </div>
                 <div className="details-row">
-                  <span className="details-label">Adresse</span>
-                  <span className="details-value">{selectedUsagerForDetails.adresse || selectedUsagerForDetails.adresse_siege || selectedUsagerForDetails.ville || 'Non spécifié'}</span>
+                  <span className="details-label"><Hash size={16} /> Quittance</span>
+                  <span className="details-value">{selectedUsagerForDetails.quittance || 'Non spécifié'}</span>
                 </div>
-                {selectedUsagerForDetails.organisateurs && (
+                <div className="details-row">
+                  <span className="details-label"><User size={16} /> Personne reçue</span>
+                  <span className="details-value">{selectedUsagerForDetails.personne_recu || 'Non spécifié'}</span>
+                </div>
+                <div className="details-row">
+                  <span className="details-label"><DollarSign size={16} /> Montant Total</span>
+                  <span className="details-value">{formatMontant(selectedUsagerForDetails.soit_total || selectedUsagerForDetails.montant_mensuel || 0)} Ar</span>
+                </div>
+                {selectedUsagerForDetails.type_usager === 'occ' && (
+                  <>
+                    <div className="details-row">
+                      <span className="details-label"><Ticket size={16} /> Genre manifestation</span>
+                      <span className="details-value">{selectedUsagerForDetails.genre_manifestation || 'Non spécifié'}</span>
+                    </div>
+                    <div className="details-row">
+                      <span className="details-label"><Calendar size={16} /> Date événement</span>
+                      <span className="details-value">{formatDate(selectedUsagerForDetails.date_evenement) || 'Non spécifié'}</span>
+                    </div>
+                    <div className="details-row">
+                      <span className="details-label"><MapPin size={16} /> Lieu événement</span>
+                      <span className="details-value">{selectedUsagerForDetails.lieu_evenement || 'Non spécifié'}</span>
+                    </div>
+                    <div className="details-row">
+                      <span className="details-label"><User size={16} /> Organisateurs</span>
+                      <span className="details-value">{selectedUsagerForDetails.organisateurs || 'Non spécifié'}</span>
+                    </div>
+                    {selectedUsagerForDetails.artistes_detail && selectedUsagerForDetails.artistes_detail.length > 0 && (
+                      <div className="details-row">
+                        <span className="details-label"><User size={16} /> Artistes</span>
+                        <span className="details-value" style={{ fontSize: '13px' }}>
+                          {selectedUsagerForDetails.artistes_detail.map((a, i) => (
+                            <span key={i}>
+                              {a.prenom ? `${a.prenom} ${a.nom}` : a.nom}
+                              {i < selectedUsagerForDetails.artistes_detail.length - 1 ? ', ' : ''}
+                            </span>
+                          ))}
+                        </span>
+                      </div>
+                    )}
+                  </>
+                )}
+                {selectedUsagerForDetails.type_usager === 'hotel' && selectedUsagerForDetails.etoiles && (
                   <div className="details-row">
-                    <span className="details-label">Organisateurs</span>
-                    <span className="details-value">{selectedUsagerForDetails.organisateurs}</span>
+                    <span className="details-label"><Star size={16} /> Étoiles</span>
+                    <span className="details-value">{'⭐'.repeat(parseInt(selectedUsagerForDetails.etoiles) || 0)}</span>
                   </div>
                 )}
-                {selectedUsagerForDetails.artistes && selectedUsagerForDetails.artistes !== 'Non spécifié' && (
+                {selectedUsagerForDetails.type_usager === 'grand-surface' && selectedUsagerForDetails.nombre_magasins > 0 && (
                   <div className="details-row">
-                    <span className="details-label">Artistes</span>
-                    <span className="details-value">{selectedUsagerForDetails.artistes}</span>
-                  </div>
-                )}
-                {selectedUsagerForDetails.lieu_evenement && (
-                  <div className="details-row">
-                    <span className="details-label">Lieu de l'événement</span>
-                    <span className="details-value">{selectedUsagerForDetails.lieu_evenement}</span>
-                  </div>
-                )}
-                {selectedUsagerForDetails.date_evenement && (
-                  <div className="details-row">
-                    <span className="details-label">Date de l'événement</span>
-                    <span className="details-value">{formatDateForQR(selectedUsagerForDetails.date_evenement)}</span>
-                  </div>
-                )}
-                {selectedUsagerForDetails.etoiles && (
-                  <div className="details-row">
-                    <span className="details-label">Étoiles</span>
-                    <span className="details-value">{selectedUsagerForDetails.etoiles}⭐</span>
-                  </div>
-                )}
-                {selectedUsagerForDetails.nombre_magasins && (
-                  <div className="details-row">
-                    <span className="details-label">Nombre de magasins</span>
+                    <span className="details-label"><Store size={16} /> Nombre magasins</span>
                     <span className="details-value">{selectedUsagerForDetails.nombre_magasins}</span>
                   </div>
                 )}
-                {selectedUsagerForDetails.nombre_vehicules && (
+                {selectedUsagerForDetails.type_usager === 'bus' && selectedUsagerForDetails.nombre_vehicules > 0 && (
                   <div className="details-row">
-                    <span className="details-label">Nombre de véhicules</span>
+                    <span className="details-label"><Bus size={16} /> Nombre véhicules</span>
                     <span className="details-value">{selectedUsagerForDetails.nombre_vehicules}</span>
                   </div>
                 )}
-                {selectedUsagerForDetails.jauge_max && (
+                {selectedUsagerForDetails.type_usager === 'nightclub' && selectedUsagerForDetails.jauge_max > 0 && (
                   <div className="details-row">
-                    <span className="details-label">Jauge max</span>
-                    <span className="details-value">{selectedUsagerForDetails.jauge_max}</span>
+                    <span className="details-label"><Users size={16} /> Jauge max</span>
+                    <span className="details-value">{selectedUsagerForDetails.jauge_max} pers.</span>
                   </div>
                 )}
-                {selectedUsagerForDetails.canal && (
-                  <div className="details-row">
-                    <span className="details-label">Canal</span>
-                    <span className="details-value">{selectedUsagerForDetails.canal}</span>
-                  </div>
+                {selectedUsagerForDetails.type_usager === 'media' && (
+                  <>
+                    {selectedUsagerForDetails.frequence && (
+                      <div className="details-row">
+                        <span className="details-label"><Tv2 size={16} /> Fréquence</span>
+                        <span className="details-value">{selectedUsagerForDetails.frequence}</span>
+                      </div>
+                    )}
+                    {selectedUsagerForDetails.canal && (
+                      <div className="details-row">
+                        <span className="details-label"><Tv2 size={16} /> Canal</span>
+                        <span className="details-value">{selectedUsagerForDetails.canal}</span>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
-
               <div className="modal-actions">
-                <button 
-                  onClick={() => setShowUsagerDetails(false)} 
-                  className="btn-cancel"
-                >
-                  Fermer
-                </button>
+                <button onClick={() => setShowUsagerDetails(false)} className="btn-cancel">Fermer</button>
               </div>
             </div>
           </div>
         )}
       </main>
-
-      {/* Styles pour l'impression */}
-      <style jsx>{`
-        @media print {
-          .modal-overlay.qr-modal-overlay {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            bottom: 0 !important;
-            background: white !important;
-            z-index: 9999 !important;
-            backdrop-filter: none !important;
-          }
-          .modal-content.qr-modal-content {
-            max-width: 100% !important;
-            margin: 0 !important;
-            border: none !important;
-            box-shadow: none !important;
-            border-radius: 0 !important;
-            padding: 20px !important;
-          }
-          .modal-header.qr-modal-header, 
-          .qr-actions-only,
-          .modal-close {
-            display: none !important;
-          }
-          .qr-preview-container {
-            padding: 0 !important;
-            display: flex !important;
-            justify-content: center !important;
-            align-items: center !important;
-          }
-          .qr-body {
-            padding: 0 !important;
-            display: flex !important;
-            flex-direction: column !important;
-            align-items: center !important;
-            justify-content: center !important;
-            min-height: 100vh !important;
-          }
-          .qr-code-wrapper-only {
-            margin: 0 auto !important;
-          }
-          .qr-red-border {
-            border-color: #dc2626 !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          .qr-logo-circle {
-            border-color: #dc2626 !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          .qr-omda-footer {
-            color: #dc2626 !important;
-            border-color: #dc2626 !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-
-          /* Impression des utilitaires */
-          .utility-modal-overlay {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            bottom: 0 !important;
-            background: white !important;
-            z-index: 9999 !important;
-          }
-          .utility-modal-content {
-            max-width: 100% !important;
-            margin: 0 !important;
-            border: none !important;
-            box-shadow: none !important;
-            border-radius: 0 !important;
-            padding: 20px !important;
-          }
-          .utility-modal-header, 
-          .utility-actions,
-          .modal-close {
-            display: none !important;
-          }
-          #utility-print-content {
-            padding: 20px !important;
-          }
-        }
-      `}</style>
     </>
   );
 };

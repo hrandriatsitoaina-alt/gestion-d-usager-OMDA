@@ -21,6 +21,7 @@ const GestionCrud = ({ onBack }) => {
   const [stats, setStats] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
   const [regions, setRegions] = useState([]);
+  const [deleteError, setDeleteError] = useState(null); // NOUVEAU : pour afficher l'erreur réelle dans la modale
 
   const usagerTypes = ['OCC', 'Grand Surface', 'Bus', 'Night club', 'Télé/Radio', 'Hôtel'];
 
@@ -45,23 +46,42 @@ const GestionCrud = ({ onBack }) => {
     fetchRegions();
   }, []);
 
+  // ============================================================
+  // CORRIGÉ : on lit d'abord le rôle depuis le localStorage (fiable),
+  // puis on tente de le rafraîchir via l'API. Si l'API échoue, on NE
+  // rétrograde PLUS silencieusement l'utilisateur en simple 'user' —
+  // c'est ce qui faisait disparaître le bouton Supprimer pour de vrais
+  // Super Admins quand /api/auth/current-user était indisponible.
+  // ============================================================
   const fetchCurrentUser = async (currentToken) => {
+    // 1) Valeur de secours fiable : ce que l'utilisateur a stocké au login
+    try {
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const userData = JSON.parse(userStr);
+        if (userData && userData.id) {
+          setCurrentUserId(userData.id);
+          setCurrentUserRole(userData.role || 'user');
+        }
+      }
+    } catch (e) {
+      console.error('Erreur lecture user localStorage:', e);
+    }
+
+    // 2) Tentative de rafraîchissement via l'API (source la plus à jour)
     try {
       const response = await fetch('http://localhost:3001/api/auth/current-user', {
         headers: { 'Authorization': `Bearer ${currentToken}`, 'adminToken': currentToken }
       });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       if (data.success && data.user) {
         setCurrentUserId(data.user.id);
         setCurrentUserRole(data.user.role || 'user');
-      } else {
-        setCurrentUserId(1);
-        setCurrentUserRole('user');
       }
     } catch (error) {
-      console.error('Erreur fetchCurrentUser:', error);
-      setCurrentUserId(1);
-      setCurrentUserRole('user');
+      // On garde le rôle lu depuis le localStorage au lieu d'écraser avec 'user'
+      console.error('Erreur fetchCurrentUser (rôle localStorage conservé si disponible):', error);
     }
   };
 
@@ -195,37 +215,81 @@ const GestionCrud = ({ onBack }) => {
     }
   };
 
+  // ============================================================
+  // CORRIGÉ : comparaison de rôle insensible à la casse/espaces
+  // ============================================================
   const initiateDelete = (usager) => {
-    if (currentUserRole !== 'super_admin') {
+    const role = (currentUserRole || '').toString().trim().toLowerCase();
+    if (role !== 'super_admin') {
       alert('⚠️ Seul le Super Admin peut supprimer des usagers.');
       return;
     }
+    setDeleteError(null);
     setUsagerToDelete(usager);
     setShowDeleteModal(true);
   };
 
-  const confirmDelete = async () => {
-    if (!usagerToDelete) return;
-    try {
-      const response = await fetch(`http://localhost:3001/api/usagers/${usagerToDelete.id}`, {
-        method: 'DELETE',
-        headers: { 'adminToken': token, 'Content-Type': 'application/json' }
-      });
-      const data = await response.json();
-      if (data.success) {
-        setSuccessMsg(`✅ Usager "${usagerToDelete.denomination}" et ses paiements supprimés`);
-        setShowDeleteModal(false);
-        setUsagerToDelete(null);
-        fetchUsagers(token);
-        setTimeout(() => setSuccessMsg(null), 3000);
-      } else {
-        alert('❌ Erreur: ' + (data.message || 'Erreur inconnue'));
-      }
-    } catch (error) {
-      console.error('Erreur confirmDelete:', error);
-      alert('❌ Erreur lors de la suppression');
-    }
+// Seule la partie confirmDelete est modifiée
+// Le reste du fichier reste identique
+
+// ============================================================
+// CORRIGÉ : suppression avec le type d'usager dans l'URL
+// ============================================================
+const confirmDelete = async () => {
+  if (!usagerToDelete) return;
+  setDeleteError(null);
+  
+  // Convertir le type en format URL pour la route prioritaire
+  const typeMap = {
+    'Hôtel': 'hotel',
+    'Grand Surface': 'grand-surface',
+    'Télé/Radio': 'media',
+    'OCC': 'occ',
+    'Bus': 'bus',
+    'Night club': 'nightclub'
   };
+  
+  const typeParam = typeMap[usagerToDelete.type_usager] || usagerToDelete.type_usager;
+  
+  try {
+    // Utiliser la route par type (prioritaire)
+    const response = await fetch(
+      `http://localhost:3001/api/usagers/${typeParam}/${usagerToDelete.id}`,
+      {
+        method: 'DELETE',
+        headers: { 
+          'adminToken': token, 
+          'Content-Type': 'application/json' 
+        }
+      }
+    );
+
+    let data = null;
+    try {
+      data = await response.json();
+    } catch (parseErr) {
+      const text = await response.text();
+      throw new Error(`Réponse serveur: ${text || `HTTP ${response.status}`}`);
+    }
+
+    if (!response.ok) {
+      throw new Error(data?.message || `Erreur HTTP ${response.status}`);
+    }
+
+    if (data.success) {
+      setSuccessMsg(`✅ Usager supprimé avec succès`);
+      setShowDeleteModal(false);
+      setUsagerToDelete(null);
+      await fetchUsagers(token);
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } else {
+      setDeleteError(data.message || 'Erreur inconnue');
+    }
+  } catch (error) {
+    console.error('Erreur confirmDelete:', error);
+    setDeleteError(error.message || 'Erreur lors de la suppression');
+  }
+};
 
   if (loading) {
     return (
@@ -245,7 +309,7 @@ const GestionCrud = ({ onBack }) => {
     );
   }
 
-  const isSuperAdmin = currentUserRole === 'super_admin';
+  const isSuperAdmin = (currentUserRole || '').toString().trim().toLowerCase() === 'super_admin';
 
   return (
     <div className="gestion-crud-container">
@@ -453,6 +517,12 @@ const GestionCrud = ({ onBack }) => {
               <div className="delete-confirmation-info">
                 <p className="delete-warning">⚠️ Cette action est irréversible !</p>
               </div>
+              {/* NOUVEAU : affichage du message d'erreur réel si la suppression échoue */}
+              {deleteError && (
+                <p className="delete-warning" style={{ color: '#c0392b', fontWeight: 'bold' }}>
+                  ❌ {deleteError}
+                </p>
+              )}
               <div className="delete-actions">
                 <button className="btn-confirm-delete" onClick={confirmDelete}>🗑️ Confirmer</button>
                 <button className="btn-cancel" onClick={() => setShowDeleteModal(false)}>❌ Annuler</button>

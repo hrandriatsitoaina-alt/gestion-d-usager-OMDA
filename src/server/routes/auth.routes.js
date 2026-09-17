@@ -4,6 +4,147 @@ const pool = require('../database');
 const config = require('../config');
 
 // ============================================================
+// GÉNÉRATION DE PRÉFIXE UNIQUE EN 3 LETTRES (JAMAIS DE CHIFFRES)
+// ============================================================
+
+/**
+ * Nettoie un nom : enlève espaces + caractères non alphabétiques + majuscules
+ */
+function cleanName(nom) {
+  return (nom || '').trim().toUpperCase().replace(/[^A-Z]/g, '');
+}
+
+/**
+ * Vérifie si un préfixe est déjà utilisé
+ */
+async function isPrefixAvailable(prefix, excludeUserId = null) {
+  let query = 'SELECT id FROM utilisateurs WHERE prefix = $1';
+  const params = [prefix];
+  if (excludeUserId) {
+    query += ' AND id != $2';
+    params.push(excludeUserId);
+  }
+  const result = await pool.query(query, params);
+  return result.rows.length === 0;
+}
+
+const VOYELLES = new Set(['A', 'E', 'I', 'O', 'U', 'Y']);
+
+/**
+ * Construit une liste de candidats de 3 lettres à partir du nom.
+ * Aucun chiffre — uniquement A-Z.
+ */
+function buildCandidates(cleaned) {
+  const candidates = [];
+  const seen = new Set();
+  const push = (s) => {
+    const c = (s || '').substring(0, 3).toUpperCase();
+    if (c.length === 3 && /^[A-Z]{3}$/.test(c) && !seen.has(c)) {
+      seen.add(c);
+      candidates.push(c);
+    }
+  };
+
+  const letters = cleaned.split('');
+  const L1 = letters[0] || 'X';
+
+  // Stratégie 1 : 3 premières lettres (RAKOTO → RAK)
+  push(cleaned.substring(0, 3));
+
+  // Stratégie 2 : 1ère + 2 consonnes suivantes (RAKOTROKA → RTK)
+  const consonnesApres = letters.slice(1).filter(c => !VOYELLES.has(c));
+  if (consonnesApres.length >= 2) {
+    push(L1 + consonnesApres[0] + consonnesApres[1]);
+  }
+
+  // Stratégie 3 : 1ère + 2ème + dernière
+  if (letters.length >= 3) {
+    push(L1 + letters[1] + letters[letters.length - 1]);
+  }
+
+  // Stratégie 4 : 1ère + dernière + avant-dernière
+  if (letters.length >= 3) {
+    push(L1 + letters[letters.length - 1] + letters[letters.length - 2]);
+  }
+
+  // Stratégie 5 : 1ère + 3ème + 5ème
+  if (letters.length >= 5) {
+    push(L1 + letters[2] + letters[4]);
+  }
+
+  // Stratégie 6 : 1ère + 2ème + 4ème
+  if (letters.length >= 4) {
+    push(L1 + letters[1] + letters[3]);
+  }
+
+  // Stratégie 7 : L1 + lettres[i] + lettres[j]
+  for (let i = 2; i < letters.length; i++) {
+    for (let j = i + 1; j < letters.length; j++) {
+      push(L1 + letters[i] + letters[j]);
+    }
+  }
+
+  // Stratégie 8 : toutes combinaisons de 3 parmi les 8 premières
+  const pool8 = letters.slice(0, 8);
+  for (let i = 0; i < pool8.length; i++) {
+    for (let j = i + 1; j < pool8.length; j++) {
+      for (let k = j + 1; k < pool8.length; k++) {
+        push(pool8[i] + pool8[j] + pool8[k]);
+      }
+    }
+  }
+
+  return candidates;
+}
+
+/**
+ * En dernier recours : force brute L1 + A + A, L1 + A + B, ..., L1 + Z + Z
+ */
+async function bruteForcePrefix(L1, excludeUserId = null) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  for (let i = 0; i < alphabet.length; i++) {
+    for (let j = 0; j < alphabet.length; j++) {
+      const candidate = L1 + alphabet[i] + alphabet[j];
+      if (await isPrefixAvailable(candidate, excludeUserId)) {
+        return candidate;
+      }
+    }
+  }
+  // Vraiment au bout : X + Y + Z
+  for (let i = 0; i < alphabet.length; i++) {
+    for (let j = 0; j < alphabet.length; j++) {
+      for (let k = 0; k < alphabet.length; k++) {
+        const candidate = alphabet[i] + alphabet[j] + alphabet[k];
+        if (await isPrefixAvailable(candidate, excludeUserId)) {
+          return candidate;
+        }
+      }
+    }
+  }
+  throw new Error('Impossible de générer un préfixe unique');
+}
+
+/**
+ * Génère un préfixe UNIQUE de 3 LETTRES (jamais de chiffres)
+ */
+async function generateUniquePrefix(nom, excludeUserId = null) {
+  const cleaned = cleanName(nom);
+  if (!cleaned) {
+    throw new Error('Nom invalide pour la génération du préfixe');
+  }
+
+  const candidates = buildCandidates(cleaned);
+  for (const candidate of candidates) {
+    if (await isPrefixAvailable(candidate, excludeUserId)) {
+      return candidate;
+    }
+  }
+
+  const L1 = cleaned[0] || 'X';
+  return await bruteForcePrefix(L1, excludeUserId);
+}
+
+// ============================================================
 // ROUTE PUBLIQUE D'INSCRIPTION (POST /auth/register)
 // ============================================================
 router.post('/auth/register', async (req, res) => {
@@ -22,11 +163,13 @@ router.post('/auth/register', async (req, res) => {
       return res.status(409).json({ success: false, message: 'Cet email est déjà utilisé.' });
     }
 
+    const prefix = await generateUniquePrefix(nom);
+
     const result = await pool.query(
-      `INSERT INTO utilisateurs (nom, email, mot_de_passe, role, statut)
-       VALUES ($1, $2, $3, 'user', 'inactif')
-       RETURNING id, nom, email, role, statut`,
-      [nom, email, mot_de_passe]
+      `INSERT INTO utilisateurs (nom, email, mot_de_passe, role, statut, prefix)
+       VALUES ($1, $2, $3, 'user', 'inactif', $4)
+       RETURNING id, nom, email, role, statut, prefix`,
+      [nom, email, mot_de_passe, prefix]
     );
 
     const newUser = result.rows[0];
@@ -60,7 +203,7 @@ router.post('/auth/login', async (req, res) => {
   console.log(`🔐 Tentative: ${username}`);
   try {
     const result = await pool.query(
-      `SELECT id, nom, email, role, statut
+      `SELECT id, nom, email, role, statut, prefix
        FROM utilisateurs 
        WHERE (email = $1 OR nom = $1) AND mot_de_passe = $2 AND statut = 'actif'`,
       [username, password]
@@ -68,26 +211,25 @@ router.post('/auth/login', async (req, res) => {
     if (result.rows.length > 0) {
       const user = result.rows[0];
       await pool.query('UPDATE utilisateurs SET derniere_connexion = NOW() WHERE id = $1', [user.id]);
-      
-      const prefix = user.nom.substring(0, 3).toUpperCase();
-      const responseData = { 
-        success: true, 
-        user: { 
-          id: user.id, 
-          nom: user.nom, 
-          email: user.email, 
+
+      const responseData = {
+        success: true,
+        user: {
+          id: user.id,
+          nom: user.nom,
+          email: user.email,
           role: user.role,
-          prefix: prefix
-        }, 
-        message: `Bienvenue ${user.nom} !` 
+          prefix: user.prefix
+        },
+        message: `Bienvenue ${user.nom} !`
       };
-      
+
       if (user.role === 'super_admin') {
         responseData.adminToken = config.ADMIN_SECRET_TOKEN;
       } else if (user.role === 'daf') {
         responseData.adminToken = config.DAF_SECRET_TOKEN;
       }
-      
+
       res.json(responseData);
     } else {
       res.status(401).json({ success: false, message: 'Identifiants incorrects' });
@@ -99,14 +241,14 @@ router.post('/auth/login', async (req, res) => {
 });
 
 // ============================================================
-// ROUTES POUR LE FRONTEND (Ces routes doivent RESTER)
+// ROUTES POUR LE FRONTEND
 // ============================================================
 
-// ✅ GET /auth/users - Liste des utilisateurs (pour le frontend)
+// ✅ GET /auth/users - Liste des utilisateurs
 router.get('/auth/users', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, nom, email, role, statut, created_at, derniere_connexion FROM utilisateurs ORDER BY id'
+      'SELECT id, nom, email, role, statut, prefix, created_at, derniere_connexion FROM utilisateurs ORDER BY id'
     );
     res.json({ success: true, users: result.rows });
   } catch (error) {
@@ -122,28 +264,28 @@ router.get('/auth/current-user', async (req, res) => {
     let userId = null;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.split(' ')[1];
-      try { userId = parseInt(token); } catch(e) {}
+      try { userId = parseInt(token); } catch (e) { }
     }
     let result;
     if (userId) {
       result = await pool.query(`
-        SELECT id, nom, email, role FROM utilisateurs 
+        SELECT id, nom, email, role, prefix FROM utilisateurs 
         WHERE id = $1 AND statut = 'actif'`, [userId]);
     } else {
       result = await pool.query(`
-        SELECT id, nom, email, role FROM utilisateurs 
+        SELECT id, nom, email, role, prefix FROM utilisateurs 
         WHERE statut = 'actif' ORDER BY id LIMIT 1`);
     }
     if (result.rows.length === 0) {
+      const defaultPrefix = await generateUniquePrefix('Utilisateur par défaut');
       const insertResult = await pool.query(`
-        INSERT INTO utilisateurs (nom, email, mot_de_passe, role, statut) 
-        VALUES ('Utilisateur par défaut', 'user@omda.mg', '1234', 'user', 'actif') 
-        RETURNING id, nom, email, role`);
+        INSERT INTO utilisateurs (nom, email, mot_de_passe, role, statut, prefix) 
+        VALUES ('Utilisateur par défaut', 'user@omda.mg', '1234', 'user', 'actif', $1) 
+        RETURNING id, nom, email, role, prefix`, [defaultPrefix]);
       result.rows = insertResult.rows;
     }
     const user = result.rows[0];
-    const prefix = user.nom.substring(0, 3).toUpperCase();
-    res.json({ success: true, user: { ...user, prefix } });
+    res.json({ success: true, user: { ...user, prefix: user.prefix } });
   } catch (error) {
     console.error('Erreur current-user:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -154,7 +296,7 @@ router.get('/auth/current-user', async (req, res) => {
 router.get('/users/stats', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT u.id, u.nom, SUBSTRING(u.nom, 1, 3) as prefix, u.email, u.role
+      SELECT u.id, u.nom, u.prefix, u.email, u.role
       FROM utilisateurs u WHERE u.statut = 'actif' ORDER BY u.id
     `);
     const usersWithCounts = [];

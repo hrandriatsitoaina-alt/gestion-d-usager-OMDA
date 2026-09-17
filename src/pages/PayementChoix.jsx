@@ -593,7 +593,7 @@ const PaiementChoix = () => {
               <BarChart3 className="header-icon" size={28} style={{ marginRight: '8px' }} />
               Tableau de Bord Financier
             </h1>
-            <p className="header-subtitle">Suivi des paiements et statistiques des usagers</p>
+            <p className="header-subtitle">Suivi des paiements des usagers</p>
           </div>
           <div className="header-actions">
             <button onClick={handlePrintPDF} className="btn-pdf">

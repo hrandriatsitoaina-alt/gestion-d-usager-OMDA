@@ -808,7 +808,90 @@
   font-size: 16px;
   margin: 0;
 }
-
+/* ============================================
+   ÉCRAN DE CHARGEMENT ADMIN PANEL
+   ============================================ */
+   .admin-panel-loading {
+    position: fixed;
+    inset: 0;
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+  }
+  
+  .loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+  
+  .loading-spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid #e3f2fd;
+    border-top: 4px solid #4a9fd8;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  
+  .loading-text {
+    color: #1a3a5c;
+    font-size: 1rem;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+  }
+  
+  .admin-panel-error {
+    position: fixed;
+    inset: 0;
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+  }
+  
+  .error-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    padding: 40px;
+    background: #fff5f5;
+    border-radius: 16px;
+    border: 1px solid #ffcdd2;
+    max-width: 400px;
+    text-align: center;
+  }
+  
+  .error-container p {
+    color: #c62828;
+    font-size: 1rem;
+    font-weight: 500;
+  }
+  
+  .error-container .close-btn {
+    padding: 10px 30px;
+    background: #c62828;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: 0.2s;
+  }
+  
+  .error-container .close-btn:hover {
+    background: #b71c1c;
+    transform: scale(1.05);
+  }
+  
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
 /* ========== RESPONSIVE ========== */
 @media (max-width: 1024px) {
   .stats-grid {

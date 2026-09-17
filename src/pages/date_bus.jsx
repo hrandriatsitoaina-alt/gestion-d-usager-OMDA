@@ -61,6 +61,32 @@ const DateBus = () => {
 
   const moisLabelsShort = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
 
+  // ============================================================
+  // ✅ FONCTION CLÉ : Calcul du montant payé
+  // Règle métier :
+  //   Total = Montant du PREMIER paiement
+  //         + Somme des paiements dont le montant est DIFFÉRENT
+  //           du montant du PREMIER paiement
+  //
+  // Exemple : [15000, 15000, ..., 15000 (9 fois), 3000, 3000, 3000]
+  //   = 15000 + (3000 + 3000 + 3000) = 24000 ✅
+  // ============================================================
+  const calculerMontantPaye = (paiementsTries) => {
+    if (!paiementsTries || paiementsTries.length === 0) return 0;
+
+    const premierMontant = parseFloat(paiementsTries[0].montant || 0);
+    let total = premierMontant;
+
+    for (let i = 1; i < paiementsTries.length; i++) {
+      const montantCourant = parseFloat(paiementsTries[i].montant || 0);
+      if (montantCourant !== premierMontant) {
+        total += montantCourant;
+      }
+    }
+
+    return total;
+  };
+
   // ---- Formatage du téléphone ----
   const formatPhoneNumber = (phone) => {
     if (!phone) return '-';
@@ -105,7 +131,6 @@ const DateBus = () => {
       if (usagersResponse.data.success && usagersResponse.data.usagers) {
         usagersData = usagersResponse.data.usagers;
       } else {
-        // Fallback sur tous les usagers
         try {
           const allUsagersResponse = await axios.get(`${API_URL}/usagers`);
           if (allUsagersResponse.data.success && allUsagersResponse.data.usagers) {
@@ -136,22 +161,29 @@ const DateBus = () => {
       }
 
       const usagersWithYearData = usagersData.map((usager) => {
-        const moisPayesPourAnnee = paiements.filter(
-          (p) =>
-            p.usager_id === usager.id &&
-            (p.usager_type === 'bus' || p.usager_type === usager.type_usager) &&
-            p.annee === anneeRecherche &&
-            p.statut === 'paye'
-        );
+        // ✅ Récupérer tous les paiements de l'année + trier par mois
+        const paiementsPourAnnee = paiements
+          .filter(
+            (p) =>
+              p.usager_id === usager.id &&
+              (p.usager_type === 'bus' || p.usager_type === usager.type_usager) &&
+              p.annee === anneeRecherche &&
+              p.statut === 'paye'
+          )
+          .sort((a, b) => (a.mois || 0) - (b.mois || 0));
 
-        const moisPayes = moisPayesPourAnnee.map((p) => p.mois);
+        const moisPayes = paiementsPourAnnee.map((p) => p.mois);
+
+        // ✅ Calcul avec la règle personnalisée (identique à grandSurface)
+        const montantTotalPaye = calculerMontantPaye(paiementsPourAnnee);
 
         return {
           ...usager,
           moisPayes: moisPayes,
+          moisPayesAnnee: paiementsPourAnnee,
           totalMoisPayesAnnee: moisPayes.length,
           anneeCourante: anneeRecherche,
-          montant_total_paye: moisPayesPourAnnee.reduce((sum, p) => sum + parseFloat(p.montant || 0), 0),
+          montant_total_paye: montantTotalPaye,
         };
       });
 
@@ -184,13 +216,9 @@ const DateBus = () => {
     setStatsGraph(stats);
   };
 
-  // Filtrer par années (début/fin)
   const filterByYears = useCallback(
     (data) => {
       let filtered = [...data];
-      // On garde tous les usagers, mais on peut éventuellement filtrer sur les mois payés si besoin
-      // Ici le filtre est appliqué sur les données déjà chargées pour l'année sélectionnée
-      // On ne modifie pas le tableau, on affiche tout
       return filtered;
     },
     [anneeRecherche, anneeDebut, anneeFin]
@@ -333,7 +361,6 @@ const DateBus = () => {
           {/* ===== FILTRES ===== */}
           <div className="filters-container">
             <div className="filters-row">
-              {/* Année de référence */}
               <div className="filter-item">
                 <label htmlFor="anneeRef">
                   <Calendar size={14} className="filter-icon" /> Année
@@ -356,7 +383,6 @@ const DateBus = () => {
                 </select>
               </div>
 
-              {/* Année début */}
               <div className="filter-item">
                 <label htmlFor="anneeDebut">
                   <Calendar size={14} className="filter-icon" /> Début
@@ -376,7 +402,6 @@ const DateBus = () => {
                 </select>
               </div>
 
-              {/* Année fin */}
               <div className="filter-item">
                 <label htmlFor="anneeFin">
                   <Calendar size={14} className="filter-icon" /> Fin
@@ -396,7 +421,6 @@ const DateBus = () => {
                 </select>
               </div>
 
-              {/* Boutons d'action */}
               <div className="filter-item filter-actions">
                 <label>&nbsp;</label>
                 <div className="filter-buttons">
@@ -468,16 +492,14 @@ const DateBus = () => {
                       <th>Demandeur</th>
                       <th>Téléphone</th>
                       <th>Adresse</th>
-                      {/* <th>Type Bus</th> */}
                       <th>Nb véhicules</th>
                       {[...Array(12)].map((_, i) => (
                         <th key={i} className="month-col">
                           {i + 1}
                         </th>
                       ))}
-                      <th>Total</th>
+                      <th>Total mois</th>
                       <th>Payé (Ar)</th>
-                      <th>Reste (Ar)</th>
                       <th>Statut</th>
                       <th>Action</th>
                     </tr>
@@ -487,9 +509,7 @@ const DateBus = () => {
                       const statusColor = getStatusColor(usager);
                       const statusText = getStatusText(usager);
                       const totalPayes = usager.totalMoisPayesAnnee || 0;
-                      const montantMensuel = usager.montant_mensuel || 0;
                       const totalPayeAr = usager.montant_total_paye || 0;
-                      const reste = (12 - totalPayes) * montantMensuel;
 
                       return (
                         <tr key={usager.id} style={{ borderLeft: `4px solid ${statusColor}` }}>
@@ -506,7 +526,6 @@ const DateBus = () => {
                           <td>{usager.demandeur || usager.representant_par || '-'}</td>
                           <td>{formatPhoneNumber(usager.telephone)}</td>
                           <td>{usager.adresse_siege || usager.adresse || '-'}</td>
-                          {/* <td>{usager.type_bus || usager.categorie || '-'}</td> */}
                           <td>{usager.nombre_vehicules || '-'}</td>
                           {[...Array(12)].map((_, i) => {
                             const mois = i + 1;
@@ -523,7 +542,6 @@ const DateBus = () => {
                             <strong>{totalPayes}/12</strong>
                           </td>
                           <td className="paye-cell">{totalPayeAr.toLocaleString()} Ar</td>
-                          <td className="reste-cell">{reste.toLocaleString()} Ar</td>
                           <td className="status-cell">
                             <span className="status-badge" style={{ background: `${statusColor}20`, color: statusColor }}>
                               {statusText}
@@ -592,6 +610,7 @@ const DateBus = () => {
               </button>
             </div>
             <div className="modal-body">
+              {/* ===== Informations ===== */}
               <div className="modal-section">
                 <h4>
                   <Bus size={16} /> Informations
@@ -620,6 +639,13 @@ const DateBus = () => {
                   <span>Région</span>
                   <strong>{selectedUsager.region || '-'}</strong>
                 </div>
+              </div>
+
+              {/* ===== Transport ===== */}
+              <div className="modal-section">
+                <h4>
+                  <Route size={16} /> Transport
+                </h4>
                 <div className="modal-row">
                   <span>Type Bus</span>
                   <strong>{selectedUsager.type_bus || selectedUsager.categorie || '-'}</strong>
@@ -636,7 +662,14 @@ const DateBus = () => {
                   <span>Trajet</span>
                   <strong>{selectedUsager.trajet || '-'}</strong>
                 </div>
+
+                <div className="modal-row">
+                  <span>Horaires</span>
+                  <strong>{selectedUsager.horaires || '-'}</strong>
+                </div>
               </div>
+
+              {/* ===== Paiements ===== */}
               <div className="modal-section">
                 <h4>
                   <DollarSign size={16} /> Paiements - {selectedUsager.anneeCourante || anneeRecherche}
@@ -661,12 +694,6 @@ const DateBus = () => {
                   <span>Total payé</span>
                   <strong style={{ color: '#28a745' }}>
                     {(selectedUsager.montant_total_paye || 0).toLocaleString()} Ar
-                  </strong>
-                </div>
-                <div className="modal-row">
-                  <span>Reste</span>
-                  <strong style={{ color: '#dc3545' }}>
-                    {((12 - (selectedUsager.totalMoisPayesAnnee || 0)) * (selectedUsager.montant_mensuel || 0)).toLocaleString()} Ar
                   </strong>
                 </div>
                 <div className="modal-row">

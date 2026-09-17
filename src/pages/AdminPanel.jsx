@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../styles/AdminPanel.css';
 import GestionCrud from './gestion_crud';
-import GestionRegionCrud from './gestion_region_crud'; // Import du nouveau composant
+import GestionRegionCrud from './gestion_region_crud';
 import {
   Users, FolderOpen, Activity, Settings, Bell,
   UserPlus, Edit, Trash2, CheckCircle, XCircle,
@@ -43,7 +43,6 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
   const [activities, setActivities] = useState([]);
   const [notifications, setNotifications] = useState([]);
 
-  // États pour la Gestion des Usagers (intégrée)
   const [selectedType, setSelectedType] = useState('');
   const [filteredUsagers, setFilteredUsagers] = useState([]);
   const [selectedUsager, setSelectedUsager] = useState(null);
@@ -59,8 +58,6 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
     email: '',
     region: ''
   });
-
-  // Suppression des états liés aux régions (déplacés dans GestionRegionCrud)
 
   const usagerTypes = [
     'Hôtel', 'Grand Surface', 'Télé/Radio', 'OCC', 'Bus', 'Night club'
@@ -99,7 +96,6 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         fetchSuperAdmin(currentToken),
         fetchActivities(currentToken),
         fetchNotifications(currentToken)
-        // fetchRegions retiré
       ]);
     } catch (err) {
       console.error('Erreur chargement données:', err);
@@ -109,7 +105,7 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
   };
 
   // ----------------------------------------------
-  // 2. REQUÊTES API (sans fetchRegions)
+  // 2. REQUÊTES API
   // ----------------------------------------------
   const fetchNotifications = async (currentToken) => {
     try {
@@ -254,7 +250,7 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
   };
 
   // ----------------------------------------------
-  // 4. GESTION DES UTILISATEURS (inchangée)
+  // 4. GESTION DES UTILISATEURS
   // ----------------------------------------------
   const handleAddUser = async (e) => {
     e.preventDefault();
@@ -419,7 +415,7 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
   };
 
   // ----------------------------------------------
-  // 5. GESTION DES USAGERS (intégrée)
+  // 5. GESTION DES USAGERS
   // ----------------------------------------------
   const handleTypeChange = (type) => {
     setSelectedType(type);
@@ -526,8 +522,28 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
     return roleMap[role] || roleMap['user'];
   };
 
-  if (loading) return <div className="admin-loading"><div className="loading-spinner"></div><p>Chargement...</p></div>;
-  if (error) return <div className="admin-loading"><p style={{ color: 'red' }}>{error}</p><button onClick={onClose} className="close-btn">Fermer</button></div>;
+  // Afficher un écran de chargement propre
+  if (loading) {
+    return (
+      <div className="admin-panel-loading">
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <p className="loading-text">Chargement du panneau d'administration...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="admin-panel-error">
+        <div className="error-container">
+          <p style={{ color: 'red' }}>{error}</p>
+          <button onClick={onClose} className="close-btn">Fermer</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="admin-panel">
@@ -567,7 +583,6 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         <button className={`tab ${activeTab === 'gestion' ? 'active' : ''}`} onClick={() => setActiveTab('gestion')}>
           <FolderOpen size={16} /> Gestion Usagers
         </button>
-        {/* Nouvel onglet pour les régions */}
         <button className={`tab ${activeTab === 'regions' ? 'active' : ''}`} onClick={() => setActiveTab('regions')}>
           <MapPin size={16} /> Régions
         </button>
@@ -636,11 +651,10 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         </div>
       )}
 
-      {/* ---- ONGLET PARAMÈTRES (sans la gestion des régions) ---- */}
+      {/* ---- ONGLET PARAMÈTRES ---- */}
       {activeTab === 'settings' && (
         <div className="content">
           <div className="settings-container">
-            {/* Carte Super Admin */}
             <div className="settings-card">
               <div className="settings-card-header">
                 <Crown size={24} className="settings-icon" />
@@ -659,7 +673,6 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
               </div>
             </div>
 
-            {/* Carte Statistiques */}
             <div className="settings-card">
               <div className="settings-card-header">
                 <BarChart size={24} className="settings-icon" />
@@ -721,7 +734,7 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
       )}
 
       {/* ============================================================ */}
-      {/* MODALS (utilisateurs, super admin, usagers) - inchangées */}
+      {/* MODALS (utilisateurs, super admin, usagers) */}
       {/* ============================================================ */}
 
       {/* Ajout utilisateur */}
@@ -796,7 +809,7 @@ const AdminPanel = ({ onClose, adminToken: propToken, onLogout }) => {
         </div>
       )}
 
-      {/* ---- MODALS USAGERS (inchangées) ---- */}
+      {/* ---- MODALS USAGERS ---- */}
       {showEditUsager && selectedUsager && (
         <div className="modal">
           <div className="modal-content">

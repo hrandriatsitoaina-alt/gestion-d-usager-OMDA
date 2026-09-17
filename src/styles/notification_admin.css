@@ -500,7 +500,32 @@
   font-size: 13px;
   word-break: break-word;
 }
+/* Bouton Rafraîchir - Icône uniquement */
+.btn-refresh-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
 
+.btn-refresh-icon:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+  transform: rotate(180deg);
+  background: var(--primary-light);
+}
+
+.btn-refresh-icon:active {
+  transform: rotate(360deg);
+}
 /* Responsive */
 @media (max-width: 768px) {
   .usager-details-grid {

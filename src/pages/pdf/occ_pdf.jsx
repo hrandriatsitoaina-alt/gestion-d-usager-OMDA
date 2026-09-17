@@ -1,7 +1,9 @@
 // src/pages/pdf/occ_pdf.jsx
 import jsPDF from 'jspdf';
 
-// Fonctions utilitaires exportées
+// ============================================================
+// FONCTIONS UTILITAIRES EXPORTÉES
+// ============================================================
 export const formatDate = (dateString) => {
   if (!dateString) return '';
   try {
@@ -29,7 +31,9 @@ export const getCurrentDate = () => {
   return `${jour} ${mois} ${annee}`;
 };
 
-// Fonction pour convertir un nombre en lettres (Ariary)
+// ============================================================
+// FONCTION : NOMBRE EN LETTRES (Ariary)
+// ============================================================
 const nombreEnLettres = (num) => {
   if (num === 0) return 'zéro';
   if (num < 0) return 'moins ' + nombreEnLettres(-num);
@@ -82,12 +86,7 @@ const nombreEnLettres = (num) => {
       result = convertHundreds(hundreds) + ' cents';
     }
     if (remainder > 0) {
-      if (hundreds === 1) {
-        result += ' ';
-      } else {
-        result += ' ';
-      }
-      result += convertHundreds(remainder);
+      result += ' ' + convertHundreds(remainder);
     }
     return result;
   };
@@ -134,7 +133,9 @@ const nombreEnLettres = (num) => {
   return convertMillions(roundedNum);
 };
 
-// Fonction pour formater la date CIN au format JJ-MM-AAAA
+// ============================================================
+// FONCTION : FORMATAGE DATE CIN (JJ-MM-AAAA)
+// ============================================================
 const formatCinDate = (dateString) => {
   if (!dateString) return '';
   try {
@@ -162,6 +163,22 @@ const formatCinDate = (dateString) => {
   }
 };
 
+// ============================================================
+// ✅ CONSTANTE : OFFSET POUR SOULIGNEMENT PROPORTIONNEL
+// ============================================================
+const SOULIGNEMENT_OFFSET = 0.8; // mm sous la baseline
+
+// ============================================================
+// ✅ HELPER : SOULIGNER UN TEXTE
+// ============================================================
+const souligner = (doc, x, y, texte, options = {}) => {
+  const width = doc.getTextWidth(texte);
+  doc.line(x, y + SOULIGNEMENT_OFFSET, x + width, y + SOULIGNEMENT_OFFSET);
+};
+
+// ============================================================
+// GÉNÉRATEUR PRINCIPAL : PDF CONTRAT OCC
+// ============================================================
 export const generateOccPDF = (usager, paymentDetails) => {
   try {
     console.log('Génération PDF avec:', { usager, paymentDetails });
@@ -176,7 +193,7 @@ export const generateOccPDF = (usager, paymentDetails) => {
     const marginX = 14;
     let yPos = 14;
     
-    // Récupération des données
+    // ========== RÉCUPÉRATION DES DONNÉES ==========
     const dossierGlobal = usager?.numero_dossier_global || '___/___/_______';
     const numeroDossierUtilisateur = usager?.numero_dossier_utilisateur || '';
     const organisateurs = usager?.organisateurs || usager?.demandeur || '';
@@ -186,21 +203,25 @@ export const generateOccPDF = (usager, paymentDetails) => {
     const dateEvenement = formatDate(usager?.date_evenement) || '';
     const lieuEvenement = usager?.lieu_evenement || '';
     
-    const montantPaye = paymentDetails?.montant || usager?.montant_total || 0;
-    const fraisDossier = usager?.frais_dossier || 5000;
-    const montantRetard = usager?.montant_retard || 0;
+    // ✅ MONTANTS
+    const montantPaye = parseFloat(paymentDetails?.montant || usager?.montant_total || usager?.montant || 0);
+    const fraisDossier = parseFloat(usager?.frais_dossier) || 5000;
+    const montantRetard = parseFloat(usager?.montant_retard) || 0;
     const estRetard = usager?.is_retard || false;
     const uniter = parseInt(usager?.uniter) || 1;
     
-    // ✅ BONNE RÈGLE DE CALCUL : (Montant × Uniter) + Frais de dossier + Retard
-    // Le frais de dossier est FIXE et N'EST PAS multiplié par Uniter
-    const baseTotal = montantPaye * uniter;
-    let soitTotal = baseTotal + fraisDossier;
+    // ✅ CALCUL DU MONTANT TOTAL (Montant × Uniter)
+    const montantXUniter = montantPaye * uniter;
+    
+    // ✅ CALCUL DU SOIT TOTAL : (Montant × Uniter) + Frais + Retard
+    let soitTotal = montantXUniter + fraisDossier;
     if (estRetard) {
       soitTotal += montantRetard;
     }
+    
+    // ✅ MONTANT EN LETTRES (basé sur montant × uniter pour cohérence)
     const totalEnLettres = nombreEnLettres(Math.round(soitTotal));
-    const montantEnLettres = nombreEnLettres(Math.floor(montantPaye));
+    const montantEnLettres = nombreEnLettres(Math.floor(montantXUniter));
     
     const nomRepresentant = usager?.representant_par || usager?.demandeur || '';
     
@@ -223,7 +244,10 @@ export const generateOccPDF = (usager, paymentDetails) => {
     
     const formattedCinDelivree = formatCinDate(cinDelivree);
 
-    // ========== PAGE 1 ==========
+    // ============================================================
+    // PAGE 1
+    // ============================================================
+    
     // En-tête centré
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
@@ -247,17 +271,13 @@ export const generateOccPDF = (usager, paymentDetails) => {
     yPos += 4;
     doc.text('ET DE LA CULTURE', marginX + 13, yPos);
     yPos += 4;
-    
     doc.text('-------------------', marginX + 23, yPos);
     yPos += 4;
-    
     doc.text('SECRETARIAT GENERAL', marginX + 12, yPos);
     yPos += 4;
-    
     doc.text('--------------------', marginX + 23, yPos);
     yPos += 6;
     
-    // OFFICE et O.M.D.A. en gras
     doc.setFont('times', 'bold');
     doc.setFontSize(11);
     doc.text('OFFICE MALAGASY DU DROIT D\'AUTEUR', marginX, yPos);
@@ -278,13 +298,13 @@ export const generateOccPDF = (usager, paymentDetails) => {
     
     yPos += 1;
     
-    // Titre centré CONTRAT DE REPRESENTATION
+    // Titre centré
     doc.setFont('times', 'bold');
     doc.setFontSize(14);
     const titreTexte = 'CONTRAT DE REPRESENTATION';
     const titreWidth = doc.getTextWidth(titreTexte);
     doc.text(titreTexte, pageWidth / 2, yPos, { align: 'center' });
-    doc.line(pageWidth / 2 - titreWidth / 2, yPos + 1.5, pageWidth / 2 + titreWidth / 2, yPos + 1.5);
+    doc.line(pageWidth / 2 - titreWidth / 2, yPos + SOULIGNEMENT_OFFSET, pageWidth / 2 + titreWidth / 2, yPos + SOULIGNEMENT_OFFSET);
     yPos += 9;
     
     // Dossier N° et Hain
@@ -312,7 +332,7 @@ export const generateOccPDF = (usager, paymentDetails) => {
     doc.text('ENTRE LES SOUSSIGNES :', marginX, yPos);
     yPos += 8;
     
-    // 1 - L'OFFICE...
+    // 1 - L'OFFICE
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
     doc.text('1 - ', marginX, yPos);
@@ -377,9 +397,9 @@ export const generateOccPDF = (usager, paymentDetails) => {
     // Article premier
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text('Article premier :', marginX, yPos);
-    const art1Width = doc.getTextWidth('Article premier :');
-    doc.line(marginX, yPos + 1.5, marginX + art1Width, yPos + 1.5);
+    const art1Texte = 'Article premier :';
+    doc.text(art1Texte, marginX, yPos);
+    souligner(doc, marginX, yPos, art1Texte);
     yPos += 5;
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
@@ -412,9 +432,9 @@ export const generateOccPDF = (usager, paymentDetails) => {
     // Article 2
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text('Article 2 :', marginX, yPos);
-    const art2Width = doc.getTextWidth('Article 2 :');
-    doc.line(marginX, yPos + 1.5, marginX + art2Width, yPos + 1.5);
+    const art2Texte = 'Article 2 :';
+    doc.text(art2Texte, marginX, yPos);
+    souligner(doc, marginX, yPos, art2Texte);
     yPos += 5;
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
@@ -433,7 +453,9 @@ export const generateOccPDF = (usager, paymentDetails) => {
     doc.text('manifestation.', marginX + 5, yPos);
     yPos += 10;
     
-    // ========== PAGE 2 ==========
+    // ============================================================
+    // PAGE 2
+    // ============================================================
     doc.addPage();
     yPos = 14;
     
@@ -449,9 +471,9 @@ export const generateOccPDF = (usager, paymentDetails) => {
     // Article 3
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text('Article 3 :', marginX, yPos);
-    const art3Width = doc.getTextWidth('Article 3 :');
-    doc.line(marginX, yPos + 1.5, marginX + art3Width, yPos + 1.5);
+    const art3Texte = 'Article 3 :';
+    doc.text(art3Texte, marginX, yPos);
+    souligner(doc, marginX, yPos, art3Texte);
     yPos += 5;
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
@@ -467,9 +489,9 @@ export const generateOccPDF = (usager, paymentDetails) => {
     // Article 4
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text('Article 4 :', marginX, yPos);
-    const art4Width = doc.getTextWidth('Article 4 :');
-    doc.line(marginX, yPos + 1.5, marginX + art4Width, yPos + 1.5);
+    const art4Texte = 'Article 4 :';
+    doc.text(art4Texte, marginX, yPos);
+    souligner(doc, marginX, yPos, art4Texte);
     yPos += 5;
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
@@ -481,9 +503,9 @@ export const generateOccPDF = (usager, paymentDetails) => {
     // Article 5
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text('Article 5 :', marginX, yPos);
-    const art5Width = doc.getTextWidth('Article 5 :');
-    doc.line(marginX, yPos + 1.5, marginX + art5Width, yPos + 1.5);
+    const art5Texte = 'Article 5 :';
+    doc.text(art5Texte, marginX, yPos);
+    souligner(doc, marginX, yPos, art5Texte);
     yPos += 5;
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
@@ -499,9 +521,9 @@ export const generateOccPDF = (usager, paymentDetails) => {
     // Article 6
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text('Article 6 :', marginX, yPos);
-    const art6Width = doc.getTextWidth('Article 6 :');
-    doc.line(marginX, yPos + 1.5, marginX + art6Width, yPos + 1.5);
+    const art6Texte = 'Article 6 :';
+    doc.text(art6Texte, marginX, yPos);
+    souligner(doc, marginX, yPos, art6Texte);
     yPos += 5;
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
@@ -513,9 +535,9 @@ export const generateOccPDF = (usager, paymentDetails) => {
     // Article 7
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text('Article 7 :', marginX, yPos);
-    const art7Width = doc.getTextWidth('Article 7 :');
-    doc.line(marginX, yPos + 1.5, marginX + art7Width, yPos + 1.5);
+    const art7Texte = 'Article 7 :';
+    doc.text(art7Texte, marginX, yPos);
+    souligner(doc, marginX, yPos, art7Texte);
     yPos += 5;
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
@@ -531,17 +553,17 @@ export const generateOccPDF = (usager, paymentDetails) => {
     // Article 1
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text('Article 1 :', marginX, yPos);
-    const art1bWidth = doc.getTextWidth('Article 1 :');
-    doc.line(marginX, yPos + 1.5, marginX + art1bWidth, yPos + 1.5);
+    const art1bTexte = 'Article 1 :';
+    doc.text(art1bTexte, marginX, yPos);
+    souligner(doc, marginX, yPos, art1bTexte);
     yPos += 7;
     
     // BENEFICIAIRE
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text('BENEFICIAIRE :', marginX, yPos);
-    const art1WWidth = doc.getTextWidth('BENEFICIAIRE :');
-    doc.line(marginX, yPos + 1.5, marginX + art1WWidth, yPos + 1.5);
+    const benefTexte = 'BENEFICIAIRE :';
+    doc.text(benefTexte, marginX, yPos);
+    souligner(doc, marginX, yPos, benefTexte);
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
     doc.text(`${organisateurs || '________________________'}`, marginX + 35, yPos);
@@ -550,9 +572,9 @@ export const generateOccPDF = (usager, paymentDetails) => {
     // GENRE DE LA MANIFESTATION
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text('GENRE DE LA MANIFESTATION :', marginX, yPos);
-    const art1WAidth = doc.getTextWidth('GENRE DE LA MANIFESTATION  :');
-    doc.line(marginX, yPos + 1.5, marginX + art1WAidth, yPos + 1.5);
+    const genreTexte = 'GENRE DE LA MANIFESTATION :';
+    doc.text(genreTexte, marginX, yPos);
+    souligner(doc, marginX, yPos, genreTexte);
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
     doc.text(`${genreManifestation || '________________________'}`, marginX + 70, yPos);
@@ -561,9 +583,9 @@ export const generateOccPDF = (usager, paymentDetails) => {
     // ARTISTE(S)
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text('ARTISTE(S) :', marginX, yPos);
-    const art1WBidth = doc.getTextWidth('ARTISTE(S) :');
-    doc.line(marginX, yPos + 1.5, marginX + art1WBidth, yPos + 1.5);
+    const artisteTexte = 'ARTISTE(S) :';
+    doc.text(artisteTexte, marginX, yPos);
+    souligner(doc, marginX, yPos, artisteTexte);
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
     doc.text(`${artistes || '________________________'}`, marginX + 30, yPos);
@@ -572,51 +594,65 @@ export const generateOccPDF = (usager, paymentDetails) => {
     // DATE et LIEU
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text('DATE :', marginX, yPos);
-    const art1WCidth = doc.getTextWidth('DATE :');
-    doc.line(marginX, yPos + 1.5, marginX + art1WCidth, yPos + 1.5);
+    const dateTexte = 'DATE :';
+    doc.text(dateTexte, marginX, yPos);
+    souligner(doc, marginX, yPos, dateTexte);
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
     doc.text(`${dateEvenement || '________________________'}`, marginX + 18, yPos);
+
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text('LIEU :', marginX + 80, yPos);
-    const art1WDidth = doc.getTextWidth('LIEU :');
-    doc.line(marginX, yPos + 1.5, marginX + art1WDidth, yPos + 1.5);
+    const lieuTexte = 'LIEU :';
+    doc.text(lieuTexte, marginX + 80, yPos);
+    souligner(doc, marginX + 80, yPos, lieuTexte);
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
     doc.text(`${lieuEvenement || '________________________'}`, marginX + 98, yPos);
     yPos += 7;
     
-    // MONTANT
+    // ============================================================
+    // ✅ MONTANT — NOUVELLE LOGIQUE : Montant × Uniter = Total
+    // ============================================================
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text('MONTANT :', marginX, yPos);
-    const art1WEidth = doc.getTextWidth('MONTANT :');
-    doc.line(marginX, yPos + 1.5, marginX + art1WEidth, yPos + 1.5);
+    const montantTexte = 'MONTANT :';
+    doc.text(montantTexte, marginX, yPos);
+    souligner(doc, marginX, yPos, montantTexte);
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
-    doc.text(`${formatNumber(montantPaye)} Ar ( ${montantEnLettres} Ariary)`, marginX + 25, yPos);
+
+    // ✅ Affichage conditionnel selon Uniter
+    let montantDisplay = '';
+    if (uniter > 1) {
+      // Ex: "55 000 × 2 Uniter = 110 000 Ar (Cent dix mille Ariary)"
+      montantDisplay = `${formatNumber(montantPaye)} × ${uniter} Uniter = ${formatNumber(montantXUniter)} Ar (${montantEnLettres} Ariary)`;
+    } else {
+      // Ex: "55 000 Ar (cinquante-cinq mille Ariary)"
+      montantDisplay = `${formatNumber(montantPaye)} Ar (${montantEnLettres} Ariary)`;
+    }
+
+    doc.text(montantDisplay, marginX + 25, yPos);
     yPos += 5;
     
     // FRAIS DE DOSSIER
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text('FRAIS DE DOSSIER :', marginX, yPos);
-    const fraisWidth = doc.getTextWidth('FRAIS DE DOSSIER :');
-    doc.line(marginX, yPos + 1.5, marginX + fraisWidth, yPos + 1.5);
+    const fraisTexte = 'FRAIS DE DOSSIER :';
+    doc.text(fraisTexte, marginX, yPos);
+    souligner(doc, marginX, yPos, fraisTexte);
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
     doc.text(`${formatNumber(fraisDossier)} Ar`, marginX + 45, yPos);
     yPos += 5;
     
-    // Afficher le retard seulement s'il est activé
+    // PENALITE DE RETARD (si activé)
     if (estRetard && montantRetard > 0) {
       doc.setFont('times', 'bold');
       doc.setFontSize(12);
-      doc.text('PENALITE DE RETARD :', marginX, yPos);
-      const retardWidth = doc.getTextWidth('PENALITE DE RETARD :');
-      doc.line(marginX, yPos + 1.5, marginX + retardWidth, yPos + 1.5);
+      const retardTexte = 'PENALITE DE RETARD :';
+      doc.text(retardTexte, marginX, yPos);
+      souligner(doc, marginX, yPos, retardTexte);
       doc.setFont('times', 'normal');
       doc.setFontSize(12);
       doc.text(`${formatNumber(montantRetard)} Ar`, marginX + 50, yPos);
@@ -625,29 +661,29 @@ export const generateOccPDF = (usager, paymentDetails) => {
       yPos += 2;
     }
     
-    // ✅ SOIT TOTAL corrigé : (Montant × Uniter) + Frais de dossier + Retard
+    // ✅ SOIT TOTAL : (Montant × Uniter) + Frais + Retard
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text('SOIT TOTAL :', marginX, yPos);
-    const soitTotalWidth = doc.getTextWidth('SOIT TOTAL :');
-    doc.line(marginX, yPos + 1.5, marginX + soitTotalWidth, yPos + 1.5);
+    const soitTexte = 'SOIT TOTAL :';
+    doc.text(soitTexte, marginX, yPos);
+    souligner(doc, marginX, yPos, soitTexte);
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
-    doc.text(`${formatNumber(soitTotal)} Ar ( ${totalEnLettres} Ariary)`, marginX + 30, yPos);
+    doc.text(`${formatNumber(soitTotal)} Ar (${totalEnLettres} Ariary)`, marginX + 30, yPos);
     yPos += 7;
     
-    // NOM ET PRENOMS (Représentant)
+    // NOM ET PRENOMS
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text('NOM ET PRENOMS :', marginX, yPos);
-    const art1WFidth = doc.getTextWidth('NOM ET PRENOMS :');
-    doc.line(marginX, yPos + 1.5, marginX + art1WFidth, yPos + 1.5);
+    const nomTexte = 'NOM ET PRENOMS :';
+    doc.text(nomTexte, marginX, yPos);
+    souligner(doc, marginX, yPos, nomTexte);
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
     doc.text(`${nomRepresentant || '________________________'}`, marginX + 45, yPos);
     yPos += 7;
     
-    // CIN avec délivrée et lieu
+    // CIN
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
     let cinText = '';
@@ -663,28 +699,29 @@ export const generateOccPDF = (usager, paymentDetails) => {
     } else {
       cinText = '________________________';
     }
-    doc.text('CIN :', marginX, yPos);
-    const art1WGidth = doc.getTextWidth('CIN :');
-    doc.line(marginX, yPos + 1.5, marginX + art1WGidth, yPos + 1.5);
+    const cinTitre = 'CIN :';
+    doc.text(cinTitre, marginX, yPos);
+    souligner(doc, marginX, yPos, cinTitre);
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
     doc.text(cinText, marginX + 18, yPos);
     yPos += 7;
     
-    // DOMICILE
+    // DOMICILE et Contact
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text('DOMICILE :', marginX, yPos);
-    const art1WHidth = doc.getTextWidth('DOMICILE :');
-    doc.line(marginX, yPos + 1.5, marginX + art1WHidth, yPos + 1.5);
+    const domicileTexte = 'DOMICILE :';
+    doc.text(domicileTexte, marginX, yPos);
+    souligner(doc, marginX, yPos, domicileTexte);
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
     doc.text(`${domicile || '________________________'}`, marginX + 25, yPos);
+
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text('Contact :', marginX + 100, yPos);
-    const art1WJidth = doc.getTextWidth('Contact :');
-    doc.line(marginX, yPos + 1.5, marginX + art1WJidth, yPos + 1.5);
+    const contactTexte = 'Contact :';
+    doc.text(contactTexte, marginX + 100, yPos);
+    souligner(doc, marginX + 100, yPos, contactTexte);
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
     doc.text(`${telephone || '________________________'}`, marginX + 125, yPos);
@@ -693,18 +730,18 @@ export const generateOccPDF = (usager, paymentDetails) => {
     // Article 2
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text('Article 2 : ', marginX, yPos);
-    const art2bWidth = doc.getTextWidth('Article 2 :');
-    doc.line(marginX, yPos + 1.5, marginX + art2bWidth, yPos + 1.5);
+    const art2bTexte = 'Article 2 :';
+    doc.text(art2bTexte, marginX, yPos);
+    souligner(doc, marginX, yPos, art2bTexte);
     yPos += 8;
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
     doc.text('Pour l\'exécution des clauses et conditions du présent contrat, les parties font élection de domicile ', marginX, yPos);
     yPos += 5;
     
-    doc.text(`à ${lieuAjout}.`, marginX, yPos);
-    const art2bXidth = doc.getTextWidth(`à ${lieuAjout}.`);
-    doc.line(marginX, yPos + 1.5, marginX + art2bXidth, yPos + 1.5);
+    const lieuAjoutTexte = `à ${lieuAjout}.`;
+    doc.text(lieuAjoutTexte, marginX, yPos);
+    souligner(doc, marginX, yPos, lieuAjoutTexte);
     yPos += 5;
     
     doc.text(`${lieuAjout}, le ${currentDateStr}`, marginX + 100, yPos);
@@ -719,7 +756,9 @@ export const generateOccPDF = (usager, paymentDetails) => {
     doc.text(representantPar, marginX + 24, yPos);
     doc.text(percepteurNom, marginX + 130, yPos);
     
-    // ========== PAGE 3 ==========
+    // ============================================================
+    // PAGE 3
+    // ============================================================
     doc.addPage();
     yPos = 15;
     
@@ -748,17 +787,13 @@ export const generateOccPDF = (usager, paymentDetails) => {
     yPos += 4;
     doc.text('ET DE LA CULTURE', marginX + 13, yPos);
     yPos += 4;
-    
     doc.text('-------------------', marginX + 23, yPos);
     yPos += 4;
-    
     doc.text('SECRETARIAT GENERAL', marginX + 12, yPos);
     yPos += 4;
-    
     doc.text('--------------------', marginX + 23, yPos);
     yPos += 6;
     
-    // OFFICE et O.M.D.A. en gras
     doc.setFont('times', 'bold');
     doc.setFontSize(11);
     doc.text('OFFICE MALAGASY DU DROIT D\'AUTEUR', marginX, yPos);
@@ -799,7 +834,7 @@ export const generateOccPDF = (usager, paymentDetails) => {
     const authTexte = 'A U T O R I S A T I O N';
     const authWidth = doc.getTextWidth(authTexte);
     doc.text(authTexte, pageWidth / 2, yPos, { align: 'center' });
-    doc.line(pageWidth / 2 - authWidth / 2, yPos + 2, pageWidth / 2 + authWidth / 2, yPos + 2);
+    doc.line(pageWidth / 2 - authWidth / 2, yPos + SOULIGNEMENT_OFFSET, pageWidth / 2 + authWidth / 2, yPos + SOULIGNEMENT_OFFSET);
     yPos += 18;
     
     doc.setFont('times', 'normal');

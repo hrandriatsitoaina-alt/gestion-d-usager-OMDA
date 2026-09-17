@@ -64,6 +64,32 @@ const HotelComponent = () => {
 
   const moisLabelsShort = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
 
+  // ============================================================
+  // ✅ FONCTION CLÉ : Calcul du montant payé
+  // Règle métier :
+  //   Total = Montant du PREMIER paiement
+  //         + Somme des paiements dont le montant est DIFFÉRENT
+  //           du montant du PREMIER paiement
+  //
+  // Exemple : [15000, 15000, ..., 15000 (9 fois), 3000, 3000, 3000]
+  //   = 15000 + (3000 + 3000 + 3000) = 24000 ✅
+  // ============================================================
+  const calculerMontantPaye = (paiementsTries) => {
+    if (!paiementsTries || paiementsTries.length === 0) return 0;
+
+    const premierMontant = parseFloat(paiementsTries[0].montant || 0);
+    let total = premierMontant;
+
+    for (let i = 1; i < paiementsTries.length; i++) {
+      const montantCourant = parseFloat(paiementsTries[i].montant || 0);
+      if (montantCourant !== premierMontant) {
+        total += montantCourant;
+      }
+    }
+
+    return total;
+  };
+
   // ---- Formatage du téléphone ----
   const formatPhoneNumber = (phone) => {
     if (!phone) return '-';
@@ -153,22 +179,29 @@ const HotelComponent = () => {
       }
 
       const usagersWithYearData = usagersData.map((usager) => {
-        const moisPayesPourAnnee = paiements.filter(
-          (p) =>
-            p.usager_id === usager.id &&
-            (p.usager_type === 'hotel' || p.usager_type === usager.type_usager) &&
-            p.annee === anneeRecherche &&
-            p.statut === 'paye'
-        );
+        // ✅ Récupérer tous les paiements de l'année + trier par mois
+        const paiementsPourAnnee = paiements
+          .filter(
+            (p) =>
+              p.usager_id === usager.id &&
+              (p.usager_type === 'hotel' || p.usager_type === usager.type_usager) &&
+              p.annee === anneeRecherche &&
+              p.statut === 'paye'
+          )
+          .sort((a, b) => (a.mois || 0) - (b.mois || 0));
 
-        const moisPayes = moisPayesPourAnnee.map((p) => p.mois);
+        const moisPayes = paiementsPourAnnee.map((p) => p.mois);
+
+        // ✅ Calcul avec la règle personnalisée
+        const montantTotalPaye = calculerMontantPaye(paiementsPourAnnee);
 
         return {
           ...usager,
           moisPayes: moisPayes,
+          moisPayesAnnee: paiementsPourAnnee,
           totalMoisPayesAnnee: moisPayes.length,
           anneeCourante: anneeRecherche,
-          montant_total_paye: moisPayesPourAnnee.reduce((sum, p) => sum + parseFloat(p.montant || 0), 0),
+          montant_total_paye: montantTotalPaye,
         };
       });
 
@@ -346,7 +379,6 @@ const HotelComponent = () => {
           {/* ===== FILTRES ===== */}
           <div className="filters-container">
             <div className="filters-row">
-              {/* Année */}
               <div className="filter-item">
                 <label htmlFor="anneeSelect">
                   <Calendar size={14} className="filter-icon" /> Année
@@ -369,7 +401,6 @@ const HotelComponent = () => {
                 </select>
               </div>
 
-              {/* Région */}
               <div className="filter-item">
                 <label htmlFor="regionSelect">
                   <MapPin size={14} className="filter-icon" /> Région
@@ -393,7 +424,6 @@ const HotelComponent = () => {
                 </select>
               </div>
 
-              {/* Boutons d'action */}
               <div className="filter-item filter-actions">
                 <label>&nbsp;</label>
                 <div className="filter-buttons">
@@ -468,9 +498,8 @@ const HotelComponent = () => {
                           {i + 1}
                         </th>
                       ))}
-                      <th>Total</th>
+                      <th>Total mois</th>
                       <th>Payé (Ar)</th>
-                      <th>Reste (Ar)</th>
                       <th>Statut</th>
                       <th>Action</th>
                     </tr>
@@ -480,9 +509,7 @@ const HotelComponent = () => {
                       const statusColor = getStatusColor(usager);
                       const statusText = getStatusText(usager);
                       const totalPayes = usager.totalMoisPayesAnnee || 0;
-                      const montantMensuel = usager.montant_mensuel || 0;
                       const totalPayeAr = usager.montant_total_paye || 0;
-                      const reste = (12 - totalPayes) * montantMensuel;
 
                       return (
                         <tr key={usager.id} style={{ borderLeft: `4px solid ${statusColor}` }}>
@@ -530,7 +557,6 @@ const HotelComponent = () => {
                             <strong>{totalPayes}/12</strong>
                           </td>
                           <td className="paye-cell">{totalPayeAr.toLocaleString()} Ar</td>
-                          <td className="reste-cell">{reste.toLocaleString()} Ar</td>
                           <td className="status-cell">
                             <span className="status-badge" style={{ background: `${statusColor}20`, color: statusColor }}>
                               {statusText}
@@ -681,12 +707,6 @@ const HotelComponent = () => {
                   <span>Total payé</span>
                   <strong style={{ color: '#28a745' }}>
                     {(selectedUsager.montant_total_paye || 0).toLocaleString()} Ar
-                  </strong>
-                </div>
-                <div className="modal-row">
-                  <span>Reste</span>
-                  <strong style={{ color: '#dc3545' }}>
-                    {((12 - (selectedUsager.totalMoisPayesAnnee || 0)) * (selectedUsager.montant_mensuel || 0)).toLocaleString()} Ar
                   </strong>
                 </div>
                 <div className="modal-row">

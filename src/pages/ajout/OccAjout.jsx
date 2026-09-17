@@ -331,7 +331,7 @@ const OccAjout = ({ onCancel }) => {
     }
   };
 
-  // ✅ HANDLE FINAL SUBMIT - OCC sans montant_mensuel
+  // ✅ HANDLE FINAL SUBMIT - OCC avec TOUS les champs en snake_case
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
     const currentUser = getCurrentUser();
@@ -372,45 +372,53 @@ const OccAjout = ({ onCancel }) => {
         total += retardVal;
       }
 
-      // ✅ OCC : NE PAS envoyer montant_mensuel (la colonne n'existe pas)
-// ✅ OCC utilise montant (pas montant_total)
-// ✅ OCC utilise montant (pas montant_total, pas montant_mensuel)
-const finalData = {
-  type: 'OCC',
-  userId: currentUser.id,
-  prefix: prefix,
-  organisateurs: occData.organisateurs || '',
-  representant_par: occData.representantPar || '',
-  genre_manifestation: occData.genreManifestation || '',
-  artistes: occData.artistes || '',
-  date_evenement: occData.dateEvenement || '',
-  lieu_evenement: occData.lieuEvenement || '',
-  representant_cin: occData.representantCin || '',
-  representant_cin_delivree: occData.representantCinDelivree || '',
-  representant_cin_lieu: occData.representantCinLieu || '',
-  adresse: occData.adresse || '',
-  telephone: occData.telephone || '',
-  domicile: occData.domicile || '',
-  confirmation_nom: occData.confirmationNom || '',
-  date_signature: occData.dateSignature || '',
-  lieu_ajout: occData.lieuAjout || '',
-  region: occData.region || '',
-  otherArtistsDetail: otherArtistsInputs,
-  hasOtherArtists,
-  dateAjout: new Date().toISOString().split('T')[0],
-  demandeur: occData.organisateurs || '',
-  representantNom: occData.organisateurs || '',
-  numeroDossierGlobal: numeroDossierGlobal,
-  numeroDossierUtilisateur: numeroDossierUtilisateur,
-  uniter: uniterVal,
-  typeKey: 'OCC',
-  // ✅ OCC utilise montant (pas montant_total)
-  montant: montantVal,
-  frais_dossier: fraisVal,
-  montant_retard: isRetard ? retardVal : 0,
-  is_retard: isRetard,
-  soit_total: total
-};
+      // ✅ TOUS les champs en snake_case (identique à la table)
+      const finalData = {
+        type: 'OCC',
+        userId: currentUser.id,
+        prefix: prefix,
+
+        // ✅ Champs spécifiques OCC (snake_case)
+        organisateurs: occData.organisateurs || '',
+        representant_par: occData.representantPar || '',
+        genre_manifestation: occData.genreManifestation || '',
+        artistes: occData.artistes || '',
+        date_evenement: occData.dateEvenement || null,
+        lieu_evenement: occData.lieuEvenement || '',
+        representant_cin: occData.representantCin || '',
+        representant_cin_delivree: occData.representantCinDelivree || null,
+        representant_cin_lieu: occData.representantCinLieu || '',
+        adresse: occData.adresse || '',
+        telephone: occData.telephone || '',
+        domicile: occData.domicile || '',
+        confirmation_nom: occData.confirmationNom || '',
+        date_signature: occData.dateSignature || null,
+        lieu_ajout: occData.lieuAjout || '',
+        region: occData.region || '',
+
+        // ✅ Autres artistes
+        otherArtistsDetail: otherArtistsInputs,
+        hasOtherArtists,
+
+        // ✅ Demandeur / dénomination
+        demandeur: occData.organisateurs || '',
+        denomination: occData.genreManifestation || '',
+
+        // ✅ Numéros de dossier
+        numero_dossier_global: numeroDossierGlobal,
+        numero_dossier_utilisateur: numeroDossierUtilisateur,
+
+        // ✅ Montants
+        uniter: uniterVal,
+        montant: montantVal,
+        frais_dossier: fraisVal,
+        montant_retard: isRetard ? retardVal : 0,
+        is_retard: isRetard,
+        soit_total: total,
+
+        // ✅ Dates
+        date_ajout: new Date().toISOString().split('T')[0]
+      };
 
       console.log('📤 Données envoyées au backend (OCC):', finalData);
 
@@ -445,7 +453,7 @@ const finalData = {
           state: {
             usager: {
               id: result.id,
-              denomination: occData.genreManifestation || occData.nom_evenement || 'OCC',
+              denomination: occData.genreManifestation || 'OCC',
               demandeur: occData.organisateurs,
               telephone: occData.telephone,
               region: occData.region,
@@ -470,7 +478,6 @@ const finalData = {
               confirmation_nom: occData.confirmationNom,
               lieu_ajout: occData.lieuAjout,
               date_signature: occData.dateSignature,
-              adresse: occData.adresse,
               domicile: occData.domicile
             },
             type: 'occ'
@@ -716,12 +723,22 @@ const finalData = {
       </div>
 
       <div className="form-row">
-        <div className="form-label"><h2><Hash size={18} strokeWidth={2} /> Uniter :</h2></div>
-        <div className="form-input">
-          <input type="number" min="1" max="9" value={uniter} onChange={(e) => setUniter(Math.min(9, Math.max(1, parseInt(e.target.value) || 1)))} className="input-style" style={{ width: '80px' }} placeholder="1" />
-          <span style={{ marginLeft: '10px', fontSize: '14px', color: '#6c757d' }}>(1 à 9 unités)</span>
-        </div>
+      <div className="form-label"><h2><Hash size={18} strokeWidth={2} /> Uniter :</h2></div>
+      <div className="form-input">
+        <input 
+          type="number" 
+          min="1" 
+          value={uniter} 
+          onChange={(e) => setUniter(Math.max(1, parseInt(e.target.value) || 1))} 
+          className="input-style" 
+          style={{ width: '80px' }} 
+          placeholder="1" 
+        />
+        <span style={{ marginLeft: '10px', fontSize: '14px', color: '#6c757d' }}>
+          (nombre d'unités)
+        </span>
       </div>
+    </div>
 
       <div className="form-row">
         <div className="form-label"><h2><Clock size={18} strokeWidth={2} /> Cas de retard :</h2></div>

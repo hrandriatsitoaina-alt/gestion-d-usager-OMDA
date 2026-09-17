@@ -4,7 +4,119 @@ const pool = require('../database');
 const config = require('../config');
 
 // ============================================================
-// MIDDLEWARE DE VÉRIFICATION (IMPORTANT)
+// GÉNÉRATION DE PRÉFIXE UNIQUE EN 3 LETTRES (JAMAIS DE CHIFFRES)
+// ============================================================
+function cleanName(nom) {
+  return (nom || '').trim().toUpperCase().replace(/[^A-Z]/g, '');
+}
+
+async function isPrefixAvailable(prefix, excludeUserId = null) {
+  let query = 'SELECT id FROM utilisateurs WHERE prefix = $1';
+  const params = [prefix];
+  if (excludeUserId) {
+    query += ' AND id != $2';
+    params.push(excludeUserId);
+  }
+  const result = await pool.query(query, params);
+  return result.rows.length === 0;
+}
+
+const VOYELLES = new Set(['A', 'E', 'I', 'O', 'U', 'Y']);
+
+function buildCandidates(cleaned) {
+  const candidates = [];
+  const seen = new Set();
+  const push = (s) => {
+    const c = (s || '').substring(0, 3).toUpperCase();
+    if (c.length === 3 && /^[A-Z]{3}$/.test(c) && !seen.has(c)) {
+      seen.add(c);
+      candidates.push(c);
+    }
+  };
+
+  const letters = cleaned.split('');
+  const L1 = letters[0] || 'X';
+
+  push(cleaned.substring(0, 3));
+
+  const consonnesApres = letters.slice(1).filter(c => !VOYELLES.has(c));
+  if (consonnesApres.length >= 2) {
+    push(L1 + consonnesApres[0] + consonnesApres[1]);
+  }
+
+  if (letters.length >= 3) {
+    push(L1 + letters[1] + letters[letters.length - 1]);
+    push(L1 + letters[letters.length - 1] + letters[letters.length - 2]);
+  }
+
+  if (letters.length >= 5) {
+    push(L1 + letters[2] + letters[4]);
+  }
+
+  if (letters.length >= 4) {
+    push(L1 + letters[1] + letters[3]);
+  }
+
+  for (let i = 2; i < letters.length; i++) {
+    for (let j = i + 1; j < letters.length; j++) {
+      push(L1 + letters[i] + letters[j]);
+    }
+  }
+
+  const pool8 = letters.slice(0, 8);
+  for (let i = 0; i < pool8.length; i++) {
+    for (let j = i + 1; j < pool8.length; j++) {
+      for (let k = j + 1; k < pool8.length; k++) {
+        push(pool8[i] + pool8[j] + pool8[k]);
+      }
+    }
+  }
+
+  return candidates;
+}
+
+async function bruteForcePrefix(L1, excludeUserId = null) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  for (let i = 0; i < alphabet.length; i++) {
+    for (let j = 0; j < alphabet.length; j++) {
+      const candidate = L1 + alphabet[i] + alphabet[j];
+      if (await isPrefixAvailable(candidate, excludeUserId)) {
+        return candidate;
+      }
+    }
+  }
+  for (let i = 0; i < alphabet.length; i++) {
+    for (let j = 0; j < alphabet.length; j++) {
+      for (let k = 0; k < alphabet.length; k++) {
+        const candidate = alphabet[i] + alphabet[j] + alphabet[k];
+        if (await isPrefixAvailable(candidate, excludeUserId)) {
+          return candidate;
+        }
+      }
+    }
+  }
+  throw new Error('Impossible de générer un préfixe unique');
+}
+
+async function generateUniquePrefix(nom, excludeUserId = null) {
+  const cleaned = cleanName(nom);
+  if (!cleaned) {
+    throw new Error('Nom invalide pour la génération du préfixe');
+  }
+
+  const candidates = buildCandidates(cleaned);
+  for (const candidate of candidates) {
+    if (await isPrefixAvailable(candidate, excludeUserId)) {
+      return candidate;
+    }
+  }
+
+  const L1 = cleaned[0] || 'X';
+  return await bruteForcePrefix(L1, excludeUserId);
+}
+
+// ============================================================
+// MIDDLEWARE DE VÉRIFICATION
 // ============================================================
 const verifyAdminToken = (req, res, next) => {
   const adminToken = req.headers.adminToken || req.headers['admintoken'];
@@ -29,14 +141,14 @@ const verifyDAFToken = (req, res, next) => {
 };
 
 // ============================================================
-// ROUTES SUPER ADMIN (avec /api/ prefix)
+// ROUTES SUPER ADMIN
 // ============================================================
 
 // ✅ GET /api/admin/users - Liste des utilisateurs
 router.get('/admin/users', verifyAdminToken, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, nom, email, role, statut, created_at, derniere_connexion FROM utilisateurs ORDER BY id'
+      'SELECT id, nom, email, role, statut, prefix, created_at, derniere_connexion FROM utilisateurs ORDER BY id'
     );
     res.json({ success: true, users: result.rows });
   } catch (error) {
@@ -56,18 +168,20 @@ router.post('/admin/users', verifyAdminToken, async (req, res) => {
     if (existing.rows.length > 0) {
       return res.status(400).json({ success: false, message: 'Cet email existe déjà' });
     }
-    
+
+    const prefix = await generateUniquePrefix(nom);
+
     const result = await pool.query(
-      `INSERT INTO utilisateurs (nom, email, mot_de_passe, role, statut) 
-       VALUES ($1, $2, $3, $4, $5) 
-       RETURNING id, nom, email, role, statut`,
-      [nom, email, mot_de_passe, role || 'user', statut || 'actif']
+      `INSERT INTO utilisateurs (nom, email, mot_de_passe, role, statut, prefix) 
+       VALUES ($1, $2, $3, $4, $5, $6) 
+       RETURNING id, nom, email, role, statut, prefix`,
+      [nom, email, mot_de_passe, role || 'user', statut || 'actif', prefix]
     );
-    
+
     const newUserId = result.rows[0].id;
     const currentYear = new Date().getFullYear();
     const typesUsager = ['Hôtel', 'Grand Surface', 'Télé/Radio', 'OCC', 'Bus', 'Night club'];
-    
+
     for (const type of typesUsager) {
       await pool.query(
         `INSERT INTO compteurs_dossiers_utilisateurs (utilisateur_id, annee, compteur, type_usager) 
@@ -76,7 +190,14 @@ router.post('/admin/users', verifyAdminToken, async (req, res) => {
         [newUserId, currentYear, type]
       );
     }
-    
+
+    await pool.query(
+      `INSERT INTO parametres_utilisateur (utilisateur_id)
+       VALUES ($1)
+       ON CONFLICT (utilisateur_id) DO NOTHING`,
+      [newUserId]
+    );
+
     res.json({ success: true, user: result.rows[0], message: 'Utilisateur créé avec succès' });
   } catch (error) {
     console.error('Erreur admin add user:', error);
@@ -89,28 +210,35 @@ router.put('/admin/users/:id', verifyAdminToken, async (req, res) => {
   const { id } = req.params;
   const { nom, email, role, statut, mot_de_passe } = req.body;
   try {
-    const userResult = await pool.query('SELECT role FROM utilisateurs WHERE id = $1', [id]);
+    const userResult = await pool.query('SELECT role, nom, prefix FROM utilisateurs WHERE id = $1', [id]);
     if (userResult.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
     }
     const currentUser = userResult.rows[0];
+
     if (currentUser.role === 'super_admin' && role && role !== 'super_admin') {
       return res.status(400).json({ success: false, message: 'Vous ne pouvez pas changer le rôle du Super Admin' });
     }
     if (role === 'super_admin' && currentUser.role !== 'super_admin') {
       return res.status(400).json({ success: false, message: 'Vous ne pouvez pas créer un autre Super Admin' });
     }
-    
+
+    // Recalculer le préfixe SI le nom a changé
+    let newPrefix = currentUser.prefix;
+    if (nom && nom !== currentUser.nom) {
+      newPrefix = await generateUniquePrefix(nom, parseInt(id));
+    }
+
     let query, params;
     if (mot_de_passe && mot_de_passe.trim() !== '') {
-      query = `UPDATE utilisateurs SET nom = $1, email = $2, role = $3, statut = $4, mot_de_passe = $5 WHERE id = $6`;
-      params = [nom, email, role || currentUser.role, statut || 'actif', mot_de_passe, id];
+      query = `UPDATE utilisateurs SET nom = $1, email = $2, role = $3, statut = $4, mot_de_passe = $5, prefix = $6 WHERE id = $7`;
+      params = [nom, email, role || currentUser.role, statut || 'actif', mot_de_passe, newPrefix, id];
     } else {
-      query = `UPDATE utilisateurs SET nom = $1, email = $2, role = $3, statut = $4 WHERE id = $5`;
-      params = [nom, email, role || currentUser.role, statut || 'actif', id];
+      query = `UPDATE utilisateurs SET nom = $1, email = $2, role = $3, statut = $4, prefix = $5 WHERE id = $6`;
+      params = [nom, email, role || currentUser.role, statut || 'actif', newPrefix, id];
     }
     await pool.query(query, params);
-    res.json({ success: true, message: 'Utilisateur modifié avec succès' });
+    res.json({ success: true, message: 'Utilisateur modifié avec succès', prefix: newPrefix });
   } catch (error) {
     console.error('Erreur admin edit user:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -197,7 +325,7 @@ router.post('/admin/activities', verifyAdminToken, async (req, res) => {
   }
 });
 
-// ✅ POST /api/admin/verify - Vérifier les accès (CRUCIAL pour Super Admin)
+// ✅ POST /api/admin/verify - Vérifier les accès
 router.post('/admin/verify', async (req, res) => {
   const { password } = req.body;
   try {
@@ -205,31 +333,31 @@ router.post('/admin/verify', async (req, res) => {
       "SELECT mot_de_passe FROM utilisateurs WHERE role = 'super_admin' LIMIT 1"
     );
     let adminPassword = superAdminResult.rows.length > 0 ? superAdminResult.rows[0].mot_de_passe : '1234';
-    
+
     if (password === adminPassword) {
-      return res.json({ 
-        success: true, 
-        token: config.ADMIN_SECRET_TOKEN, 
+      return res.json({
+        success: true,
+        token: config.ADMIN_SECRET_TOKEN,
         message: 'Accès Super Admin autorisé',
         role: 'super_admin'
       });
     }
-    
+
     const dafResult = await pool.query(
       "SELECT mot_de_passe FROM utilisateurs WHERE role = 'daf' LIMIT 1"
     );
     if (dafResult.rows.length > 0) {
       const dafPassword = dafResult.rows[0].mot_de_passe;
       if (password === dafPassword) {
-        return res.json({ 
-          success: true, 
-          token: config.DAF_SECRET_TOKEN, 
+        return res.json({
+          success: true,
+          token: config.DAF_SECRET_TOKEN,
           message: 'Accès DAF autorisé',
           role: 'daf'
         });
       }
     }
-    
+
     res.status(401).json({ success: false, message: 'Mot de passe incorrect' });
   } catch (error) {
     console.error('Erreur verify admin:', error);

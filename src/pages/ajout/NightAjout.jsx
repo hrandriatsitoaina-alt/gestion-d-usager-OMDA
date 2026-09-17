@@ -6,7 +6,8 @@ import {
   CreditCard, Calendar, Clock, DollarSign, Hash,
   ArrowLeft, ArrowRight, Save, X, Edit, Briefcase, Home,
   PlusCircle, Radio, Tv, Headphones, MoreHorizontal,
-  CheckCircle, UserPlus, Music, Users as UsersIcon, Sunset
+  CheckCircle, UserPlus, Music, Users as UsersIcon, Sunset,
+  Info, BarChart
 } from 'lucide-react';
 import { useToast } from '../../components/Toast';
 
@@ -15,15 +16,16 @@ const NightAjout = ({ onCancel }) => {
   const showToast = useToast();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [userInfo, setUserInfo] = useState({ 
-    id: null, nom: '', prefix: '', 
-    compteurs: { 'Night club': 0 }, 
-    anneeEnCours: new Date().getFullYear() 
+  const [userInfo, setUserInfo] = useState({
+    id: null, nom: '', prefix: '',
+    compteurs: { 'Night club': 0 },
+    anneeEnCours: new Date().getFullYear()
   });
   const [fraisDossier, setFraisDossier] = useState('');
   const [montant, setMontant] = useState('');
   const [uniter, setUniter] = useState(1);
   const [soitTotal, setSoitTotal] = useState(0);
+  const [globalTotalCount, setGlobalTotalCount] = useState(0);
 
   const [regionsList, setRegionsList] = useState([]);
   const [newRegion, setNewRegion] = useState('');
@@ -107,6 +109,34 @@ const NightAjout = ({ onCancel }) => {
     }
   };
 
+  const loadGlobalTotal = async () => {
+    try {
+      const currentYear = new Date().getFullYear();
+      const response = await fetch(`http://localhost:3001/api/nightclub/total-count?year=${currentYear}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setGlobalTotalCount(data.total || 0);
+          console.log(`✅ Total Night Club ${currentYear}: ${data.total}`);
+        }
+      } else {
+        const fallbackResponse = await fetch('http://localhost:3001/api/usagers');
+        if (fallbackResponse.ok) {
+          const usagers = await fallbackResponse.json();
+          const currentYear = new Date().getFullYear();
+          const count = usagers.filter(u => {
+            const createdAt = new Date(u.created_at);
+            return u.type_usager === 'Night club' && createdAt.getFullYear() === currentYear;
+          }).length;
+          setGlobalTotalCount(count);
+          console.log(`✅ Total Night Club (fallback) ${currentYear}: ${count}`);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Erreur chargement total Night Club:', error);
+    }
+  };
+
   const handleAddRegion = async () => {
     const trimmed = newRegion.trim();
     if (!trimmed) {
@@ -153,7 +183,24 @@ const NightAjout = ({ onCancel }) => {
     }
   };
 
-  // ✅ CALCUL CORRIGÉ - (Montant + Somme des taux) × Uniter + Frais de dossier
+  const loadUserCounters = async (userId) => {
+    try {
+      const year = new Date().getFullYear();
+      const response = await fetch(`http://localhost:3001/api/users/counters/${userId}?year=${year}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          console.log('✅ Compteurs chargés depuis la base:', data.compteurs);
+          return data.compteurs;
+        }
+      }
+    } catch (error) {
+      console.error('❌ Erreur chargement compteurs:', error);
+    }
+    return null;
+  };
+
+  // ✅ CALCUL - (Montant + Somme des taux) × Uniter + Frais de dossier
   useEffect(() => {
     let totalMoyens = 0;
     if (nightData.moyensCommunication.radio.actif) {
@@ -180,19 +227,26 @@ const NightAjout = ({ onCancel }) => {
     setSoitTotal(totalFinal);
   }, [nightData.moyensCommunication, fraisDossier, montant, uniter]);
 
+  // ✅ Chargement des données utilisateur avec compteurs depuis la base
   useEffect(() => {
-    const currentUser = getCurrentUser();
-    if (currentUser) {
-      setUserInfo(prev => ({ 
-        ...prev, 
-        id: currentUser.id,
-        nom: currentUser.nom, 
-        prefix: currentUser.prefix,
-        compteurs: currentUser.compteurs || { 'Night club': 0 },
-        anneeEnCours: currentUser.anneeEnCours || new Date().getFullYear()
-      }));
-    }
-    loadRegions();
+    const loadUserData = async () => {
+      const currentUser = getCurrentUser();
+      if (currentUser) {
+        const compteurs = await loadUserCounters(currentUser.id);
+
+        setUserInfo(prev => ({
+          ...prev,
+          id: currentUser.id,
+          nom: currentUser.nom,
+          prefix: currentUser.prefix || '',
+          compteurs: compteurs || currentUser.compteurs || { 'Night club': 0 },
+          anneeEnCours: new Date().getFullYear()
+        }));
+      }
+      loadRegions();
+      loadGlobalTotal();
+    };
+    loadUserData();
   }, []);
 
   const handleNightChange = (e) => {
@@ -251,7 +305,6 @@ const NightAjout = ({ onCancel }) => {
     }
   };
 
-  // ✅ HANDLE FINAL SUBMIT CORRIGÉ - comme Hotel et OCC
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
     const currentUser = getCurrentUser();
@@ -305,59 +358,65 @@ const NightAjout = ({ onCancel }) => {
       const result = await response.json();
       
       if (result.success) {
+        const updatedCompteurs = await loadUserCounters(currentUser.id);
+
         const updatedUser = getCurrentUser();
         if (updatedUser) {
-          updatedUser.compteurs = updatedUser.compteurs || {};
-          const nouveauCompteur = (updatedUser.compteurs['Night club'] || 0) + 1;
-          updatedUser.compteurs['Night club'] = nouveauCompteur;
+          updatedUser.compteurs = updatedCompteurs || updatedUser.compteurs || {};
           localStorage.setItem('user', JSON.stringify(updatedUser));
-          
+
           setUserInfo(prev => ({
             ...prev,
-            compteurs: {
-              ...prev.compteurs,
-              'Night club': nouveauCompteur
-            }
+            compteurs: updatedCompteurs || prev.compteurs
           }));
-          
-          console.log(`✅ Compteur Night club incrémenté à ${nouveauCompteur}`);
+
+          console.log(`✅ Compteurs mis à jour:`, updatedCompteurs);
         }
-        
+
+        await loadGlobalTotal();
+
         showToast('✅ Night Club ajouté avec succès !', 'success');
-        
+
+        const nouveauCompteur = (userInfo.compteurs?.['Night club'] || 0) + 1;
+        const prefix = userInfo.prefix || '';
+        const currentTrimestre = getTrimestreFromMonth(new Date().getMonth() + 1);
+        const anneeEnCours = new Date().getFullYear();
+
+        const usagerData = {
+          id: result.id,
+          denomination: nightData.denomination || 'Sans nom',
+          demandeur: nightData.demandeur || '',
+          telephone: nightData.telephone || '',
+          region: nightData.region || '',
+          adresse_siege: nightData.adresseSiege || '',
+          nif_stat: nightData.nifStat || '',
+          email: nightData.email || '',
+          representant_nom: nightData.representantNom || '',
+          representant_adresse: nightData.representantAdresse || '',
+          representant_tel: nightData.representantTel || '',
+          representant_cin: nightData.representantCin || '',
+          representant_cin_delivree: nightData.representantCinDelivree || '',
+          representant_cin_lieu: nightData.representantCinLieu || '',
+          representant_fonction: nightData.representantFonction || '',
+          jauge_max: nightData.jaugeMax || 0,
+          horaires: nightData.horaires || '',
+          moyens_communication: nightData.moyensCommunication,
+          a_compter_du: nightData.aCompterDu || '',
+          echeance: nightData.echeance || '',
+          confirmation_nom: nightData.confirmationNom || '',
+          lieu_signature: nightData.lieuSignature || '',
+          date_signature: nightData.dateSignature || '',
+          montant_mensuel: montantVal,
+          frais_dossier: fraisVal,
+          montant_total: montantVal,
+          soit_total: totalFinal,
+          uniter: uniterVal,
+          numero_dossier_utilisateur: `${prefix} ${nouveauCompteur}/${currentTrimestre}/${anneeEnCours}`
+        };
+
         navigate('/confirme-paiement', { 
           state: { 
-            usager: { 
-              id: result.id,
-              denomination: nightData.denomination,
-              demandeur: nightData.demandeur,
-              telephone: nightData.telephone,
-              region: nightData.region,
-              adresse_siege: nightData.adresseSiege,
-              nif_stat: nightData.nifStat,
-              email: nightData.email,
-              representant_nom: nightData.representantNom,
-              representant_adresse: nightData.representantAdresse,
-              representant_tel: nightData.representantTel,
-              representant_cin: nightData.representantCin,
-              representant_cin_delivree: nightData.representantCinDelivree,
-              representant_cin_lieu: nightData.representantCinLieu,
-              representant_fonction: nightData.representantFonction,
-              jauge_max: nightData.jaugeMax,
-              horaires: nightData.horaires,
-              moyens_communication: nightData.moyensCommunication,
-              a_compter_du: nightData.aCompterDu,
-              echeance: nightData.echeance,
-              confirmation_nom: nightData.confirmationNom,
-              lieu_signature: nightData.lieuSignature,
-              date_signature: nightData.dateSignature,
-              montant_mensuel: montantVal,
-              frais_dossier: fraisVal,
-              montant_total: montantVal,
-              soit_total: totalFinal,
-              uniter: uniterVal,
-              numero_dossier_utilisateur: `${userInfo.prefix || ''} ${(userInfo.compteurs?.['Night club'] || 0) + 1}/${getTrimestreFromMonth(new Date().getMonth() + 1)}/${userInfo.anneeEnCours || new Date().getFullYear()}`
-            }, 
+            usager: usagerData,
             type: 'nightclub'
           } 
         });
@@ -388,6 +447,12 @@ const NightAjout = ({ onCancel }) => {
           <div className="user-info-row">
             <FileText size={18} strokeWidth={2} />
             <span>Prochain dossier: <strong>{userDossierDisplay}</strong></span>
+          </div>
+          <div className="user-info-row" style={{ fontSize: '12px', color: '#6c757d' }}>
+            <span><BarChart size={14} strokeWidth={2} /> Total dossiers Night Club: <strong>{globalTotalCount}</strong></span>
+            <span style={{ marginLeft: '15px' }}>
+              <BarChart size={14} strokeWidth={2} /> Vos dossiers cette année: <strong>{userInfo.compteurs?.['Night club'] || 0}</strong>
+            </span>
           </div>
         </div>
 
@@ -483,6 +548,11 @@ const NightAjout = ({ onCancel }) => {
 
   const renderStep2 = () => (
     <>
+      <div className="info-banner">
+        <Info size={18} strokeWidth={2} />
+        <span>Demandeur : <strong>{nightData.demandeur || 'Non renseigné'}</strong> - Dénomination : <strong>{nightData.denomination || 'Non renseigné'}</strong></span>
+      </div>
+
       <div className="form-row">
         <div className="form-label"><h2><User size={18} strokeWidth={2} /> Nom et prénoms :</h2></div>
         <div className="form-input">
@@ -530,6 +600,11 @@ const NightAjout = ({ onCancel }) => {
 
   const renderStep3 = () => (
     <>
+      <div className="info-banner">
+        <Info size={18} strokeWidth={2} />
+        <span>Représentant : <strong>{nightData.representantNom || 'Non renseigné'}</strong> - CIN : <strong>{nightData.representantCin || 'Non renseigné'}</strong></span>
+      </div>
+
       <div className="form-row">
         <div className="form-label"><h2><UsersIcon size={18} strokeWidth={2} /> Jauge maximale :</h2></div>
         <div className="form-input">
@@ -598,18 +673,24 @@ const NightAjout = ({ onCancel }) => {
         </div>
       </div>
 
-      {/* <div className="form-row">
-        <div className="form-label"><h2><DollarSign size={18} strokeWidth={2} /> Montant mensuel :</h2></div>
-        <div className="form-input">
-          <input type="text" value={getDisplayValue(montant)} onChange={handleMontantChange} className="input-style" placeholder="Montant mensuel en Ar" />
-        </div>
-      </div> */}
+
 
       <div className="form-row">
         <div className="form-label"><h2><Hash size={18} strokeWidth={2} /> Uniter :</h2></div>
         <div className="form-input">
-          <input type="number" min="1" max="9" value={uniter} onChange={(e) => setUniter(Math.min(9, Math.max(1, parseInt(e.target.value) || 1)))} className="input-style" style={{ width: '80px' }} placeholder="1" />
-          <span style={{ marginLeft: '10px', fontSize: '14px', color: '#6c757d' }}>(1 à 9 unités)</span>
+          <input
+            type="number"
+            min="1"
+            value={uniter}
+            onChange={(e) => {
+              const val = parseInt(e.target.value);
+              setUniter(isNaN(val) || val < 1 ? 1 : val);
+            }}
+            className="input-style"
+            style={{ width: '100px' }}
+            placeholder="1"
+          />
+          <span style={{ marginLeft: '10px', fontSize: '14px', color: '#6c757d' }}>(nombre d'unités)</span>
         </div>
       </div>
 
@@ -618,7 +699,7 @@ const NightAjout = ({ onCancel }) => {
         <div className="form-input">
           <input type="text" value={getSoitTotalDisplay()} readOnly className="input-style total-field" />
           <span style={{ marginLeft: '10px', fontSize: '12px', color: '#6c757d' }}>
-            (Montant × Uniter + Frais de dossier)
+            (Montant + Moyens comm.) × Uniter + Frais
           </span>
         </div>
       </div>
@@ -666,12 +747,35 @@ const NightAjout = ({ onCancel }) => {
     const currentTrimestre = getTrimestreFromMonth(currentMonth);
     const userDossierDisplay = `${userInfo.prefix || ''} ${nextCompteur}/${currentTrimestre}/${userInfo.anneeEnCours || new Date().getFullYear()}`;
 
+    const fraisVal = parseFloat(fraisDossier) || 0;
+    const montantVal = parseFloat(montant) || 0;
+    const uniterVal = parseInt(uniter) || 1;
+
+    let totalMoyens = 0;
+    if (nightData.moyensCommunication.radio.actif) {
+      totalMoyens += parseInt(nightData.moyensCommunication.radio.taux) || 0;
+    }
+    if (nightData.moyensCommunication.lecteur.actif) {
+      totalMoyens += parseInt(nightData.moyensCommunication.lecteur.taux) || 0;
+    }
+    if (nightData.moyensCommunication.tv.actif) {
+      totalMoyens += parseInt(nightData.moyensCommunication.tv.taux) || 0;
+    }
+    if (nightData.moyensCommunication.autres.actif) {
+      totalMoyens += parseInt(nightData.moyensCommunication.autres.taux) || 0;
+    }
+
+    const totalCalcule = (montantVal + totalMoyens) * uniterVal;
+    const totalFinal = totalCalcule + fraisVal;
+
     return (
       <div className="recap-container">
         <h3><CheckCircle size={20} strokeWidth={2} /> RÉCAPITULATIF - NIGHT CLUB</h3>
         <div className="user-info-recap">
           <p><Users size={16} strokeWidth={2} /> Utilisateur: <strong>{userInfo.nom}</strong> ({userInfo.prefix})</p>
           <p><FileText size={16} strokeWidth={2} /> Prochain dossier: <strong>{userDossierDisplay}</strong></p>
+          <p><BarChart size={16} strokeWidth={2} /> Total dossiers Night Club: <strong>{globalTotalCount}</strong></p>
+          <p><BarChart size={16} strokeWidth={2} /> Vos dossiers cette année: <strong>{userInfo.compteurs?.['Night club'] || 0}</strong></p>
         </div>
         <table className="recap-table">
           <tbody>
@@ -680,14 +784,17 @@ const NightAjout = ({ onCancel }) => {
             <tr><td><MapPin size={16} strokeWidth={2} /> Région</td><td>{nightData.region || '-'}</td></tr>
             <tr><td><UsersIcon size={16} strokeWidth={2} /> Jauge max</td><td>{nightData.jaugeMax || '0'}</td></tr>
             <tr><td><Clock size={16} strokeWidth={2} /> Horaires</td><td>{nightData.horaires || '-'}</td></tr>
-            <tr><td><FileText size={16} strokeWidth={2} /> Frais de dossier</td><td>{formatNumber(fraisDossier || 0)} Ar <span style={{ color: '#6c757d', fontSize: '12px' }}>(fixe)</span></td></tr>
-            <tr><td><DollarSign size={16} strokeWidth={2} /> Montant mensuel</td><td>{formatNumber(montant || 0)} Ar/mois</td></tr>
+            <tr><td><FileText size={16} strokeWidth={2} /> Frais de dossier</td><td>{formatNumber(fraisVal)} Ar <span style={{ color: '#6c757d', fontSize: '12px' }}>(fixe)</span></td></tr>
+            <tr><td><DollarSign size={16} strokeWidth={2} /> Montant mensuel</td><td>{formatNumber(montantVal)} Ar/mois</td></tr>
             <tr><td><Radio size={16} strokeWidth={2} /> Radio - Poste TSF</td><td>{nightData.moyensCommunication.radio.actif ? formatNumber(nightData.moyensCommunication.radio.taux || 0) + ' Ar/an' : 'Non actif'}</td></tr>
             <tr><td><Headphones size={16} strokeWidth={2} /> Lecteur</td><td>{nightData.moyensCommunication.lecteur.actif ? formatNumber(nightData.moyensCommunication.lecteur.taux || 0) + ' Ar/an' : 'Non actif'}</td></tr>
             <tr><td><Tv size={16} strokeWidth={2} /> TV</td><td>{nightData.moyensCommunication.tv.actif ? formatNumber(nightData.moyensCommunication.tv.taux || 0) + ' Ar/an' : 'Non actif'}</td></tr>
             <tr><td><MoreHorizontal size={16} strokeWidth={2} /> Autres</td><td>{nightData.moyensCommunication.autres.actif ? formatNumber(nightData.moyensCommunication.autres.taux || 0) + ' Ar/an' : 'Non actif'}</td></tr>
-            <tr><td><Hash size={16} strokeWidth={2} /> Uniter</td><td>{uniter}</td></tr>
-            <tr><td><DollarSign size={16} strokeWidth={2} /> Soit Total</td><td><strong style={{ color: '#28a745' }}>{getSoitTotalDisplay()}</strong></td></tr>
+            <tr><td><Hash size={16} strokeWidth={2} /> Uniter</td><td>{uniterVal}</td></tr>
+            <tr><td><DollarSign size={16} strokeWidth={2} /> Soit Total</td><td><strong style={{ color: '#28a745' }}>{formatNumber(totalFinal)} Ar</strong></td></tr>
+            <tr><td><User size={16} strokeWidth={2} /> Représentant</td><td>{nightData.representantNom || '-'}</td></tr>
+            <tr><td><CreditCard size={16} strokeWidth={2} /> CIN</td><td>{nightData.representantCin || '-'}</td></tr>
+            <tr><td><Edit size={16} strokeWidth={2} /> Signataire</td><td>{nightData.confirmationNom || '-'}</td></tr>
           </tbody>
         </table>
       </div>

@@ -26,6 +26,7 @@ const Authentification = () => {
   const [adminToken, setAdminToken] = useState(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [isVerifyingAdmin, setIsVerifyingAdmin] = useState(false);
+  const [isAdminPanelLoading, setIsAdminPanelLoading] = useState(false); // NOUVEAU
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeSection, setActiveSection] = useState('home');
@@ -78,54 +79,74 @@ const Authentification = () => {
     setShowAdminPasswordModal(true);
   };
 
-// src/pages/Authentification.jsx
-// Dans la fonction verifyAdminPassword
-
-// Dans Authentification.jsx - Fonction verifyAdminPassword
-
-const verifyAdminPassword = async () => {
-  if (!adminPasswordInput || adminPasswordInput.length !== 4) {
-    showToast('Veuillez entrer un code à 4 chiffres', 'error');
-    return;
-  }
-  
-  try {
-    // ⭐ URL CORRECTE : /api/admin/verify
-    const response = await fetch('http://localhost:3001/api/admin/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: adminPasswordInput })
-    });
-    
-    const data = await response.json();
-    console.log('📦 Réponse admin:', data);
-    
-    if (data.success) {
-      localStorage.setItem('adminToken', data.token);
-      setAdminToken(data.token);
-      
-      if (data.user) {
-        localStorage.setItem('adminUser', JSON.stringify(data.user));
-        localStorage.setItem('adminName', data.user.nom);
-        localStorage.setItem('adminEmail', data.user.email);
-        localStorage.setItem('adminRole', data.role);
-      }
-      
-      setShowAdminPasswordModal(false);
-      setAdminPasswordInput('');
-      setShowAdminPassword(false);
-      setShowAdminPanel(true);
-      
-      showToast(data.message || 'Accès autorisé ✅', 'success');
-    } else {
-      showToast(data.message || 'Mot de passe incorrect ❌', 'error');
-      setAdminPasswordInput('');
+  const verifyAdminPassword = async () => {
+    if (!adminPasswordInput || adminPasswordInput.length !== 4) {
+      showToast('Veuillez entrer un code à 4 chiffres', 'error');
+      return;
     }
-  } catch (error) {
-    console.error('❌ Erreur:', error);
-    showToast('Erreur de connexion au serveur', 'error');
-  }
-};
+    
+    setIsVerifyingAdmin(true);
+    setIsAdminPanelLoading(true); // NOUVEAU - montre l'état de chargement
+    
+    try {
+      const response = await fetch('http://localhost:3001/api/admin/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: adminPasswordInput })
+      });
+      
+      const data = await response.json();
+      console.log('📦 Réponse admin:', data);
+      
+      if (data.success) {
+        localStorage.setItem('adminToken', data.token);
+        setAdminToken(data.token);
+        
+        if (data.user) {
+          localStorage.setItem('adminUser', JSON.stringify(data.user));
+          localStorage.setItem('adminName', data.user.nom);
+          localStorage.setItem('adminEmail', data.user.email);
+          localStorage.setItem('adminRole', data.role);
+        }
+        
+        // Fermer la modale AVANT d'afficher AdminPanel
+        setShowAdminPasswordModal(false);
+        setAdminPasswordInput('');
+        setShowAdminPassword(false);
+        setIsVerifyingAdmin(false);
+        
+        showToast(data.message || 'Accès autorisé ✅', 'success');
+        
+        // Attendre un court instant pour que la modale disparaisse
+        setTimeout(() => {
+          setShowAdminPanel(true);
+          setIsAdminPanelLoading(false);
+        }, 300);
+        
+      } else {
+        showToast(data.message || 'Mot de passe incorrect ❌', 'error');
+        setAdminPasswordInput('');
+        setIsVerifyingAdmin(false);
+        setIsAdminPanelLoading(false);
+      }
+    } catch (error) {
+      console.error('❌ Erreur:', error);
+      showToast('Erreur de connexion au serveur', 'error');
+      setIsVerifyingAdmin(false);
+      setIsAdminPanelLoading(false);
+    }
+  };
+
+  // NOUVELLE FONCTION - pour gérer la fermeture propre
+  const handleCloseAdminPanel = () => {
+    setShowAdminPanel(false);
+    localStorage.removeItem('adminToken');
+    // Réinitialiser l'état pour permettre une nouvelle ouverture
+    setTimeout(() => {
+      setIsAdminPanelLoading(false);
+    }, 100);
+  };
+
   const sectionContent = {
     home: {
       title: "Bienvenue à l'OMDA",
@@ -155,6 +176,11 @@ const verifyAdminPassword = async () => {
   };
 
   const currentContent = sectionContent[activeSection] || sectionContent.home;
+
+  // Si AdminPanel est affiché, on le rend directement (sans le fond bleu)
+  if (showAdminPanel) {
+    return <AdminPanel onClose={handleCloseAdminPanel} adminToken={adminToken} />;
+  }
 
   return (
     <div className="auth-landing">
@@ -318,6 +344,7 @@ const verifyAdminPassword = async () => {
                   setShowAdminPasswordModal(false);
                   setAdminPasswordInput('');
                   setShowAdminPassword(false);
+                  setIsVerifyingAdmin(false);
                 }}
                 disabled={isVerifyingAdmin}
               >
@@ -326,16 +353,6 @@ const verifyAdminPassword = async () => {
             </div>
           </div>
         </div>
-      )}
-
-      {showAdminPanel && (
-        <AdminPanel
-          onClose={() => {
-            setShowAdminPanel(false);
-            localStorage.removeItem('adminToken');
-          }}
-          adminToken={adminToken}
-        />
       )}
     </div>
   );

@@ -35,7 +35,7 @@
      NOTIFICATION
      ============================================================ */
   .notif {
-    position: fixed;
+    position: absolute;
     top: 80px;
     right: 20px;
     padding: 14px 24px;
@@ -702,7 +702,69 @@
     opacity: 0.5;
     cursor: not-allowed;
   }
-  
+  /* ============================================================
+   ✅ 6 TYPES SUR UNE SEULE LIGNE
+   ============================================================ */
+.types-stats-6 {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+/* ✅ Carte événementielle — bleu ciel */
+.type-stat-other .type-stat-icon {
+  background: rgba(74, 158, 255, 0.1);
+  color: #357ABD;
+}
+
+.type-stat-other.active {
+  border-color: #4a9eff !important;
+  background: rgba(74, 158, 255, 0.08) !important;
+  box-shadow: 0 4px 16px rgba(74, 158, 255, 0.25) !important;
+}
+
+.type-stat-other.active .type-stat-name {
+  color: #357ABD;
+}
+
+/* ✅ Table événementiel — bleu ciel */
+.other-table {
+  font-size: 13px;
+}
+
+.other-table thead {
+  background: #eff6ff;
+}
+
+.other-table th {
+  color: #1e40af;
+  border-bottom-color: #bfdbfe;
+}
+
+.other-table tbody tr:hover {
+  background: #eff6ff;
+}
+
+/* ✅ Responsive : 6 colonnes */
+@media (max-width: 1400px) {
+  .types-stats-6 { grid-template-columns: repeat(6, 1fr); gap: 8px; }
+  .types-stats-6 .type-stat { padding: 10px 10px; min-height: 62px; }
+  .types-stats-6 .type-stat-name { font-size: 11px; }
+  .types-stats-6 .type-stat-count { font-size: 18px; }
+}
+
+@media (max-width: 1200px) {
+  .types-stats-6 { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 768px) {
+  .types-stats-6 { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 480px) {
+  .types-stats-6 { grid-template-columns: 1fr 1fr; gap: 6px; }
+}
   /* ============================================================
      RESPONSIVE - 5 colonnes sur tous les écrans
      ============================================================ */

@@ -14,7 +14,7 @@ router.get('/profile/:userId', async (req, res) => {
     console.log('📡 Récupération profil pour userId:', userId);
     
     const userResult = await pool.query(
-      `SELECT id, nom, email, role, statut, created_at, derniere_connexion
+      `SELECT id, nom, email, role, statut, prefix, created_at, derniere_connexion
        FROM utilisateurs 
        WHERE id = $1`,
       [userId]
@@ -30,15 +30,51 @@ router.get('/profile/:userId', async (req, res) => {
     const user = userResult.rows[0];
     console.log('✅ Utilisateur trouvé:', user.nom);
     
-    // ❌ SUPPRIMÉ : Statistiques qui utilisaient created_by
-    // Pour éviter l'erreur, on renvoie des statistiques vides
+    // ============================================
+    // STATISTIQUES DES DOSSIERS PAR TYPE
+    // ============================================
+    const stats = {
+      totalDossiers: 0,
+      dossiers: {}
+    };
     
+    const types = ['Hôtel', 'Grand Surface', 'Télé/Radio', 'OCC', 'Bus', 'Night club'];
+    const tables = {
+      'Hôtel': 'usagers_hotel',
+      'Grand Surface': 'usagers_magasin',
+      'Télé/Radio': 'usagers_media',
+      'OCC': 'usagers_occasionnel',
+      'Bus': 'usagers_bus',
+      'Night club': 'usagers_nightclub'
+    };
+    
+    let total = 0;
+    
+    for (const type of types) {
+      const tableName = tables[type];
+      try {
+        const result = await pool.query(
+          `SELECT COUNT(*) as count FROM ${tableName} WHERE created_by = $1`,
+          [userId]
+        );
+        const count = parseInt(result.rows[0].count) || 0;
+        stats.dossiers[type] = count;
+        total += count;
+      } catch (err) {
+        console.error(`❌ Erreur comptage ${type}:`, err.message);
+        stats.dossiers[type] = 0;
+      }
+    }
+    
+    stats.totalDossiers = total;
+    console.log(`📊 Statistiques: ${total} dossiers au total`);
+
     res.json({
       success: true,
       user: {
         ...user,
-        totalDossiers: 0,
-        dossiers: {}
+        totalDossiers: stats.totalDossiers,
+        dossiers: stats.dossiers
       }
     });
     
@@ -111,7 +147,7 @@ router.put('/profile/:userId', async (req, res) => {
     }
     
     query = query.slice(0, -2);
-    query += ` WHERE id = $${paramIndex} RETURNING id, nom, email, role, statut`;
+    query += ` WHERE id = $${paramIndex} RETURNING id, nom, email, role, statut, prefix`;
     params.push(userId);
     
     const result = await pool.query(query, params);
@@ -157,7 +193,7 @@ router.get('/profile/me', verifyAdminToken, async (req, res) => {
     }
     
     const userResult = await pool.query(
-      `SELECT id, nom, email, role, statut, created_at, derniere_connexion
+      `SELECT id, nom, email, role, statut, prefix, created_at, derniere_connexion
        FROM utilisateurs 
        WHERE id = $1`,
       [userId]
@@ -172,12 +208,39 @@ router.get('/profile/me', verifyAdminToken, async (req, res) => {
     
     const user = userResult.rows[0];
     
+    // Statistiques
+    const stats = { totalDossiers: 0, dossiers: {} };
+    const types = ['Hôtel', 'Grand Surface', 'Télé/Radio', 'OCC', 'Bus', 'Night club'];
+    const tables = {
+      'Hôtel': 'usagers_hotel',
+      'Grand Surface': 'usagers_magasin',
+      'Télé/Radio': 'usagers_media',
+      'OCC': 'usagers_occasionnel',
+      'Bus': 'usagers_bus',
+      'Night club': 'usagers_nightclub'
+    };
+    
+    let total = 0;
+    for (const type of types) {
+      try {
+        const result = await pool.query(
+          `SELECT COUNT(*) as count FROM ${tables[type]} WHERE created_by = $1`,
+          [userId]
+        );
+        const count = parseInt(result.rows[0].count) || 0;
+        stats.dossiers[type] = count;
+        total += count;
+      } catch (err) {
+        stats.dossiers[type] = 0;
+      }
+    }
+    stats.totalDossiers = total;
+    
     res.json({
       success: true,
       user: {
         ...user,
-        totalDossiers: 0,
-        dossiers: {}
+        ...stats
       }
     });
     

@@ -30,31 +30,64 @@ const getDAFName = async () => {
 // ============================================================
 // 0.1 RÉCUPÉRER LE DERNIER NUMÉRO DE QUITTANCE (PERSISTANT)
 // ============================================================
-const getLastQuittanceNumber = async () => {
+const getLastQuittanceNumber = async (client = pool) => {
   try {
-    // Récupérer le MAX de quittance dans la table facture_usager
-    const result = await pool.query(`
-      SELECT MAX(CAST(quittance AS INTEGER)) as max_quittance 
-      FROM facture_usager 
-      WHERE quittance IS NOT NULL AND quittance != '' AND quittance ~ '^[0-9]+$'
+    const tableCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'facture_usager'
+      )
     `);
     
+    if (!tableCheck.rows[0].exists) {
+      console.log('⚠️ Table facture_usager n\'existe pas encore');
+      return 0;
+    }
+
+    const columnTypeCheck = await client.query(`
+      SELECT data_type 
+      FROM information_schema.columns 
+      WHERE table_name = 'facture_usager' AND column_name = 'quittance'
+    `);
+    
+    let query = '';
+    if (columnTypeCheck.rows.length > 0) {
+      const dataType = columnTypeCheck.rows[0].data_type;
+      console.log(`📊 Type de la colonne quittance: ${dataType}`);
+      
+      if (dataType === 'integer' || dataType === 'bigint' || dataType === 'numeric') {
+        query = `
+          SELECT MAX(quittance) as max_quittance 
+          FROM facture_usager 
+          WHERE quittance IS NOT NULL AND quittance > 0
+        `;
+      } else {
+        query = `
+          SELECT MAX(CAST(quittance AS INTEGER)) as max_quittance 
+          FROM facture_usager 
+          WHERE quittance IS NOT NULL 
+            AND quittance != '' 
+            AND quittance != '0'
+            AND quittance ~ '^[0-9]+$'
+        `;
+      }
+    } else {
+      console.log('⚠️ Colonne quittance n\'existe pas');
+      return 0;
+    }
+
+    const result = await client.query(query);
+    
+    let maxQuittance = 0;
     if (result.rows.length > 0 && result.rows[0].max_quittance !== null) {
-      return parseInt(result.rows[0].max_quittance);
+      maxQuittance = parseInt(result.rows[0].max_quittance, 10);
+      console.log(`📊 Dernier numéro de quittance trouvé: ${maxQuittance}`);
+    } else {
+      console.log('⚠️ Aucun numéro de quittance existant trouvé, départ à 0');
     }
     
-    // Si aucun quittance trouvé, chercher dans paiements
-    const paiementResult = await pool.query(`
-      SELECT MAX(CAST(quittance AS INTEGER)) as max_quittance 
-      FROM paiements 
-      WHERE quittance IS NOT NULL AND quittance != '' AND quittance ~ '^[0-9]+$'
-    `);
+    return maxQuittance;
     
-    if (paiementResult.rows.length > 0 && paiementResult.rows[0].max_quittance !== null) {
-      return parseInt(paiementResult.rows[0].max_quittance);
-    }
-    
-    return 0;
   } catch (error) {
     console.error('❌ Erreur récupération dernier quittance:', error);
     return 0;
@@ -65,11 +98,12 @@ const getLastQuittanceNumber = async () => {
 // 0.2 FORMATER LE NUMÉRO DE QUITTANCE SUR 7 CHIFFRES
 // ============================================================
 const formatQuittance = (num) => {
-  return String(num).padStart(7, '0');
+  const n = parseInt(num, 10) || 0;
+  return String(n).padStart(7, '0');
 };
 
 // ============================================================
-// 0.3 EXTRACTION GÉNÉRIQUE DU MONTANT DEPUIS LA BASE
+// 0.3 EXTRACTION DU MONTANT
 // ============================================================
 const extractMontantDepuisBase = (usagerData) => {
   const candidats = [
@@ -86,7 +120,82 @@ const extractMontantDepuisBase = (usagerData) => {
 };
 
 // ============================================================
-// 1. CRÉER UNE FACTURE SIMPLE (ROUTE PRINCIPALE)
+// 0.4 GET TABLE NAME
+// ✅ AJOUT : "other" → "usager_other"
+// ============================================================
+const getTableName = (usagerType) => {
+  const mapping = {
+    'hotel': 'usagers_hotel',
+    'grand-surface': 'usagers_magasin',
+    'media': 'usagers_media',
+    'bus': 'usagers_bus',
+    'nightclub': 'usagers_nightclub',
+    'occ': 'usagers_occasionnel',
+    'other': 'usager_other'   // ✅ AJOUTÉ
+  };
+  return mapping[usagerType];
+};
+
+// ============================================================
+// 0.5 OBTENIR LES COLONNES D'UNE TABLE
+// ============================================================
+const getTableColumns = async (tableName) => {
+  try {
+    const result = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = $1
+    `, [tableName]);
+    return result.rows.map(row => row.column_name);
+  } catch (error) {
+    console.error(`❌ Erreur récupération colonnes de ${tableName}:`, error);
+    return [];
+  }
+};
+
+// ============================================================
+// 0.6 VÉRIFIER SI UNE COLONNE EXISTE
+// ============================================================
+const hasColumn = (columns, colName) => {
+  return columns.includes(colName);
+};
+
+// ============================================================
+// 0.7 ✅ NOUVEAU : GET LIGNES OTHER (table other_lignes)
+// ============================================================
+const getOtherLignes = async (usagerOtherId, client = pool) => {
+  try {
+    const result = await client.query(`
+      SELECT description, uniter, pu, montant, ordre
+      FROM other_lignes 
+      WHERE usager_other_id = $1
+      ORDER BY ordre ASC
+    `, [usagerOtherId]);
+    return result.rows;
+  } catch (error) {
+    console.error('❌ Erreur récupération other_lignes:', error);
+    return [];
+  }
+};
+
+// ============================================================
+// 0.8 ✅ NOUVEAU : TYPE MAPPING (ref_client_type)
+// ============================================================
+const getRefClientType = (usagerType) => {
+  const typeMapping = {
+    'hotel': 'HTL',
+    'grand-surface': 'MGS',
+    'media': 'RDP',
+    'bus': 'TRP',
+    'nightclub': 'NGT',
+    'occ': 'OCC',
+    'other': 'OTH'   // ✅ AJOUTÉ
+  };
+  return typeMapping[usagerType] || 'AUT';
+};
+
+// ============================================================
+// 1. CRÉER UNE FACTURE SIMPLE (TYPE A)
 // ============================================================
 router.post('/factures/creer', async (req, res) => {
   const client = await pool.connect();
@@ -94,13 +203,12 @@ router.post('/factures/creer', async (req, res) => {
     await client.query('BEGIN');
     
     console.log('📥 ROUTE /factures/creer appelée');
-    console.log('📦 Body reçu:', req.body);
     
     const { 
       usagerId, 
       usagerType, 
       userId,
-      typeFacture,
+      typeFacture = 'DAFC',
       regionUsager,
       personneRecu,
       montantMensuel: frontMontantMensuel,
@@ -108,19 +216,30 @@ router.post('/factures/creer', async (req, res) => {
       montantRetard: frontMontantRetard,
       isRetard: frontIsRetard,
       uniter: frontUniter,
-      soitTotal: frontSoitTotal
+      soitTotal: frontSoitTotal,
+      quittance: frontQuittance,
+      quittanceValidee: frontQuittanceValidee,
+      isRenouvellement: frontIsRenouvellement,
+      fraisRenouvellement: frontFraisRenouvellement,
+      isRenouvellementFacture: frontIsRenouvellementFacture,
+      fraisRenouvellementFacture: frontFraisRenouvellementFacture
     } = req.body;
 
-    // Déterminer la table selon le type
-    let tableName = '';
-    switch(usagerType) {
-      case 'hotel': tableName = 'usagers_hotel'; break;
-      case 'grand-surface': tableName = 'usagers_magasin'; break;
-      case 'media': tableName = 'usagers_media'; break;
-      case 'bus': tableName = 'usagers_bus'; break;
-      case 'nightclub': tableName = 'usagers_nightclub'; break;
-      case 'occ': tableName = 'usagers_occasionnel'; break;
-      default: throw new Error('Type d\'usager non reconnu');
+    if (!usagerId || !usagerType || !userId) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: 'Paramètres manquants: usagerId, usagerType et userId sont requis'
+      });
+    }
+
+    const tableName = getTableName(usagerType);
+    if (!tableName) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: `Type d'usager non reconnu: ${usagerType}`
+      });
     }
 
     const usagerResult = await client.query(
@@ -129,7 +248,11 @@ router.post('/factures/creer', async (req, res) => {
     );
     
     if (usagerResult.rows.length === 0) {
-      throw new Error('Usager non trouvé');
+      await client.query('ROLLBACK');
+      return res.status(404).json({
+        success: false,
+        message: 'Usager non trouvé'
+      });
     }
     const usagerData = usagerResult.rows[0];
 
@@ -138,125 +261,136 @@ router.post('/factures/creer', async (req, res) => {
     let montantRetard = frontMontantRetard || parseFloat(usagerData.montant_retard) || 0;
     let isRetard = frontIsRetard !== undefined ? frontIsRetard : (usagerData.is_retard || false);
     let uniter = frontUniter || parseInt(usagerData.uniter) || 1;
-    let soitTotal = frontSoitTotal || (montantMensuel * uniter + fraisDossier + (isRetard ? montantRetard : 0));
+    let isRenouvellement = frontIsRenouvellement !== undefined ? frontIsRenouvellement : false;
+    let fraisRenouvellement = frontFraisRenouvellement || 0;
+    let isRenouvellementFacture = frontIsRenouvellementFacture !== undefined ? frontIsRenouvellementFacture : false;
+    let fraisRenouvellementFacture = frontFraisRenouvellementFacture || 0;
+    
+    let soitTotal = frontSoitTotal || (
+      montantMensuel * uniter + 
+      fraisDossier + 
+      (isRetard ? montantRetard : 0) + 
+      (isRenouvellement ? fraisRenouvellement : 0) +
+      (isRenouvellementFacture ? fraisRenouvellementFacture : 0)
+    );
 
     const lastRefResult = await client.query(
-      `SELECT MAX(ref_omda) as max_ref FROM facture_usager`
+      `SELECT COALESCE(MAX(ref_omda), 0) as max_ref FROM facture_usager`
     );
     const newRefOmda = (lastRefResult.rows[0].max_ref || 0) + 1;
 
-    const typeMapping = {
-      'hotel': 'HTL',
-      'grand-surface': 'MGS',
-      'media': 'RDP',
-      'bus': 'TRP',
-      'nightclub': 'NGT',
-      'occ': 'OCC'
-    };
-    const refClientType = typeMapping[usagerType] || 'AUT';
+    const refClientType = getRefClientType(usagerType);   // ✅ Utilise le helper
 
-    // Récupérer le prochain numéro de quittance (PERSISTANT)
-    const lastQuittanceNum = await getLastQuittanceNumber();
-    const nextQuittanceNum = lastQuittanceNum + 1;
-    const quittanceValue = nextQuittanceNum; // Stocker en nombre
+    let nextQuittanceNum = frontQuittance || (await getLastQuittanceNumber(client) + 1);
+    console.log(`📝 Numéro de quittance utilisé: ${nextQuittanceNum}`);
+
+    const factureColumns = await getTableColumns('facture_usager');
+
+    const baseColumns = [
+      'ref_omda', 'num_facture', 'num_facture_type', 'ref_client_type',
+      'ref_usager', 'type_facture', 'region_usager', 'date_ajout',
+      'denomination', 'demandeur', 'telephone', 'email', 'adresse',
+      'representant_nom', 'representant_adresse', 'representant_tel',
+      'representant_cin', 'representant_cin_delivree', 'representant_cin_lieu',
+      'representant_fonction', 'activite', 'etoiles', 'ravinala',
+      'nombre_magasins', 'nombre_vehicules', 'lignes', 'type_bus',
+      'trajet', 'horaires', 'zones_desservies', 'jauge_max',
+      'frequence', 'canal', 'siege', 'nif', 'stat', 'taux',
+      'organisateurs', 'representant_par', 'genre_manifestation',
+      'artistes', 'date_evenement', 'lieu_evenement', 'domicile',
+      'lieu_ajout', 'date_signature', 'confirmation_nom',
+      'personne_recu', 'quittance', 'quittance_validee',
+      'moyens_communication', 'a_compter_du', 'echeance',
+      'montant_mensuel', 'frais_dossier', 'montant_retard',
+      'is_retard', 'soit_total', 'uniter',
+      'is_renouvellement', 'frais_renouvellement',
+      'is_renouvellement_facture', 'frais_renouvellement_facture',
+      'numero_dossier_utilisateur', 'numero_dossier_global',
+      'statut', 'created_by', 'mois_facture', 'annee_facture'
+    ];
+
+    const existingColumns = baseColumns.filter(col => factureColumns.includes(col));
+    const placeholders = existingColumns.map((_, index) => `$${index + 1}`).join(', ');
 
     const query = `
-      INSERT INTO facture_usager (
-        ref_omda, num_facture, num_facture_type, ref_client_type,
-        ref_usager, type_facture, region_usager, date_ajout,
-        denomination, demandeur, telephone, email, adresse,
-        representant_nom, representant_adresse, representant_tel,
-        representant_cin, representant_cin_delivree, representant_cin_lieu,
-        representant_fonction, activite, etoiles, ravinala,
-        nombre_magasins, nombre_vehicules, lignes, type_bus,
-        trajet, horaires, zones_desservies, jauge_max,
-        frequence, canal, siege, nif, stat, taux,
-        organisateurs, representant_par, genre_manifestation,
-        artistes, date_evenement, lieu_evenement, domicile,
-        lieu_ajout, date_signature, confirmation_nom,
-        personne_recu, quittance, quittance_validee,
-        moyens_communication, a_compter_du, echeance,
-        montant_mensuel, frais_dossier, montant_retard,
-        is_retard, soit_total, uniter,
-        numero_dossier_utilisateur, numero_dossier_global,
-        statut, created_by, mois_facture, annee_facture
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-        $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
-        $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35,
-        $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46,
-        $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57,
-        $58, $59, $60, $61, $62, $63, $64, $65
-      ) RETURNING id
+      INSERT INTO facture_usager (${existingColumns.join(', ')})
+      VALUES (${placeholders})
+      RETURNING id
     `;
 
-    const values = [
-      newRefOmda,
-      String(newRefOmda).padStart(4, '0'),
-      'A',
-      refClientType,
-      usagerId,
-      typeFacture || 'DAFC',
-      regionUsager || usagerData.region || '',
-      new Date().toISOString().split('T')[0],
-      usagerData.denomination || usagerData.nom_evenement || usagerData.genre_manifestation || '',
-      usagerData.demandeur || usagerData.proprietaire_nom || usagerData.organisateurs || '',
-      usagerData.telephone || '',
-      usagerData.email || '',
-      usagerData.adresse_siege || usagerData.siege || usagerData.adresse || '',
-      usagerData.representant_nom || usagerData.representant_par || '',
-      usagerData.representant_adresse || usagerData.proprietaire_adresse || '',
-      usagerData.representant_tel || usagerData.proprietaire_tel || '',
-      usagerData.representant_cin || usagerData.proprietaire_cin || '',
-      usagerData.representant_cin_delivree || usagerData.proprietaire_cin_delivree || null,
-      usagerData.representant_cin_lieu || usagerData.proprietaire_cin_lieu || '',
-      usagerData.representant_fonction || usagerData.proprietaire_fonction || '',
-      usagerData.activite || '',
-      usagerData.etoiles || '',
-      usagerData.ravinala || false,
-      usagerData.nombre_magasins || 0,
-      usagerData.nombre_vehicules || 0,
-      usagerData.lignes || '',
-      usagerData.type_bus || '',
-      usagerData.trajet || '',
-      usagerData.horaires || '',
-      usagerData.zones_desservies || '',
-      usagerData.jauge_max || 0,
-      usagerData.frequence || '',
-      usagerData.canal || '',
-      usagerData.siege || '',
-      usagerData.nif || '',
-      usagerData.stat || '',
-      usagerData.taux || 0,
-      usagerData.organisateurs || '',
-      usagerData.representant_par || '',
-      usagerData.genre_manifestation || '',
-      usagerData.artistes || '',
-      usagerData.date_evenement || null,
-      usagerData.lieu_evenement || '',
-      usagerData.domicile || usagerData.adresse || '',
-      usagerData.lieu_ajout || usagerData.lieu_signature || 'Antananarivo',
-      usagerData.date_signature || null,
-      usagerData.confirmation_nom || usagerData.demandeur || '',
-      personneRecu || '',
-      quittanceValue,
-      false,
-      usagerData.moyens_communication || null,
-      null,
-      null,
-      montantMensuel,
-      fraisDossier,
-      montantRetard,
-      isRetard,
-      soitTotal,
-      uniter,
-      usagerData.numero_dossier_utilisateur || '',
-      usagerData.numero_dossier_global || '',
-      'validee',
-      userId,
-      new Date().getMonth() + 1,
-      new Date().getFullYear()
-    ];
+    const valuesMap = {
+      ref_omda: newRefOmda,
+      num_facture: String(newRefOmda).padStart(4, '0'),
+      num_facture_type: 'A',
+      ref_client_type: refClientType,
+      ref_usager: usagerId,
+      type_facture: typeFacture,
+      region_usager: regionUsager || usagerData.region || '',
+      date_ajout: new Date().toISOString().split('T')[0],
+      denomination: usagerData.denomination || usagerData.nom_evenement || usagerData.genre_manifestation || '',
+      demandeur: usagerData.demandeur || usagerData.proprietaire_nom || usagerData.organisateurs || '',
+      telephone: usagerData.telephone || '',
+      email: usagerData.email || '',
+      adresse: usagerData.adresse_siege || usagerData.siege || usagerData.adresse || '',
+      representant_nom: usagerData.representant_nom || usagerData.representant_par || '',
+      representant_adresse: usagerData.representant_adresse || usagerData.proprietaire_adresse || '',
+      representant_tel: usagerData.representant_tel || usagerData.proprietaire_tel || '',
+      representant_cin: usagerData.representant_cin || usagerData.proprietaire_cin || '',
+      representant_cin_delivree: usagerData.representant_cin_delivree || usagerData.proprietaire_cin_delivree || null,
+      representant_cin_lieu: usagerData.representant_cin_lieu || usagerData.proprietaire_cin_lieu || '',
+      representant_fonction: usagerData.representant_fonction || usagerData.proprietaire_fonction || '',
+      activite: usagerData.activite || '',
+      etoiles: usagerData.etoiles || '',
+      ravinala: usagerData.ravinala || false,
+      nombre_magasins: usagerData.nombre_magasins || 0,
+      nombre_vehicules: usagerData.nombre_vehicules || 0,
+      lignes: usagerData.lignes || '',
+      type_bus: usagerData.type_bus || '',
+      trajet: usagerData.trajet || '',
+      horaires: usagerData.horaires || '',
+      zones_desservies: usagerData.zones_desservies || '',
+      jauge_max: usagerData.jauge_max || 0,
+      frequence: usagerData.frequence || '',
+      canal: usagerData.canal || '',
+      siege: usagerData.siege || '',
+      nif: usagerData.nif || '',
+      stat: usagerData.stat || '',
+      taux: usagerData.taux || 0,
+      organisateurs: usagerData.organisateurs || '',
+      representant_par: usagerData.representant_par || '',
+      genre_manifestation: usagerData.genre_manifestation || '',
+      artistes: usagerData.artistes || '',
+      date_evenement: usagerData.date_evenement || null,
+      lieu_evenement: usagerData.lieu_evenement || '',
+      domicile: usagerData.domicile || usagerData.adresse || '',
+      lieu_ajout: usagerData.lieu_ajout || usagerData.lieu_signature || 'Antananarivo',
+      date_signature: usagerData.date_signature || null,
+      confirmation_nom: usagerData.confirmation_nom || usagerData.demandeur || '',
+      personne_recu: personneRecu || '',
+      quittance: nextQuittanceNum,
+      quittance_validee: frontQuittanceValidee || false,
+      moyens_communication: usagerData.moyens_communication || null,
+      a_compter_du: null,
+      echeance: null,
+      montant_mensuel: montantMensuel,
+      frais_dossier: fraisDossier,
+      montant_retard: montantRetard,
+      is_retard: isRetard,
+      soit_total: soitTotal,
+      uniter: uniter,
+      is_renouvellement: isRenouvellement,
+      frais_renouvellement: fraisRenouvellement,
+      is_renouvellement_facture: isRenouvellementFacture,
+      frais_renouvellement_facture: fraisRenouvellementFacture,
+      numero_dossier_utilisateur: usagerData.numero_dossier_utilisateur || '',
+      numero_dossier_global: usagerData.numero_dossier_global || '',
+      statut: 'validee',
+      created_by: userId,
+      mois_facture: new Date().getMonth() + 1,
+      annee_facture: new Date().getFullYear()
+    };
+
+    const values = existingColumns.map(col => valuesMap[col] !== undefined ? valuesMap[col] : null);
 
     const result = await client.query(query, values);
     
@@ -264,8 +398,8 @@ router.post('/factures/creer', async (req, res) => {
     
     await client.query('COMMIT');
     
-    console.log('✅ Facture créée avec succès, ID:', result.rows[0].id);
-    console.log('📝 Quittance attribuée:', quittanceValue);
+    console.log(`✅ Facture créée avec succès, ID: ${result.rows[0].id}`);
+    console.log(`📝 Quittance attribuée: ${formatQuittance(nextQuittanceNum)} (numéro ${nextQuittanceNum})`);
 
     res.json({
       success: true,
@@ -274,16 +408,18 @@ router.post('/factures/creer', async (req, res) => {
       refOmda: newRefOmda,
       numFacture: String(newRefOmda).padStart(4, '0'),
       dafName: dafName,
-      quittance: formatQuittance(quittanceValue),
+      quittance: formatQuittance(nextQuittanceNum),
+      quittanceNumber: nextQuittanceNum,
       soitTotal: soitTotal
     });
 
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('❌ Erreur création facture:', error);
+    console.error('❌ Erreur détaillée création facture:', error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Erreur lors de la création de la facture'
+      message: 'Erreur lors de la création de la facture',
+      error: error.message
     });
   } finally {
     client.release();
@@ -291,7 +427,7 @@ router.post('/factures/creer', async (req, res) => {
 });
 
 // ============================================================
-// 2. CRÉER UNE FACTURE AVEC PAIEMENT (Type B)
+// 2. CRÉER UNE FACTURE AVEC PAIEMENT (Type B et C)
 // ============================================================
 router.post('/factures/creer-avec-paiement', async (req, res) => {
   const client = await pool.connect();
@@ -299,13 +435,12 @@ router.post('/factures/creer-avec-paiement', async (req, res) => {
     await client.query('BEGIN');
     
     console.log('📥 ROUTE /factures/creer-avec-paiement appelée');
-    console.log('📦 Body reçu:', req.body);
     
     const { 
       usagerId, 
       usagerType, 
       userId,
-      typeFacture,
+      typeFacture = 'DAFC',
       regionUsager,
       personneRecu,
       montantMensuel: frontMontantMensuel,
@@ -317,20 +452,32 @@ router.post('/factures/creer-avec-paiement', async (req, res) => {
       mois,
       annee,
       datePaiement,
-      numFactureType,
+      numFactureType = 'B',
       suffixe,
-      descriptionPersonnalisee
+      descriptionPersonnalisee,
+      quittance: frontQuittance,
+      quittanceValidee: frontQuittanceValidee,
+      isRenouvellement: frontIsRenouvellement,
+      fraisRenouvellement: frontFraisRenouvellement,
+      isRenouvellementFacture: frontIsRenouvellementFacture,
+      fraisRenouvellementFacture: frontFraisRenouvellementFacture
     } = req.body;
 
-    let tableName = '';
-    switch(usagerType) {
-      case 'hotel': tableName = 'usagers_hotel'; break;
-      case 'grand-surface': tableName = 'usagers_magasin'; break;
-      case 'media': tableName = 'usagers_media'; break;
-      case 'bus': tableName = 'usagers_bus'; break;
-      case 'nightclub': tableName = 'usagers_nightclub'; break;
-      case 'occ': tableName = 'usagers_occasionnel'; break;
-      default: throw new Error('Type d\'usager non reconnu');
+    if (!usagerId || !usagerType || !userId) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: 'Paramètres manquants: usagerId, usagerType et userId sont requis'
+      });
+    }
+
+    const tableName = getTableName(usagerType);
+    if (!tableName) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: `Type d'usager non reconnu: ${usagerType}`
+      });
     }
 
     const usagerResult = await client.query(
@@ -339,142 +486,178 @@ router.post('/factures/creer-avec-paiement', async (req, res) => {
     );
     
     if (usagerResult.rows.length === 0) {
-      throw new Error('Usager non trouvé');
+      await client.query('ROLLBACK');
+      return res.status(404).json({
+        success: false,
+        message: 'Usager non trouvé'
+      });
     }
     const usagerData = usagerResult.rows[0];
+
+    // ✅ NOUVEAU : Pour "other", récupérer les lignes
+    let otherLignes = [];
+    if (usagerType === 'other') {
+      otherLignes = await getOtherLignes(usagerId, client);
+      console.log(`📋 ${otherLignes.length} lignes other récupérées`);
+    }
 
     let montantMensuel = frontMontantMensuel || extractMontantDepuisBase(usagerData) || 0;
     let fraisDossier = frontFraisDossier || parseFloat(usagerData.frais_dossier) || 0;
     let montantRetard = frontMontantRetard || parseFloat(usagerData.montant_retard) || 0;
     let isRetard = frontIsRetard !== undefined ? frontIsRetard : (usagerData.is_retard || false);
     let uniter = frontUniter || parseInt(usagerData.uniter) || 1;
-    let soitTotal = frontSoitTotal || (montantMensuel * uniter + fraisDossier + (isRetard ? montantRetard : 0));
+    let isRenouvellement = frontIsRenouvellement !== undefined ? frontIsRenouvellement : false;
+    let fraisRenouvellement = frontFraisRenouvellement || 0;
+    let isRenouvellementFacture = frontIsRenouvellementFacture !== undefined ? frontIsRenouvellementFacture : false;
+    let fraisRenouvellementFacture = frontFraisRenouvellementFacture || 0;
+    
+    let soitTotal = frontSoitTotal || (
+      montantMensuel * uniter + 
+      fraisDossier + 
+      (isRetard ? montantRetard : 0) + 
+      (isRenouvellement ? fraisRenouvellement : 0) +
+      (isRenouvellementFacture ? fraisRenouvellementFacture : 0)
+    );
 
     const lastRefResult = await client.query(
-      `SELECT MAX(ref_omda) as max_ref FROM facture_usager`
+      `SELECT COALESCE(MAX(ref_omda), 0) as max_ref FROM facture_usager`
     );
     const newRefOmda = (lastRefResult.rows[0].max_ref || 0) + 1;
 
-    const typeMapping = {
-      'hotel': 'HTL',
-      'grand-surface': 'MGS',
-      'media': 'RDP',
-      'bus': 'TRP',
-      'nightclub': 'NGT',
-      'occ': 'OCC'
-    };
-    const refClientType = typeMapping[usagerType] || 'AUT';
+    const refClientType = getRefClientType(usagerType);   // ✅ Utilise le helper
 
-    // Récupérer le prochain numéro de quittance (PERSISTANT)
-    const lastQuittanceNum = await getLastQuittanceNumber();
-    const nextQuittanceNum = lastQuittanceNum + 1;
-    const quittanceValue = nextQuittanceNum;
+    let nextQuittanceNum = frontQuittance || (await getLastQuittanceNumber(client) + 1);
+    console.log(`📝 Numéro de quittance utilisé pour cette facture ${numFactureType}: ${nextQuittanceNum}`);
 
     let numFactureDisplay = String(newRefOmda).padStart(4, '0');
     if (suffixe) {
       numFactureDisplay = `${numFactureDisplay}-${suffixe}`;
     }
 
+    const factureColumns = await getTableColumns('facture_usager');
+    
+    const baseColumns = [
+      'ref_omda', 'num_facture', 'num_facture_type', 'ref_client_type',
+      'ref_usager', 'type_facture', 'region_usager', 'date_ajout',
+      'denomination', 'demandeur', 'telephone', 'email', 'adresse',
+      'representant_nom', 'representant_adresse', 'representant_tel',
+      'representant_cin', 'representant_cin_delivree', 'representant_cin_lieu',
+      'representant_fonction', 'activite', 'etoiles', 'ravinala',
+      'nombre_magasins', 'nombre_vehicules', 'lignes', 'type_bus',
+      'trajet', 'horaires', 'zones_desservies', 'jauge_max',
+      'frequence', 'canal', 'siege', 'nif', 'stat', 'taux',
+      'organisateurs', 'representant_par', 'genre_manifestation',
+      'artistes', 'date_evenement', 'lieu_evenement', 'domicile',
+      'lieu_ajout', 'date_signature', 'confirmation_nom',
+      'personne_recu', 'quittance', 'quittance_validee',
+      'moyens_communication', 'a_compter_du', 'echeance',
+      'montant_mensuel', 'frais_dossier', 'montant_retard',
+      'is_retard', 'soit_total', 'uniter',
+      'is_renouvellement', 'frais_renouvellement',
+      'is_renouvellement_facture', 'frais_renouvellement_facture',
+      'numero_dossier_utilisateur', 'numero_dossier_global',
+      'statut', 'created_by', 'mois_facture', 'annee_facture'
+    ];
+
+    const optionalColumns = ['suffixe', 'description_personnalisee'];
+    const allColumns = [...baseColumns];
+    optionalColumns.forEach(col => {
+      if (factureColumns.includes(col)) {
+        allColumns.push(col);
+      }
+    });
+
+    const placeholders = allColumns.map((_, index) => `$${index + 1}`).join(', ');
+
     const query = `
-      INSERT INTO facture_usager (
-        ref_omda, num_facture, num_facture_type, ref_client_type,
-        ref_usager, type_facture, region_usager, date_ajout,
-        denomination, demandeur, telephone, email, adresse,
-        representant_nom, representant_adresse, representant_tel,
-        representant_cin, representant_cin_delivree, representant_cin_lieu,
-        representant_fonction, activite, etoiles, ravinala,
-        nombre_magasins, nombre_vehicules, lignes, type_bus,
-        trajet, horaires, zones_desservies, jauge_max,
-        frequence, canal, siege, nif, stat, taux,
-        organisateurs, representant_par, genre_manifestation,
-        artistes, date_evenement, lieu_evenement, domicile,
-        lieu_ajout, date_signature, confirmation_nom,
-        personne_recu, quittance, quittance_validee,
-        moyens_communication, a_compter_du, echeance,
-        montant_mensuel, frais_dossier, montant_retard,
-        is_retard, soit_total, uniter,
-        numero_dossier_utilisateur, numero_dossier_global,
-        statut, created_by, mois_facture, annee_facture,
-        suffixe, description_personnalisee
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-        $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
-        $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35,
-        $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46,
-        $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57,
-        $58, $59, $60, $61, $62, $63, $64, $65, $66, $67
-      ) RETURNING id
+      INSERT INTO facture_usager (${allColumns.join(', ')})
+      VALUES (${placeholders})
+      RETURNING id
     `;
 
-    const values = [
-      newRefOmda,
-      numFactureDisplay,
-      numFactureType || 'B',
-      refClientType,
-      usagerId,
-      typeFacture || 'DAFC',
-      regionUsager || usagerData.region || '',
-      new Date().toISOString().split('T')[0],
-      usagerData.denomination || usagerData.nom_evenement || usagerData.genre_manifestation || '',
-      usagerData.demandeur || usagerData.proprietaire_nom || usagerData.organisateurs || '',
-      usagerData.telephone || '',
-      usagerData.email || '',
-      usagerData.adresse_siege || usagerData.siege || usagerData.adresse || '',
-      usagerData.representant_nom || usagerData.representant_par || '',
-      usagerData.representant_adresse || usagerData.proprietaire_adresse || '',
-      usagerData.representant_tel || usagerData.proprietaire_tel || '',
-      usagerData.representant_cin || usagerData.proprietaire_cin || '',
-      usagerData.representant_cin_delivree || usagerData.proprietaire_cin_delivree || null,
-      usagerData.representant_cin_lieu || usagerData.proprietaire_cin_lieu || '',
-      usagerData.representant_fonction || usagerData.proprietaire_fonction || '',
-      usagerData.activite || '',
-      usagerData.etoiles || '',
-      usagerData.ravinala || false,
-      usagerData.nombre_magasins || 0,
-      usagerData.nombre_vehicules || 0,
-      usagerData.lignes || '',
-      usagerData.type_bus || '',
-      usagerData.trajet || '',
-      usagerData.horaires || '',
-      usagerData.zones_desservies || '',
-      usagerData.jauge_max || 0,
-      usagerData.frequence || '',
-      usagerData.canal || '',
-      usagerData.siege || '',
-      usagerData.nif || '',
-      usagerData.stat || '',
-      usagerData.taux || 0,
-      usagerData.organisateurs || '',
-      usagerData.representant_par || '',
-      usagerData.genre_manifestation || '',
-      usagerData.artistes || '',
-      usagerData.date_evenement || null,
-      usagerData.lieu_evenement || '',
-      usagerData.domicile || usagerData.adresse || '',
-      usagerData.lieu_ajout || usagerData.lieu_signature || 'Antananarivo',
-      usagerData.date_signature || null,
-      usagerData.confirmation_nom || usagerData.demandeur || '',
-      personneRecu || '',
-      quittanceValue,
-      false,
-      usagerData.moyens_communication || null,
-      datePaiement || new Date().toISOString().split('T')[0],
-      null,
-      montantMensuel,
-      fraisDossier,
-      montantRetard,
-      isRetard,
-      soitTotal,
-      uniter,
-      usagerData.numero_dossier_utilisateur || '',
-      usagerData.numero_dossier_global || '',
-      'validee',
-      userId,
-      mois,
-      annee,
-      suffixe || '',
-      descriptionPersonnalisee || null // 🔥 null si pas de description personnalisée
-    ];
+    // ✅ NOUVEAU : description_personnalisee auto pour "other" (lignes concaténées)
+    let descPersoFinale = descriptionPersonnalisee || null;
+    if (usagerType === 'other' && otherLignes.length > 0 && !descPersoFinale) {
+      descPersoFinale = otherLignes.map(l =>
+        `${l.description} (U:${l.uniter} × ${parseFloat(l.pu).toLocaleString()} Ar = ${parseFloat(l.montant).toLocaleString()} Ar)`
+      ).join('\n');
+    }
+
+    const valuesMap = {
+      ref_omda: newRefOmda,
+      num_facture: numFactureDisplay,
+      num_facture_type: numFactureType,
+      ref_client_type: refClientType,
+      ref_usager: usagerId,
+      type_facture: typeFacture,
+      region_usager: regionUsager || usagerData.region || '',
+      date_ajout: new Date().toISOString().split('T')[0],
+      denomination: usagerData.denomination || usagerData.nom_evenement || usagerData.genre_manifestation || '',
+      demandeur: usagerData.demandeur || usagerData.proprietaire_nom || usagerData.organisateurs || '',
+      telephone: usagerData.telephone || '',
+      email: usagerData.email || '',
+      adresse: usagerData.adresse_siege || usagerData.siege || usagerData.adresse || '',
+      representant_nom: usagerData.representant_nom || usagerData.representant_par || '',
+      representant_adresse: usagerData.representant_adresse || usagerData.proprietaire_adresse || '',
+      representant_tel: usagerData.representant_tel || usagerData.proprietaire_tel || '',
+      representant_cin: usagerData.representant_cin || usagerData.proprietaire_cin || '',
+      representant_cin_delivree: usagerData.representant_cin_delivree || usagerData.proprietaire_cin_delivree || null,
+      representant_cin_lieu: usagerData.representant_cin_lieu || usagerData.proprietaire_cin_lieu || '',
+      representant_fonction: usagerData.representant_fonction || usagerData.proprietaire_fonction || '',
+      activite: usagerData.activite || '',
+      etoiles: usagerData.etoiles || '',
+      ravinala: usagerData.ravinala || false,
+      nombre_magasins: usagerData.nombre_magasins || 0,
+      nombre_vehicules: usagerData.nombre_vehicules || 0,
+      lignes: usagerData.lignes || '',
+      type_bus: usagerData.type_bus || '',
+      trajet: usagerData.trajet || '',
+      horaires: usagerData.horaires || '',
+      zones_desservies: usagerData.zones_desservies || '',
+      jauge_max: usagerData.jauge_max || 0,
+      frequence: usagerData.frequence || '',
+      canal: usagerData.canal || '',
+      siege: usagerData.siege || '',
+      nif: usagerData.nif || '',
+      stat: usagerData.stat || '',
+      taux: usagerData.taux || 0,
+      organisateurs: usagerData.organisateurs || '',
+      representant_par: usagerData.representant_par || '',
+      genre_manifestation: usagerData.genre_manifestation || '',
+      artistes: usagerData.artistes || '',
+      date_evenement: usagerData.date_evenement || null,
+      lieu_evenement: usagerData.lieu_evenement || '',
+      domicile: usagerData.domicile || usagerData.adresse || '',
+      lieu_ajout: usagerData.lieu_ajout || usagerData.lieu_signature || 'Antananarivo',
+      date_signature: usagerData.date_signature || null,
+      confirmation_nom: usagerData.confirmation_nom || usagerData.demandeur || '',
+      personne_recu: personneRecu || '',
+      quittance: nextQuittanceNum,
+      quittance_validee: frontQuittanceValidee || false,
+      moyens_communication: usagerData.moyens_communication || null,
+      a_compter_du: datePaiement || new Date().toISOString().split('T')[0],
+      echeance: null,
+      montant_mensuel: montantMensuel,
+      frais_dossier: fraisDossier,
+      montant_retard: montantRetard,
+      is_retard: isRetard,
+      soit_total: soitTotal,
+      uniter: uniter,
+      is_renouvellement: isRenouvellement,
+      frais_renouvellement: fraisRenouvellement,
+      is_renouvellement_facture: isRenouvellementFacture,
+      frais_renouvellement_facture: fraisRenouvellementFacture,
+      numero_dossier_utilisateur: usagerData.numero_dossier_utilisateur || '',
+      numero_dossier_global: usagerData.numero_dossier_global || '',
+      statut: 'validee',
+      created_by: userId,
+      mois_facture: mois || new Date().getMonth() + 1,
+      annee_facture: annee || new Date().getFullYear(),
+      suffixe: suffixe || '',
+      description_personnalisee: descPersoFinale
+    };
+
+    const values = allColumns.map(col => valuesMap[col] !== undefined ? valuesMap[col] : null);
 
     const result = await client.query(query, values);
     
@@ -482,8 +665,8 @@ router.post('/factures/creer-avec-paiement', async (req, res) => {
     
     await client.query('COMMIT');
     
-    console.log('✅ Facture avec paiement créée avec succès, ID:', result.rows[0].id);
-    console.log('📝 Quittance attribuée:', quittanceValue);
+    console.log(`✅ Facture ${numFactureType} créée avec succès, ID: ${result.rows[0].id}`);
+    console.log(`📝 Quittance attribuée: ${formatQuittance(nextQuittanceNum)} (numéro ${nextQuittanceNum})`);
 
     res.json({
       success: true,
@@ -492,18 +675,21 @@ router.post('/factures/creer-avec-paiement', async (req, res) => {
       refOmda: newRefOmda,
       numFacture: numFactureDisplay,
       dafName: dafName,
-      quittance: formatQuittance(quittanceValue),
+      quittance: formatQuittance(nextQuittanceNum),
+      quittanceNumber: nextQuittanceNum,
       mois: mois,
       annee: annee,
-      soitTotal: soitTotal
+      soitTotal: soitTotal,
+      lignes: otherLignes   // ✅ Retourner les lignes
     });
 
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('❌ Erreur création facture avec paiement:', error);
+    console.error('❌ Erreur détaillée création facture avec paiement:', error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Erreur lors de la création de la facture avec paiement'
+      message: 'Erreur lors de la création de la facture avec paiement',
+      error: error.message
     });
   } finally {
     client.release();
@@ -511,7 +697,7 @@ router.post('/factures/creer-avec-paiement', async (req, res) => {
 });
 
 // ============================================================
-// 3. CRÉER UNE FACTURE GROUPÉE (TYPE A)
+// 3. CRÉER UNE FACTURE GROUPÉE (Type A groupé)
 // ============================================================
 router.post('/factures/creer-avec-paiement-groupe', async (req, res) => {
   const client = await pool.connect();
@@ -519,13 +705,12 @@ router.post('/factures/creer-avec-paiement-groupe', async (req, res) => {
     await client.query('BEGIN');
     
     console.log('📥 ROUTE /factures/creer-avec-paiement-groupe appelée');
-    console.log('📦 Body reçu:', req.body);
     
     const { 
       usagerId, 
       usagerType, 
       userId,
-      typeFacture,
+      typeFacture = 'DAFC',
       regionUsager,
       personneRecu,
       montantMensuel: frontMontantMensuel,
@@ -537,20 +722,32 @@ router.post('/factures/creer-avec-paiement-groupe', async (req, res) => {
       mois: moisGroupes,
       annee,
       datePaiement,
-      numFactureType,
+      numFactureType = 'A',
       typeGroupe,
-      descriptionPersonnalisee
+      descriptionPersonnalisee,
+      quittance: frontQuittance,
+      quittanceValidee: frontQuittanceValidee,
+      isRenouvellement: frontIsRenouvellement,
+      fraisRenouvellement: frontFraisRenouvellement,
+      isRenouvellementFacture: frontIsRenouvellementFacture,
+      fraisRenouvellementFacture: frontFraisRenouvellementFacture
     } = req.body;
 
-    let tableName = '';
-    switch(usagerType) {
-      case 'hotel': tableName = 'usagers_hotel'; break;
-      case 'grand-surface': tableName = 'usagers_magasin'; break;
-      case 'media': tableName = 'usagers_media'; break;
-      case 'bus': tableName = 'usagers_bus'; break;
-      case 'nightclub': tableName = 'usagers_nightclub'; break;
-      case 'occ': tableName = 'usagers_occasionnel'; break;
-      default: throw new Error('Type d\'usager non reconnu');
+    if (!usagerId || !usagerType || !userId) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: 'Paramètres manquants: usagerId, usagerType et userId sont requis'
+      });
+    }
+
+    const tableName = getTableName(usagerType);
+    if (!tableName) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: `Type d'usager non reconnu: ${usagerType}`
+      });
     }
 
     const usagerResult = await client.query(
@@ -559,142 +756,178 @@ router.post('/factures/creer-avec-paiement-groupe', async (req, res) => {
     );
     
     if (usagerResult.rows.length === 0) {
-      throw new Error('Usager non trouvé');
+      await client.query('ROLLBACK');
+      return res.status(404).json({
+        success: false,
+        message: 'Usager non trouvé'
+      });
     }
     const usagerData = usagerResult.rows[0];
+
+    // ✅ NOUVEAU : Pour "other", récupérer les lignes
+    let otherLignes = [];
+    if (usagerType === 'other') {
+      otherLignes = await getOtherLignes(usagerId, client);
+      console.log(`📋 ${otherLignes.length} lignes other récupérées`);
+    }
 
     let montantMensuel = frontMontantMensuel || extractMontantDepuisBase(usagerData) || 0;
     let fraisDossier = frontFraisDossier || parseFloat(usagerData.frais_dossier) || 0;
     let montantRetard = frontMontantRetard || parseFloat(usagerData.montant_retard) || 0;
     let isRetard = frontIsRetard !== undefined ? frontIsRetard : (usagerData.is_retard || false);
     let uniter = frontUniter || parseInt(usagerData.uniter) || 1;
+    let isRenouvellement = frontIsRenouvellement !== undefined ? frontIsRenouvellement : false;
+    let fraisRenouvellement = frontFraisRenouvellement || 0;
+    let isRenouvellementFacture = frontIsRenouvellementFacture !== undefined ? frontIsRenouvellementFacture : false;
+    let fraisRenouvellementFacture = frontFraisRenouvellementFacture || 0;
     const nbMois = moisGroupes ? moisGroupes.length : 1;
-    let soitTotal = frontSoitTotal || (montantMensuel * uniter * nbMois + fraisDossier + (isRetard ? montantRetard : 0));
+    
+    let soitTotal = frontSoitTotal || (
+      montantMensuel * uniter * nbMois + 
+      fraisDossier + 
+      (isRetard ? montantRetard : 0) + 
+      (isRenouvellement ? fraisRenouvellement : 0) +
+      (isRenouvellementFacture ? fraisRenouvellementFacture : 0)
+    );
 
     const lastRefResult = await client.query(
-      `SELECT MAX(ref_omda) as max_ref FROM facture_usager`
+      `SELECT COALESCE(MAX(ref_omda), 0) as max_ref FROM facture_usager`
     );
     const newRefOmda = (lastRefResult.rows[0].max_ref || 0) + 1;
 
-    const typeMapping = {
-      'hotel': 'HTL',
-      'grand-surface': 'MGS',
-      'media': 'RDP',
-      'bus': 'TRP',
-      'nightclub': 'NGT',
-      'occ': 'OCC'
-    };
-    const refClientType = typeMapping[usagerType] || 'AUT';
+    const refClientType = getRefClientType(usagerType);   // ✅ Utilise le helper
 
-    // Récupérer le prochain numéro de quittance (PERSISTANT)
-    const lastQuittanceNum = await getLastQuittanceNumber();
-    const nextQuittanceNum = lastQuittanceNum + 1;
-    const quittanceValue = nextQuittanceNum;
+    let nextQuittanceNum = frontQuittance || (await getLastQuittanceNumber(client) + 1);
+    console.log(`📝 Numéro de quittance utilisé pour cette facture groupée: ${nextQuittanceNum}`);
 
     const moisGroupesStr = moisGroupes ? moisGroupes.join(',') : null;
     const premierMois = moisGroupes && moisGroupes.length > 0 ? moisGroupes[0] : 1;
 
+    const factureColumns = await getTableColumns('facture_usager');
+    
+    const baseColumns = [
+      'ref_omda', 'num_facture', 'num_facture_type', 'ref_client_type',
+      'ref_usager', 'type_facture', 'region_usager', 'date_ajout',
+      'denomination', 'demandeur', 'telephone', 'email', 'adresse',
+      'representant_nom', 'representant_adresse', 'representant_tel',
+      'representant_cin', 'representant_cin_delivree', 'representant_cin_lieu',
+      'representant_fonction', 'activite', 'etoiles', 'ravinala',
+      'nombre_magasins', 'nombre_vehicules', 'lignes', 'type_bus',
+      'trajet', 'horaires', 'zones_desservies', 'jauge_max',
+      'frequence', 'canal', 'siege', 'nif', 'stat', 'taux',
+      'organisateurs', 'representant_par', 'genre_manifestation',
+      'artistes', 'date_evenement', 'lieu_evenement', 'domicile',
+      'lieu_ajout', 'date_signature', 'confirmation_nom',
+      'personne_recu', 'quittance', 'quittance_validee',
+      'moyens_communication', 'a_compter_du', 'echeance',
+      'montant_mensuel', 'frais_dossier', 'montant_retard',
+      'is_retard', 'soit_total', 'uniter',
+      'is_renouvellement', 'frais_renouvellement',
+      'is_renouvellement_facture', 'frais_renouvellement_facture',
+      'numero_dossier_utilisateur', 'numero_dossier_global',
+      'statut', 'created_by', 'annee_facture', 'mois_facture'
+    ];
+
+    const optionalColumns = ['mois_groupes', 'type_groupe', 'description_personnalisee'];
+    const allColumns = [...baseColumns];
+    optionalColumns.forEach(col => {
+      if (factureColumns.includes(col)) {
+        allColumns.push(col);
+      }
+    });
+
+    const placeholders = allColumns.map((_, index) => `$${index + 1}`).join(', ');
+
     const query = `
-      INSERT INTO facture_usager (
-        ref_omda, num_facture, num_facture_type, ref_client_type,
-        ref_usager, type_facture, region_usager, date_ajout,
-        denomination, demandeur, telephone, email, adresse,
-        representant_nom, representant_adresse, representant_tel,
-        representant_cin, representant_cin_delivree, representant_cin_lieu,
-        representant_fonction, activite, etoiles, ravinala,
-        nombre_magasins, nombre_vehicules, lignes, type_bus,
-        trajet, horaires, zones_desservies, jauge_max,
-        frequence, canal, siege, nif, stat, taux,
-        organisateurs, representant_par, genre_manifestation,
-        artistes, date_evenement, lieu_evenement, domicile,
-        lieu_ajout, date_signature, confirmation_nom,
-        personne_recu, quittance, quittance_validee,
-        moyens_communication, a_compter_du, echeance,
-        montant_mensuel, frais_dossier, montant_retard,
-        is_retard, soit_total, uniter,
-        numero_dossier_utilisateur, numero_dossier_global,
-        statut, created_by, annee_facture, mois_facture,
-        mois_groupes, type_groupe, description_personnalisee
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-        $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
-        $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35,
-        $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46,
-        $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57,
-        $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68
-      ) RETURNING id
+      INSERT INTO facture_usager (${allColumns.join(', ')})
+      VALUES (${placeholders})
+      RETURNING id
     `;
 
-    const values = [
-      newRefOmda,
-      String(newRefOmda).padStart(4, '0'),
-      numFactureType || 'A',
-      refClientType,
-      usagerId,
-      typeFacture || 'DAFC',
-      regionUsager || usagerData.region || '',
-      new Date().toISOString().split('T')[0],
-      usagerData.denomination || usagerData.nom_evenement || usagerData.genre_manifestation || '',
-      usagerData.demandeur || usagerData.proprietaire_nom || usagerData.organisateurs || '',
-      usagerData.telephone || '',
-      usagerData.email || '',
-      usagerData.adresse_siege || usagerData.siege || usagerData.adresse || '',
-      usagerData.representant_nom || usagerData.representant_par || '',
-      usagerData.representant_adresse || usagerData.proprietaire_adresse || '',
-      usagerData.representant_tel || usagerData.proprietaire_tel || '',
-      usagerData.representant_cin || usagerData.proprietaire_cin || '',
-      usagerData.representant_cin_delivree || usagerData.proprietaire_cin_delivree || null,
-      usagerData.representant_cin_lieu || usagerData.proprietaire_cin_lieu || '',
-      usagerData.representant_fonction || usagerData.proprietaire_fonction || '',
-      usagerData.activite || '',
-      usagerData.etoiles || '',
-      usagerData.ravinala || false,
-      usagerData.nombre_magasins || 0,
-      usagerData.nombre_vehicules || 0,
-      usagerData.lignes || '',
-      usagerData.type_bus || '',
-      usagerData.trajet || '',
-      usagerData.horaires || '',
-      usagerData.zones_desservies || '',
-      usagerData.jauge_max || 0,
-      usagerData.frequence || '',
-      usagerData.canal || '',
-      usagerData.siege || '',
-      usagerData.nif || '',
-      usagerData.stat || '',
-      usagerData.taux || 0,
-      usagerData.organisateurs || '',
-      usagerData.representant_par || '',
-      usagerData.genre_manifestation || '',
-      usagerData.artistes || '',
-      usagerData.date_evenement || null,
-      usagerData.lieu_evenement || '',
-      usagerData.domicile || usagerData.adresse || '',
-      usagerData.lieu_ajout || usagerData.lieu_signature || 'Antananarivo',
-      usagerData.date_signature || null,
-      usagerData.confirmation_nom || usagerData.demandeur || '',
-      personneRecu || '',
-      quittanceValue,
-      false,
-      usagerData.moyens_communication || null,
-      datePaiement || new Date().toISOString().split('T')[0],
-      null,
-      montantMensuel,
-      fraisDossier,
-      montantRetard,
-      isRetard,
-      soitTotal,
-      uniter,
-      usagerData.numero_dossier_utilisateur || '',
-      usagerData.numero_dossier_global || '',
-      'validee',
-      userId,
-      annee,
-      premierMois,
-      moisGroupesStr,
-      typeGroupe || 'A',
-      descriptionPersonnalisee || null // 🔥 null si pas de description personnalisée
-    ];
+    // ✅ NOUVEAU : description_personnalisee auto pour "other"
+    let descPersoFinale = descriptionPersonnalisee || null;
+    if (usagerType === 'other' && otherLignes.length > 0 && !descPersoFinale) {
+      descPersoFinale = otherLignes.map(l =>
+        `${l.description} (U:${l.uniter} × ${parseFloat(l.pu).toLocaleString()} Ar = ${parseFloat(l.montant).toLocaleString()} Ar)`
+      ).join('\n');
+    }
+
+    const valuesMap = {
+      ref_omda: newRefOmda,
+      num_facture: String(newRefOmda).padStart(4, '0'),
+      num_facture_type: numFactureType,
+      ref_client_type: refClientType,
+      ref_usager: usagerId,
+      type_facture: typeFacture,
+      region_usager: regionUsager || usagerData.region || '',
+      date_ajout: new Date().toISOString().split('T')[0],
+      denomination: usagerData.denomination || usagerData.nom_evenement || usagerData.genre_manifestation || '',
+      demandeur: usagerData.demandeur || usagerData.proprietaire_nom || usagerData.organisateurs || '',
+      telephone: usagerData.telephone || '',
+      email: usagerData.email || '',
+      adresse: usagerData.adresse_siege || usagerData.siege || usagerData.adresse || '',
+      representant_nom: usagerData.representant_nom || usagerData.representant_par || '',
+      representant_adresse: usagerData.representant_adresse || usagerData.proprietaire_adresse || '',
+      representant_tel: usagerData.representant_tel || usagerData.proprietaire_tel || '',
+      representant_cin: usagerData.representant_cin || usagerData.proprietaire_cin || '',
+      representant_cin_delivree: usagerData.representant_cin_delivree || usagerData.proprietaire_cin_delivree || null,
+      representant_cin_lieu: usagerData.representant_cin_lieu || usagerData.proprietaire_cin_lieu || '',
+      representant_fonction: usagerData.representant_fonction || usagerData.proprietaire_fonction || '',
+      activite: usagerData.activite || '',
+      etoiles: usagerData.etoiles || '',
+      ravinala: usagerData.ravinala || false,
+      nombre_magasins: usagerData.nombre_magasins || 0,
+      nombre_vehicules: usagerData.nombre_vehicules || 0,
+      lignes: usagerData.lignes || '',
+      type_bus: usagerData.type_bus || '',
+      trajet: usagerData.trajet || '',
+      horaires: usagerData.horaires || '',
+      zones_desservies: usagerData.zones_desservies || '',
+      jauge_max: usagerData.jauge_max || 0,
+      frequence: usagerData.frequence || '',
+      canal: usagerData.canal || '',
+      siege: usagerData.siege || '',
+      nif: usagerData.nif || '',
+      stat: usagerData.stat || '',
+      taux: usagerData.taux || 0,
+      organisateurs: usagerData.organisateurs || '',
+      representant_par: usagerData.representant_par || '',
+      genre_manifestation: usagerData.genre_manifestation || '',
+      artistes: usagerData.artistes || '',
+      date_evenement: usagerData.date_evenement || null,
+      lieu_evenement: usagerData.lieu_evenement || '',
+      domicile: usagerData.domicile || usagerData.adresse || '',
+      lieu_ajout: usagerData.lieu_ajout || usagerData.lieu_signature || 'Antananarivo',
+      date_signature: usagerData.date_signature || null,
+      confirmation_nom: usagerData.confirmation_nom || usagerData.demandeur || '',
+      personne_recu: personneRecu || '',
+      quittance: nextQuittanceNum,
+      quittance_validee: frontQuittanceValidee || false,
+      moyens_communication: usagerData.moyens_communication || null,
+      a_compter_du: datePaiement || new Date().toISOString().split('T')[0],
+      echeance: null,
+      montant_mensuel: montantMensuel,
+      frais_dossier: fraisDossier,
+      montant_retard: montantRetard,
+      is_retard: isRetard,
+      soit_total: soitTotal,
+      uniter: uniter,
+      is_renouvellement: isRenouvellement,
+      frais_renouvellement: fraisRenouvellement,
+      is_renouvellement_facture: isRenouvellementFacture,
+      frais_renouvellement_facture: fraisRenouvellementFacture,
+      numero_dossier_utilisateur: usagerData.numero_dossier_utilisateur || '',
+      numero_dossier_global: usagerData.numero_dossier_global || '',
+      statut: 'validee',
+      created_by: userId,
+      annee_facture: annee || new Date().getFullYear(),
+      mois_facture: premierMois,
+      mois_groupes: moisGroupesStr,
+      type_groupe: typeGroupe || 'A',
+      description_personnalisee: descPersoFinale
+    };
+
+    const values = allColumns.map(col => valuesMap[col] !== undefined ? valuesMap[col] : null);
 
     const result = await client.query(query, values);
     
@@ -702,8 +935,8 @@ router.post('/factures/creer-avec-paiement-groupe', async (req, res) => {
     
     await client.query('COMMIT');
     
-    console.log('✅ Facture groupée créée avec succès, ID:', result.rows[0].id);
-    console.log('📝 Quittance attribuée:', quittanceValue);
+    console.log(`✅ Facture groupée créée avec succès, ID: ${result.rows[0].id}`);
+    console.log(`📝 Quittance attribuée: ${formatQuittance(nextQuittanceNum)} (numéro ${nextQuittanceNum})`);
 
     res.json({
       success: true,
@@ -712,17 +945,20 @@ router.post('/factures/creer-avec-paiement-groupe', async (req, res) => {
       refOmda: newRefOmda,
       numFacture: String(newRefOmda).padStart(4, '0'),
       dafName: dafName,
-      quittance: formatQuittance(quittanceValue),
+      quittance: formatQuittance(nextQuittanceNum),
+      quittanceNumber: nextQuittanceNum,
       moisGroupes: moisGroupes,
-      soitTotal: soitTotal
+      soitTotal: soitTotal,
+      lignes: otherLignes   // ✅ Retourner les lignes
     });
 
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('❌ Erreur création facture groupée:', error);
+    console.error('❌ Erreur détaillée création facture groupée:', error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Erreur lors de la création de la facture groupée'
+      message: 'Erreur lors de la création de la facture groupée',
+      error: error.message
     });
   } finally {
     client.release();
@@ -771,6 +1007,7 @@ router.get('/quittance/last', async (req, res) => {
 
 // ============================================================
 // 6. RÉCUPÉRER UNE FACTURE PAR ID
+// ✅ AJOUT : si ref_client_type === 'OTH', charger les lignes other
 // ============================================================
 router.get('/factures/:id', async (req, res) => {
   try {
@@ -787,17 +1024,23 @@ router.get('/factures/:id', async (req, res) => {
       });
     }
     
-    const dafName = await getDAFName();
-    result.rows[0].daf_nom = dafName;
+    const facture = result.rows[0];
     
-    // Formater le quittance
-    if (result.rows[0].quittance) {
-      result.rows[0].quittance = formatQuittance(result.rows[0].quittance);
+    // ✅ NOUVEAU : Charger les lignes other si c'est une facture OTH
+    if (facture.ref_client_type === 'OTH') {
+      facture.lignes_other = await getOtherLignes(facture.ref_usager);
+    }
+    
+    const dafName = await getDAFName();
+    facture.daf_nom = dafName;
+    
+    if (facture.quittance !== null && facture.quittance !== undefined) {
+      facture.quittance = formatQuittance(facture.quittance);
     }
     
     res.json({
       success: true,
-      facture: result.rows[0]
+      facture: facture
     });
   } catch (error) {
     console.error('❌ Erreur récupération facture:', error);
@@ -824,6 +1067,8 @@ router.get('/factures', async (req, res) => {
         frais_dossier, montant_retard, is_retard,
         soit_total, uniter, statut, personne_recu,
         quittance, quittance_validee,
+        is_renouvellement, frais_renouvellement,
+        is_renouvellement_facture, frais_renouvellement_facture,
         mois_facture, annee_facture, mois_groupes, type_groupe,
         suffixe, description_personnalisee,
         created_at, created_by
@@ -835,7 +1080,9 @@ router.get('/factures', async (req, res) => {
     const factures = result.rows.map(f => ({
       ...f,
       daf_nom: dafName,
-      quittance: f.quittance ? formatQuittance(f.quittance) : ''
+      quittance: f.quittance !== null && f.quittance !== undefined 
+        ? formatQuittance(f.quittance) 
+        : ''
     }));
     
     res.json({
@@ -880,22 +1127,36 @@ router.put('/factures/:id', async (req, res) => {
       'montant_mensuel', 'frais_dossier', 'montant_retard',
       'is_retard', 'soit_total', 'uniter',
       'quittance', 'quittance_validee',
-      'description_personnalisee', 'suffixe'
+      'description_personnalisee', 'suffixe',
+      'is_renouvellement', 'frais_renouvellement',
+      'is_renouvellement_facture', 'frais_renouvellement_facture'
     ];
     
     const filteredUpdates = {};
     for (const key of allowedFields) {
       if (updates[key] !== undefined) {
-        filteredUpdates[key] = updates[key];
+        if (key === 'quittance') {
+          const clean = String(updates[key]).replace(/\D/g, '');
+          filteredUpdates[key] = clean ? parseInt(clean, 10) : null;
+        } else {
+          filteredUpdates[key] = updates[key];
+        }
       }
     }
     
     if (filteredUpdates.montant_mensuel !== undefined || 
         filteredUpdates.frais_dossier !== undefined || 
-        filteredUpdates.uniter !== undefined) {
+        filteredUpdates.uniter !== undefined ||
+        filteredUpdates.is_renouvellement !== undefined ||
+        filteredUpdates.frais_renouvellement !== undefined ||
+        filteredUpdates.is_renouvellement_facture !== undefined ||
+        filteredUpdates.frais_renouvellement_facture !== undefined) {
       
       const currentResult = await pool.query(
-        'SELECT montant_mensuel, frais_dossier, montant_retard, is_retard, uniter FROM facture_usager WHERE id = $1',
+        `SELECT montant_mensuel, frais_dossier, montant_retard, is_retard, uniter, 
+                is_renouvellement, frais_renouvellement,
+                is_renouvellement_facture, frais_renouvellement_facture
+         FROM facture_usager WHERE id = $1`,
         [id]
       );
       
@@ -906,9 +1167,19 @@ router.put('/factures/:id', async (req, res) => {
         const montantRetard = filteredUpdates.montant_retard !== undefined ? filteredUpdates.montant_retard : current.montant_retard;
         const isRetard = filteredUpdates.is_retard !== undefined ? filteredUpdates.is_retard : current.is_retard;
         const uniter = filteredUpdates.uniter !== undefined ? filteredUpdates.uniter : current.uniter;
+        const isRenouvellement = filteredUpdates.is_renouvellement !== undefined ? filteredUpdates.is_renouvellement : current.is_renouvellement;
+        const fraisRenouvellement = filteredUpdates.frais_renouvellement !== undefined ? filteredUpdates.frais_renouvellement : current.frais_renouvellement;
+        const isRenouvellementFacture = filteredUpdates.is_renouvellement_facture !== undefined ? filteredUpdates.is_renouvellement_facture : current.is_renouvellement_facture;
+        const fraisRenouvellementFacture = filteredUpdates.frais_renouvellement_facture !== undefined ? filteredUpdates.frais_renouvellement_facture : current.frais_renouvellement_facture;
         
         const baseTotal = (parseFloat(montantMensuel) || 0) * (parseInt(uniter) || 1);
-        const total = baseTotal + (parseFloat(fraisDossier) || 0) + (isRetard ? (parseFloat(montantRetard) || 0) : 0);
+        let total = baseTotal + (parseFloat(fraisDossier) || 0) + (isRetard ? (parseFloat(montantRetard) || 0) : 0);
+        if (isRenouvellement && fraisRenouvellement > 0) {
+          total += parseFloat(fraisRenouvellement) || 0;
+        }
+        if (isRenouvellementFacture && fraisRenouvellementFacture > 0) {
+          total += parseFloat(fraisRenouvellementFacture) || 0;
+        }
         filteredUpdates.soit_total = total;
       }
     }
@@ -939,13 +1210,24 @@ router.put('/factures/:id', async (req, res) => {
       });
     }
     
+    const facture = result.rows[0];
+    
+    // ✅ NOUVEAU : Charger les lignes other si c'est une facture OTH
+    if (facture.ref_client_type === 'OTH') {
+      facture.lignes_other = await getOtherLignes(facture.ref_usager);
+    }
+    
     const dafName = await getDAFName();
-    result.rows[0].daf_nom = dafName;
+    facture.daf_nom = dafName;
+    
+    if (facture.quittance !== null && facture.quittance !== undefined) {
+      facture.quittance = formatQuittance(facture.quittance);
+    }
     
     res.json({
       success: true,
       message: 'Facture mise à jour avec succès',
-      facture: result.rows[0]
+      facture: facture
     });
   } catch (error) {
     console.error('❌ Erreur mise à jour facture:', error);
@@ -1024,6 +1306,104 @@ router.delete('/factures/:id', async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.message
+    });
+  }
+});
+
+// ============================================================
+// GET - Récupérer les usagers par type
+// ✅ AJOUT : "other" → "usager_other" + lignes other
+// ============================================================
+router.get('/factures/type/:type', async (req, res) => {
+  const { type } = req.params;
+  console.log(`📊 Récupération des usagers pour le type: ${type}`);
+  
+  try {
+    const typeMapping = {
+      'hotel': 'usagers_hotel',
+      'grand-surface': 'usagers_magasin',
+      'media': 'usagers_media',
+      'bus': 'usagers_bus',
+      'nightclub': 'usagers_nightclub',
+      'occ': 'usagers_occasionnel',
+      'other': 'usager_other'   // ✅ AJOUTÉ
+    };
+    
+    const tableName = typeMapping[type];
+    if (!tableName) {
+      return res.status(400).json({
+        success: false,
+        message: `Type d'usager non reconnu: ${type}`
+      });
+    }
+    
+    const result = await pool.query(`SELECT * FROM ${tableName} ORDER BY id DESC`);
+    
+    const usagers = await Promise.all(result.rows.map(async (usager) => {
+      const factureResult = await pool.query(`
+        SELECT * FROM facture_usager 
+        WHERE ref_usager = $1 AND ref_client_type = $2
+        ORDER BY created_at DESC LIMIT 1
+      `, [usager.id, getRefClientType(type)]);
+      
+      const facture = factureResult.rows[0] || {};
+      
+      // ✅ NOUVEAU : Charger les lignes other
+      let lignes_other = [];
+      if (type === 'other') {
+        lignes_other = await getOtherLignes(usager.id);
+      }
+      
+      let artistes_detail = [];
+      if (type === 'occ' && usager.id) {
+        try {
+          const artistesResult = await pool.query(`
+            SELECT a.id, a.nom, a.prenom, a.role
+            FROM event_artistes ea
+            JOIN artistes a ON ea.artiste_id = a.id
+            WHERE ea.event_id = $1
+            ORDER BY a.id
+          `, [usager.id]);
+          artistes_detail = artistesResult.rows;
+        } catch (err) {
+          console.error('❌ Erreur récupération artistes OCC:', err);
+        }
+      }
+      
+      return {
+        ...usager,
+        ...facture,
+        id: usager.id,
+        type_usager: type,
+        artistes_detail: artistes_detail,
+        lignes_other: lignes_other,   // ✅ AJOUTÉ
+        quittance: facture.quittance || null,
+        soit_total: facture.soit_total || usager.montant || usager.montant_mensuel || 0,
+        region_usager: facture.region_usager || usager.region || '',
+        numero_dossier_utilisateur: usager.numero_dossier_utilisateur || facture.numero_dossier_utilisateur || '',
+        date_ajout: usager.created_at || usager.date_ajout || facture.date_ajout || null,
+        created_at: usager.created_at || facture.created_at || new Date().toISOString(),
+        personne_recu: facture.personne_recu || '',
+        frais_dossier: usager.frais_dossier || facture.frais_dossier || 0,
+        montant_mensuel: usager.montant_mensuel || facture.montant_mensuel || 0,
+        uniter: usager.uniter || facture.uniter || 1
+      };
+    }));
+    
+    console.log(`✅ ${usagers.length} usagers récupérés pour le type ${type}`);
+    
+    res.json({
+      success: true,
+      usagers: usagers,
+      total: usagers.length
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur récupération usagers par type:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+      usagers: []
     });
   }
 });

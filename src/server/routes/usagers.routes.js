@@ -4,6 +4,26 @@ const router = express.Router();
 const pool = require('../database');
 
 // ============================================================
+// ✅ UTILITAIRES : Conversion sécurisée des types
+// ============================================================
+const toNumber = (v) => {
+  if (v === undefined || v === null || v === '') return 0;
+  const cleaned = typeof v === 'string' ? v.replace(/\s/g, '') : v;
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? 0 : n;
+};
+
+// ✅ Nouveau : conversion date sécurisée (vide → null)
+const toDate = (v) => {
+  if (v === undefined || v === null || v === '') return null;
+  if (typeof v === 'string' && v.trim() === '') return null;
+  // Vérifier que c'est une date valide
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return null;
+  return v; // Renvoyer la valeur brute (format YYYY-MM-DD attendu par Postgres)
+};
+
+// ============================================================
 // GET - Paiements par type d'usager
 // ============================================================
 router.get('/usagers/paiements/:type', async (req, res) => {
@@ -77,7 +97,6 @@ router.get('/usagers/paiements/:type', async (req, res) => {
         resumeAnnees.push({ annee, nbMois: nbMoisValides, moisTotalAttendus, moisDebut: moisDebutAnnee, estComplete, affichage, moisCreation: annee===anneeCreation ? moisCreation : null, anneeCreation: annee===anneeCreation ? anneeCreation : null });
       }
       
-      // Pour OCC, récupérer les artistes
       let artistes_detail = [];
       if (type === 'occ') {
         try {
@@ -105,6 +124,8 @@ router.get('/usagers/paiements/:type', async (req, res) => {
         montant_mensuel: montantMensuel,
         region: usager.region || 'N/A',
         adresse: usager.adresse || usager.adresse_siege || '',
+        adresse_siege: usager.adresse_siege || '',
+        nif_stat: usager.nif_stat || '',
         uniter: usager.uniter || 1,
         resumeAnnees,
         moisPayesParAnnee,
@@ -120,8 +141,21 @@ router.get('/usagers/paiements/:type', async (req, res) => {
         anneeCreation,
         etoiles: usager.etoiles || null,
         nombre_magasins: usager.nombre_magasins || 0,
+        ravinala: usager.ravinala || false,
+        activite: usager.activite || null,
         nombre_vehicules: usager.nombre_vehicules || 0,
         jauge_max: usager.jauge_max || 0,
+        horaires: usager.horaires || null,
+        lignes: usager.lignes || null,
+        trajet: usager.trajet || null,
+        type_bus: usager.type_bus || null,
+        zones_desservies: usager.zones_desservies || null,
+        frequence: usager.frequence || null,
+        canal: usager.canal || null,
+        siege: usager.siege || null,
+        nif: usager.nif || null,
+        stat: usager.stat || null,
+        taux: usager.taux || null,
         genre_manifestation: usager.genre_manifestation || null,
         nom_evenement: usager.nom_evenement || null,
         date_evenement: usager.date_evenement || null,
@@ -129,15 +163,20 @@ router.get('/usagers/paiements/:type', async (req, res) => {
         artistes: usager.artistes || null,
         artistes_detail: artistes_detail,
         organisateurs: usager.organisateurs || null,
-        representant_nom: usager.representant_nom || null,
         representant_par: usager.representant_par || null,
-        frequence: usager.frequence || null,
-        canal: usager.canal || null,
-        lignes: usager.lignes || null,
-        trajet: usager.trajet || null,
-        horaires: usager.horaires || null,
-        activite: usager.activite || null,
-        ravinala: usager.ravinala || false
+        representant_nom: usager.representant_nom || null,
+        representant_adresse: usager.representant_adresse || null,
+        representant_tel: usager.representant_tel || null,
+        representant_cin: usager.representant_cin || null,
+        representant_cin_delivree: usager.representant_cin_delivree || null,
+        representant_cin_lieu: usager.representant_cin_lieu || null,
+        representant_fonction: usager.representant_fonction || null,
+        confirmation_nom: usager.confirmation_nom || null,
+        date_signature: usager.date_signature || null,
+        lieu_signature: usager.lieu_signature || null,
+        a_compter_du: usager.a_compter_du || null,
+        echeance: usager.echeance || null,
+        frais_dossier: parseFloat(usager.frais_dossier) || 0
       });
     }
     res.json({ success: true, usagers: result });
@@ -282,18 +321,13 @@ router.get('/usagers/occasionnels', async (req, res) => {
   try {
     const query = `
       SELECT 
-        o.id, o.demandeur, o.denomination, o.nom_evenement, o.genre_manifestation, 
-        o.date_evenement, o.lieu_evenement, o.created_at, o.telephone, o.email,
-        o.organisateurs, o.representant_par, o.lieu_ajout, o.date_ajout,
-        o.adresse, o.domicile, o.artistes,
-        o.numero_dossier_global, o.numero_dossier_utilisateur,
-        o.confirmation_nom, o.representant_cin, o.representant_cin_delivree,
-        o.representant_cin_lieu, o.region, o.uniter
+        o.*,
+        COALESCE(o.montant, 0) + COALESCE(o.frais_dossier, 0) + COALESCE(o.montant_retard, 0) AS montant_total
       FROM usagers_occasionnel o
-      ORDER BY o.date_evenement DESC, o.created_at DESC
+      ORDER BY o.date_evenement DESC NULLS LAST, o.created_at DESC
     `;
     const result = await pool.query(query);
-    
+
     const events = [];
     for (const row of result.rows) {
       let artistes_detail = [];
@@ -310,38 +344,49 @@ router.get('/usagers/occasionnels', async (req, res) => {
       } catch (err) {
         console.error('❌ Erreur récupération artistes:', err);
       }
-      
+
       events.push({
         id: row.id,
-        demandeur: row.demandeur,
-        denomination: row.denomination,
         nom_evenement: row.nom_evenement,
         genre_manifestation: row.genre_manifestation,
         date_evenement: row.date_evenement,
         lieu_evenement: row.lieu_evenement,
-        telephone: row.telephone,
-        email: row.email,
+        artistes: row.artistes,
+        artistes_detail: artistes_detail,
+        artistesList: artistes_detail.map(a => ({
+          nom: a.nom,
+          prenom: a.prenom,
+          role: a.role
+        })),
+        denomination: row.denomination,
+        demandeur: row.demandeur,
         organisateurs: row.organisateurs,
         representant_par: row.representant_par,
-        lieu_ajout: row.lieu_ajout,
-        date_ajout: row.date_ajout,
-        adresse: row.adresse,
-        domicile: row.domicile,
-        artistes: row.artistes,
-        created_at: row.created_at,
-        artistes_detail: artistes_detail,
-        artistesList: artistes_detail.map(a => ({ nom: a.nom, prenom: a.prenom, role: a.role })),
-        numero_dossier_global: row.numero_dossier_global,
-        numero_dossier_utilisateur: row.numero_dossier_utilisateur,
-        confirmation_nom: row.confirmation_nom,
         representant_cin: row.representant_cin,
         representant_cin_delivree: row.representant_cin_delivree,
         representant_cin_lieu: row.representant_cin_lieu,
+        confirmation_nom: row.confirmation_nom,
+        date_signature: row.date_signature,
+        telephone: row.telephone,
+        email: row.email,
+        adresse: row.adresse,
+        domicile: row.domicile,
         region: row.region,
-        uniter: row.uniter || 1
+        lieu_ajout: row.lieu_ajout,
+        date_ajout: row.date_ajout,
+        numero_dossier_global: row.numero_dossier_global,
+        numero_dossier_utilisateur: row.numero_dossier_utilisateur,
+        uniter: row.uniter || 1,
+        frais_dossier: parseFloat(row.frais_dossier) || 0,
+        montant: parseFloat(row.montant) || 0,
+        montant_retard: parseFloat(row.montant_retard) || 0,
+        is_retard: row.is_retard || false,
+        soit_total: parseFloat(row.soit_total) || 0,
+        montant_total: parseFloat(row.montant_total) || 0,
+        created_at: row.created_at
       });
     }
-    
+
     res.json({ success: true, events });
   } catch (error) {
     console.error('❌ Erreur récupération occasionnels:', error);
@@ -478,7 +523,25 @@ router.get('/usagers/occasionnel/:id', async (req, res) => {
   try {
     const result = await pool.query(`SELECT * FROM usagers_occasionnel WHERE id = $1`, [id]);
     if (result.rows.length === 0) return res.status(404).json({ success: false, message: 'OCC non trouvé' });
-    res.json({ success: true, usager: result.rows[0] });
+    
+    let artistes_detail = [];
+    try {
+      const artistesResult = await pool.query(
+        `SELECT a.id, a.nom, a.prenom, a.role
+         FROM event_artistes ea
+         JOIN artistes a ON ea.artiste_id = a.id
+         WHERE ea.event_id = $1
+         ORDER BY a.id`,
+        [id]
+      );
+      artistes_detail = artistesResult.rows;
+    } catch (err) {
+      console.error('❌ Erreur récupération artistes:', err);
+    }
+    
+    const usager = result.rows[0];
+    usager.artistes_detail = artistes_detail;
+    res.json({ success: true, usager });
   } catch (error) {
     console.error('❌ Erreur récupération OCC:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -522,9 +585,17 @@ router.get('/users/counters/:userId', async (req, res) => {
       [parseInt(userId), parseInt(year)]
     );
     const compteurs = {};
-    for (const row of result.rows) compteurs[row.type_usager] = row.compteur;
+    for (const row of result.rows) {
+      let key = row.type_usager;
+      if (key === 'Grand Surface') key = 'Grand Surface';
+      else if (key === 'Télé/Radio') key = 'Télé/Radio';
+      else if (key === 'Night club') key = 'Night club';
+      compteurs[key] = row.compteur;
+    }
     const types = ['Hôtel','Grand Surface','Télé/Radio','OCC','Bus','Night club'];
-    for (const type of types) if (!compteurs[type]) compteurs[type] = 0;
+    for (const type of types) {
+      if (!compteurs[type]) compteurs[type] = 0;
+    }
     res.json({ success: true, compteurs, year: parseInt(year) });
   } catch (error) {
     console.error('❌ Erreur récupération compteurs:', error);
@@ -566,23 +637,23 @@ router.get('/occ/dossier-number', async (req, res) => {
 });
 
 // ============================================================
-// POST - Ajouter un usager (CORRIGÉ)
+// POST - Ajouter un usager
+// ✅ Toutes les dates sont OPTIONNELLES (null si vides)
 // ============================================================
 router.post('/usagers', async (req, res) => {
   const { type, userId, ...data } = req.body;
   console.log(`📝 Ajout usager - Type: ${type}, Utilisateur ID: ${userId}`);
   if (!type) return res.status(400).json({ success: false, message: 'Type d\'usager non spécifié' });
 
-  const toNumber = (v) => {
-    if (v === undefined || v === null || v === '') return 0;
-    const cleaned = typeof v === 'string' ? v.replace(/\s/g, '') : v;
-    const n = parseFloat(cleaned);
-    return isNaN(n) ? 0 : n;
+  // ✅ Helper : lit la valeur avec fallback snake_case OU camelCase
+  const get = (snake, camel, defaultVal = '') => {
+    if (data[snake] !== undefined && data[snake] !== null) return data[snake];
+    if (camel && data[camel] !== undefined && data[camel] !== null) return data[camel];
+    return defaultVal;
   };
-  const montantMensuelInput = data.montant_mensuel !== undefined ? data.montant_mensuel : data.montantMensuel;
-  const fraisDossierInput = data.frais_dossier !== undefined ? data.frais_dossier : data.fraisDossier;
-  const montantMensuelVal = toNumber(montantMensuelInput);
-  const fraisDossierVal = toNumber(fraisDossierInput);
+
+  const montantMensuelVal = toNumber(get('montant_mensuel', 'montantMensuel', 0));
+  const fraisDossierVal = toNumber(get('frais_dossier', 'fraisDossier', 0));
 
   try {
     let tableName = '', insertData = {}, uniter = data.uniter || 1;
@@ -600,151 +671,220 @@ router.post('/usagers', async (req, res) => {
     switch(type) {
       case 'Hôtel':
         insertData = { 
-          demandeur: data.demandeur || '', denomination: data.denomination || '', 
-          adresse_siege: data.adresseSiege || '', nif_stat: data.nifStat || '', 
-          telephone: data.telephone || '', email: data.email || '', 
-          etoiles: data.etoiles || '', ravinala: data.ravinala || false, 
-          representant_nom: data.representantNom || '', representant_adresse: data.representantAdresse || '', 
-          representant_tel: data.representantTel || '', representant_cin: data.representantCin || '', 
-          representant_cin_delivree: data.representantCinDelivree || null, 
-          representant_cin_lieu: data.representantCinLieu || '', 
-          representant_fonction: data.representantFonction || '', activite: data.activite || '', 
-          moyens_communication: JSON.stringify(data.moyensCommunication || {}), 
-          total: data.total || '', a_compter_du: data.aCompterDu || null, 
-          echeance: data.echeance || null, confirmation_nom: data.confirmationNom || '', 
-          date_signature: data.dateSignature || null, lieu_signature: data.lieuSignature || '', 
-          type_paiement: 'mensuel', montant_mensuel: montantMensuelVal, 
+          demandeur: get('demandeur', 'demandeur'),
+          denomination: get('denomination', 'denomination'),
+          adresse_siege: get('adresse_siege', 'adresseSiege'),
+          nif_stat: get('nif_stat', 'nifStat'),
+          telephone: get('telephone', 'telephone'),
+          email: get('email', 'email'),
+          etoiles: get('etoiles', 'etoiles'),
+          ravinala: get('ravinala', 'ravinala', false),
+          representant_nom: get('representant_nom', 'representantNom'),
+          representant_adresse: get('representant_adresse', 'representantAdresse'),
+          representant_tel: get('representant_tel', 'representantTel'),
+          representant_cin: get('representant_cin', 'representantCin'),
+          representant_cin_delivree: toDate(get('representant_cin_delivree', 'representantCinDelivree', null)),
+          representant_cin_lieu: get('representant_cin_lieu', 'representantCinLieu'),
+          representant_fonction: get('representant_fonction', 'representantFonction'),
+          activite: get('activite', 'activite'),
+          moyens_communication: JSON.stringify(get('moyens_communication', 'moyensCommunication', {})),
+          total: get('total', 'total'),
+          a_compter_du: toDate(get('a_compter_du', 'aCompterDu', null)),
+          echeance: toDate(get('echeance', 'echeance', null)),
+          confirmation_nom: get('confirmation_nom', 'confirmationNom'),
+          date_signature: toDate(get('date_signature', 'dateSignature', null)),
+          lieu_signature: get('lieu_signature', 'lieuSignature'),
+          type_paiement: 'mensuel',
+          montant_mensuel: montantMensuelVal,
           frais_dossier: fraisDossierVal,
-          region: data.region || '', uniter: uniter, created_by: userId
+          region: get('region', 'region'),
+          uniter: uniter,
+          created_by: userId
         };
         break;
+
       case 'Grand Surface':
         insertData = { 
-          demandeur: data.demandeur || '', denomination: data.denomination || '', 
-          adresse_siege: data.adresseSiege || '', nif_stat: data.nifStat || '', 
-          telephone: data.telephone || '', 
-          representant_nom: data.representantNom || '', representant_adresse: data.representantAdresse || '', 
-          representant_tel: data.representantTel || '', representant_cin: data.representantCin || '', 
-          representant_cin_delivree: data.representantCinDelivree || null, 
-          representant_cin_lieu: data.representantCinLieu || '', 
-          representant_fonction: data.representantFonction || '', activite: data.activite || '', 
-          nombre_magasins: data.nombreMagasins ? parseInt(data.nombreMagasins) : 0, 
-          moyens_communication: JSON.stringify(data.moyensCommunication || {}), 
-          total: data.total || '', a_compter_du: data.aCompterDu || null, 
-          echeance: data.echeance || null, confirmation_nom: data.confirmationNom || '', 
-          date_signature: data.dateSignature || null, lieu_signature: data.lieuSignature || '', 
-          type_paiement: 'mensuel', montant_mensuel: montantMensuelVal, 
+          demandeur: get('demandeur', 'demandeur'),
+          denomination: get('denomination', 'denomination'),
+          adresse_siege: get('adresse_siege', 'adresseSiege'),
+          nif_stat: get('nif_stat', 'nifStat'),
+          telephone: get('telephone', 'telephone'),
+          representant_nom: get('representant_nom', 'representantNom'),
+          representant_adresse: get('representant_adresse', 'representantAdresse'),
+          representant_tel: get('representant_tel', 'representantTel'),
+          representant_cin: get('representant_cin', 'representantCin'),
+          representant_cin_delivree: toDate(get('representant_cin_delivree', 'representantCinDelivree', null)),
+          representant_cin_lieu: get('representant_cin_lieu', 'representantCinLieu'),
+          representant_fonction: get('representant_fonction', 'representantFonction'),
+          activite: get('activite', 'activite'),
+          nombre_magasins: data.nombre_magasins ? parseInt(data.nombre_magasins) : (data.nombreMagasins ? parseInt(data.nombreMagasins) : 0),
+          moyens_communication: JSON.stringify(get('moyens_communication', 'moyensCommunication', {})),
+          total: get('total', 'total'),
+          a_compter_du: toDate(get('a_compter_du', 'aCompterDu', null)),
+          echeance: toDate(get('echeance', 'echeance', null)),
+          confirmation_nom: get('confirmation_nom', 'confirmationNom'),
+          date_signature: toDate(get('date_signature', 'dateSignature', null)),
+          lieu_signature: get('lieu_signature', 'lieuSignature'),
+          type_paiement: 'mensuel',
+          montant_mensuel: montantMensuelVal,
           frais_dossier: fraisDossierVal,
-          region: data.region || '', uniter: uniter, created_by: userId
+          region: get('region', 'region'),
+          uniter: uniter,
+          created_by: userId
         };
         break;
+
       case 'Bus':
         insertData = { 
-          demandeur: data.demandeur || '', denomination: data.denomination || '', 
-          adresse_siege: data.adresseSiege || '', nif_stat: data.nifStat || '', 
-          telephone: data.telephone || '', email: data.email || '', 
-          representant_nom: data.representantNom || '', representant_adresse: data.representantAdresse || '', 
-          representant_tel: data.representantTel || '', representant_cin: data.representantCin || '', 
-          representant_cin_delivree: data.representantCinDelivree || null, 
-          representant_cin_lieu: data.representantCinLieu || '', 
-          representant_fonction: data.representantFonction || '', 
-          nombre_vehicules: data.nombreVehicules ? parseInt(data.nombreVehicules) : 0, 
-          lignes: data.lignes || '', type_bus: data.typeBus || '', trajet: data.trajet || '', 
-          horaires: data.horaires || '', zones_desservies: data.zonesDesservies || '', 
-          type_paiement: 'mensuel', montant_mensuel: montantMensuelVal, 
+          demandeur: get('demandeur', 'demandeur'),
+          denomination: get('denomination', 'denomination'),
+          adresse_siege: get('adresse_siege', 'adresseSiege'),
+          nif_stat: get('nif_stat', 'nifStat'),
+          telephone: get('telephone', 'telephone'),
+          email: get('email', 'email'),
+          representant_nom: get('representant_nom', 'representantNom'),
+          representant_adresse: get('representant_adresse', 'representantAdresse'),
+          representant_tel: get('representant_tel', 'representantTel'),
+          representant_cin: get('representant_cin', 'representantCin'),
+          representant_cin_delivree: toDate(get('representant_cin_delivree', 'representantCinDelivree', null)),
+          representant_cin_lieu: get('representant_cin_lieu', 'representantCinLieu'),
+          representant_fonction: get('representant_fonction', 'representantFonction'),
+          nombre_vehicules: data.nombre_vehicules ? parseInt(data.nombre_vehicules) : (data.nombreVehicules ? parseInt(data.nombreVehicules) : 0),
+          lignes: get('lignes', 'lignes'),
+          type_bus: get('type_bus', 'typeBus'),
+          trajet: get('trajet', 'trajet'),
+          horaires: get('horaires', 'horaires'),
+          zones_desservies: get('zones_desservies', 'zonesDesservies'),
+          a_compter_du: toDate(get('a_compter_du', 'aCompterDu', null)),
+          echeance: toDate(get('echeance', 'echeance', null)),
+          type_paiement: 'mensuel',
+          montant_mensuel: montantMensuelVal,
           frais_dossier: fraisDossierVal,
-          region: data.region || '', confirmation_nom: data.confirmationNom || '',
-          date_signature: data.dateSignature || null, lieu_signature: data.lieuSignature || '',
-          uniter: uniter, created_by: userId
+          region: get('region', 'region'),
+          confirmation_nom: get('confirmation_nom', 'confirmationNom'),
+          date_signature: toDate(get('date_signature', 'dateSignature', null)),
+          lieu_signature: get('lieu_signature', 'lieuSignature'),
+          uniter: uniter,
+          created_by: userId
         };
         break;
+
       case 'Night club':
         insertData = { 
-          demandeur: data.demandeur || '', denomination: data.denomination || '', 
-          adresse_siege: data.adresseSiege || '', nif_stat: data.nifStat || '', 
-          telephone: data.telephone || '', email: data.email || '', 
-          representant_nom: data.representantNom || '', representant_adresse: data.representantAdresse || '', 
-          representant_tel: data.representantTel || '', representant_cin: data.representantCin || '', 
-          representant_cin_delivree: data.representantCinDelivree || null, 
-          representant_cin_lieu: data.representantCinLieu || '', 
-          representant_fonction: data.representantFonction || '', 
-          jauge_max: data.jaugeMax ? parseInt(data.jaugeMax) : 0, 
-          horaires: data.horaires || '', moyens_communication: JSON.stringify(data.moyensCommunication || {}),
-          total: data.total || '', a_compter_du: data.aCompterDu || null,
-          echeance: data.echeance || null, type_paiement: 'mensuel', 
-          montant_mensuel: montantMensuelVal, frais_dossier: fraisDossierVal,
-          region: data.region || '', confirmation_nom: data.confirmationNom || '',
-          date_signature: data.dateSignature || null, lieu_signature: data.lieuSignature || '',
-          uniter: uniter, created_by: userId
+          demandeur: get('demandeur', 'demandeur'),
+          denomination: get('denomination', 'denomination'),
+          adresse_siege: get('adresse_siege', 'adresseSiege'),
+          nif_stat: get('nif_stat', 'nifStat'),
+          telephone: get('telephone', 'telephone'),
+          email: get('email', 'email'),
+          representant_nom: get('representant_nom', 'representantNom'),
+          representant_adresse: get('representant_adresse', 'representantAdresse'),
+          representant_tel: get('representant_tel', 'representantTel'),
+          representant_cin: get('representant_cin', 'representantCin'),
+          representant_cin_delivree: toDate(get('representant_cin_delivree', 'representantCinDelivree', null)),
+          representant_cin_lieu: get('representant_cin_lieu', 'representantCinLieu'),
+          representant_fonction: get('representant_fonction', 'representantFonction'),
+          jauge_max: data.jauge_max ? parseInt(data.jauge_max) : (data.jaugeMax ? parseInt(data.jaugeMax) : 0),
+          horaires: get('horaires', 'horaires'),
+          moyens_communication: JSON.stringify(get('moyens_communication', 'moyensCommunication', {})),
+          total: get('total', 'total'),
+          a_compter_du: toDate(get('a_compter_du', 'aCompterDu', null)),
+          echeance: toDate(get('echeance', 'echeance', null)),
+          type_paiement: 'mensuel',
+          montant_mensuel: montantMensuelVal,
+          frais_dossier: fraisDossierVal,
+          region: get('region', 'region'),
+          confirmation_nom: get('confirmation_nom', 'confirmationNom'),
+          date_signature: toDate(get('date_signature', 'dateSignature', null)),
+          lieu_signature: get('lieu_signature', 'lieuSignature'),
+          uniter: uniter,
+          created_by: userId
         };
         break;
+
       case 'Télé/Radio':
         insertData = { 
-          proprietaire_nom: data.proprietaireNom || '', proprietaire_adresse: data.proprietaireAdresse || '', 
-          proprietaire_tel: data.proprietaireTel || '', proprietaire_cin: data.proprietaireCin || '', 
-          proprietaire_cin_delivree: data.proprietaireCinDelivree || null, 
-          proprietaire_cin_lieu: data.proprietaireCinLieu || '', 
-          representant_nom: data.representantNom || '', representant_adresse: data.representantAdresse || '', 
-          representant_tel: data.representantTel || '', representant_cin: data.representantCin || '', 
-          representant_cin_delivree: data.representantCinDelivree || null, 
-          representant_cin_lieu: data.representantCinLieu || '', 
-          representant_pouvoir_date: data.representantPouvoirDate || null, 
-          representant_pouvoir_par: data.representantPouvoirPar || '', 
-          representant_fonction: data.representantFonction || '', denomination: data.denomination || '', 
-          frequence: data.frequence || '', canal: data.canal || '', siege: data.siege || '', 
-          telephone: data.telephone || '', email: data.email || '', nif: data.nif || '', 
-          stat: data.stat || '', taux: data.taux || '', 
-          couverture_capitale: data.couvertureCapitale || false, 
-          couverture_chef_lieu_province: data.couvertureChefLieuProvince || false, 
-          couverture_chef_lieu_region: data.couvertureChefLieuRegion || false, 
-          couverture_district: data.couvertureDistrict || false, 
-          horaires_jusqua12: data.horairesJusqua12 || false, horaires_13a24: data.horaires13a24 || false, 
-          has_regions: data.hasRegions || false, regions_detail: JSON.stringify(data.regionsDetail || []), 
-          type_paiement: 'mensuel', montant_mensuel: montantMensuelVal, 
+          proprietaire_nom: get('proprietaire_nom', 'proprietaireNom'),
+          proprietaire_adresse: get('proprietaire_adresse', 'proprietaireAdresse'),
+          proprietaire_tel: get('proprietaire_tel', 'proprietaireTel'),
+          proprietaire_cin: get('proprietaire_cin', 'proprietaireCin'),
+          proprietaire_cin_delivree: toDate(get('proprietaire_cin_delivree', 'proprietaireCinDelivree', null)),
+          proprietaire_cin_lieu: get('proprietaire_cin_lieu', 'proprietaireCinLieu'),
+          representant_nom: get('representant_nom', 'representantNom'),
+          representant_adresse: get('representant_adresse', 'representantAdresse'),
+          representant_tel: get('representant_tel', 'representantTel'),
+          representant_cin: get('representant_cin', 'representantCin'),
+          representant_cin_delivree: toDate(get('representant_cin_delivree', 'representantCinDelivree', null)),
+          representant_cin_lieu: get('representant_cin_lieu', 'representantCinLieu'),
+          representant_pouvoir_date: toDate(get('representant_pouvoir_date', 'representantPouvoirDate', null)),
+          representant_pouvoir_par: get('representant_pouvoir_par', 'representantPouvoirPar'),
+          representant_fonction: get('representant_fonction', 'representantFonction'),
+          denomination: get('denomination', 'denomination'),
+          frequence: get('frequence', 'frequence'),
+          canal: get('canal', 'canal'),
+          siege: get('siege', 'siege'),
+          telephone: get('telephone', 'telephone'),
+          email: get('email', 'email'),
+          nif: get('nif', 'nif'),
+          stat: get('stat', 'stat'),
+          taux: get('taux', 'taux'),
+          couverture_capitale: get('couverture_capitale', 'couvertureCapitale', false),
+          couverture_chef_lieu_province: get('couverture_chef_lieu_province', 'couvertureChefLieuProvince', false),
+          couverture_chef_lieu_region: get('couverture_chef_lieu_region', 'couvertureChefLieuRegion', false),
+          couverture_district: get('couverture_district', 'couvertureDistrict', false),
+          horaires_jusqua12: get('horaires_jusqua12', 'horairesJusqua12', false),
+          horaires_13a24: get('horaires_13a24', 'horaires13a24', false),
+          has_regions: get('has_regions', 'hasRegions', false),
+          regions_detail: JSON.stringify(get('regions_detail', 'regionsDetail', [])),
+          type_paiement: 'mensuel',
+          montant_mensuel: montantMensuelVal,
           frais_dossier: fraisDossierVal,
-          region: data.region || '', confirmation_nom: data.confirmationNom || '',
-          date_signature: data.dateSignature || null, lieu_signature: data.lieuSignature || '',
-          uniter: uniter, created_by: userId
+          region: get('region', 'region'),
+          confirmation_nom: get('confirmation_nom', 'confirmationNom'),
+          date_signature: toDate(get('date_signature', 'dateSignature', null)),
+          lieu_signature: get('lieu_signature', 'lieuSignature'),
+          uniter: uniter,
+          created_by: userId
         };
         break;
-      // ============================================================
-      // ✅ OCC - SANS montant_mensuel (utilise montant)
-      // ============================================================
+
       case 'OCC':
         insertData = { 
-          organisateurs: data.organisateurs || '', 
-          representant_par: data.representantPar || '',
-          genre_manifestation: data.genreManifestation || '', 
-          artistes: data.artistes || '',
-          date_evenement: data.dateEvenement || null, 
-          lieu_evenement: data.lieuEvenement || '',
-          representant_cin: data.representantCin || '', 
-          representant_cin_delivree: data.representantCinDelivree || null,
-          representant_cin_lieu: data.representantCinLieu || '', 
-          adresse: data.adresse || '',
-          telephone: data.telephone || '', 
-          domicile: data.domicile || '',
-          confirmation_nom: data.confirmationNom || '', 
-          date_signature: data.dateSignature || null,
-          lieu_ajout: data.lieuAjout || '', 
-          date_ajout: data.dateAjout || null,
-          region: data.region || '', 
-          demandeur: data.organisateurs || '',
-          denomination: data.genreManifestation || '', 
-          numero_dossier_global: data.numeroDossierGlobal || '',
-          numero_dossier_utilisateur: data.numeroDossierUtilisateur || '',
-          // ✅ OCC utilise montant (PAS montant_mensuel)
-          montant: toNumber(data.montant || data.montant_total || 0),
+          organisateurs: get('organisateurs', 'organisateurs'),
+          representant_par: get('representant_par', 'representantPar'),
+          genre_manifestation: get('genre_manifestation', 'genreManifestation'),
+          artistes: get('artistes', 'artistes'),
+          date_evenement: toDate(get('date_evenement', 'dateEvenement', null)),
+          lieu_evenement: get('lieu_evenement', 'lieuEvenement'),
+          representant_cin: get('representant_cin', 'representantCin'),
+          representant_cin_delivree: toDate(get('representant_cin_delivree', 'representantCinDelivree', null)),
+          representant_cin_lieu: get('representant_cin_lieu', 'representantCinLieu'),
+          adresse: get('adresse', 'adresse'),
+          telephone: get('telephone', 'telephone'),
+          domicile: get('domicile', 'domicile'),
+          confirmation_nom: get('confirmation_nom', 'confirmationNom'),
+          date_signature: toDate(get('date_signature', 'dateSignature', null)),
+          lieu_ajout: get('lieu_ajout', 'lieuAjout'),
+          date_ajout: toDate(get('date_ajout', 'dateAjout', null)),
+          region: get('region', 'region'),
+          demandeur: get('organisateurs', 'organisateurs'),
+          denomination: get('genre_manifestation', 'genreManifestation'),
+          numero_dossier_global: get('numero_dossier_global', 'numeroDossierGlobal'),
+          numero_dossier_utilisateur: get('numero_dossier_utilisateur', 'numeroDossierUtilisateur'),
+          montant: toNumber(get('montant', 'montant', 0)),
           frais_dossier: fraisDossierVal,
-          montant_retard: toNumber(data.montant_retard || 0),
-          is_retard: data.is_retard || false,
-          soit_total: toNumber(data.soit_total || 0),
+          montant_retard: toNumber(get('montant_retard', 'montant_retard', 0)),
+          is_retard: get('is_retard', 'is_retard', false),
+          soit_total: toNumber(get('soit_total', 'soit_total', 0)),
           uniter: data.uniter || 1,
           created_by: userId
         };
         break;
+
       default: return res.status(400).json({ success: false, message: 'Type d\'usager inconnu' });
     }
+
     const columns = Object.keys(insertData);
     const values = Object.values(insertData);
     const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
@@ -752,17 +892,20 @@ router.post('/usagers', async (req, res) => {
     const result = await pool.query(query, values);
     const newId = result.rows[0].id;
     
-    // ============================================================
-    // INCRÉMENTATION DU COMPTEUR
-    // ============================================================
+    // Incrémentation du compteur
     if (userId) {
       const currentYear = new Date().getFullYear();
       const userIdInt = parseInt(userId);
       
+      let counterType = type;
+      if (type === 'Grand Surface') counterType = 'Grand Surface';
+      else if (type === 'Télé/Radio') counterType = 'Télé/Radio';
+      else if (type === 'Night club') counterType = 'Night club';
+      
       let counterResult = await pool.query(
         `SELECT compteur, id FROM compteurs_dossiers_utilisateurs 
          WHERE utilisateur_id = $1 AND annee = $2 AND type_usager = $3`,
-        [userIdInt, currentYear, type]
+        [userIdInt, currentYear, counterType]
       );
       
       let nouveauCompteur = 0;
@@ -774,38 +917,39 @@ router.post('/usagers', async (req, res) => {
            WHERE id = $2`,
           [nouveauCompteur, counterResult.rows[0].id]
         );
-        console.log(`✅ Compteur ${type} incrémenté à ${nouveauCompteur} pour l'utilisateur ${userId}`);
+        console.log(`✅ Compteur ${counterType} incrémenté à ${nouveauCompteur} pour l'utilisateur ${userId}`);
       } else {
         nouveauCompteur = 1;
         await pool.query(
           `INSERT INTO compteurs_dossiers_utilisateurs 
            (utilisateur_id, annee, compteur, type_usager, created_at, updated_at) 
            VALUES ($1, $2, 1, $3, NOW(), NOW())`,
-          [userIdInt, currentYear, type]
+          [userIdInt, currentYear, counterType]
         );
-        console.log(`✅ Nouveau compteur ${type} créé pour l'utilisateur ${userId}`);
+        console.log(`✅ Nouveau compteur ${counterType} créé pour l'utilisateur ${userId}`);
       }
       
-      const prefix = data.prefix || '';
-      const trimestre = Math.ceil((new Date().getMonth() + 1) / 4);
-      const numeroDossierUtilisateur = `${prefix} ${nouveauCompteur}/${trimestre}/${currentYear}`;
-      await pool.query(
-        `UPDATE ${tableName} SET numero_dossier_utilisateur = $1 WHERE id = $2`,
-        [numeroDossierUtilisateur, newId]
-      );
-      
-      console.log(`📁 Numéro dossier: ${numeroDossierUtilisateur}`);
+      if (type !== 'OCC') {
+        const prefix = data.prefix || '';
+        const trimestre = Math.ceil((new Date().getMonth() + 1) / 4);
+        const numeroDossierUtilisateur = `${prefix} ${nouveauCompteur}/${trimestre}/${currentYear}`;
+        await pool.query(
+          `UPDATE ${tableName} SET numero_dossier_utilisateur = $1 WHERE id = $2`,
+          [numeroDossierUtilisateur, newId]
+        );
+        console.log(`📁 Numéro dossier: ${numeroDossierUtilisateur}`);
+      }
     }
     
-    // ============================================================
-    // GESTION DES ARTISTES POUR OCC
-    // ============================================================
+    // Gestion des artistes pour OCC
     if (type === 'OCC') {
       const allArtists = [];
+      
       if (data.artistes && data.artistes.trim() !== '') {
         allArtists.push({ nom: data.artistes.trim(), prenom: '', role: 'Artiste principal' });
       }
-      if (data.otherArtistsDetail && data.otherArtistsDetail.length > 0) {
+      
+      if (data.otherArtistsDetail && Array.isArray(data.otherArtistsDetail) && data.otherArtistsDetail.length > 0) {
         for (const artist of data.otherArtistsDetail) {
           if (artist.nom && artist.nom.trim() !== '') {
             allArtists.push({ 
@@ -816,21 +960,31 @@ router.post('/usagers', async (req, res) => {
           }
         }
       }
+      
+      console.log(`🎵 Traitement de ${allArtists.length} artistes pour l'événement ${newId}`);
+      
+      await pool.query(`DELETE FROM event_artistes WHERE event_id = $1`, [newId]);
+      
       for (const artist of allArtists) {
         let artisteId;
+        
         const existingArtiste = await pool.query(
           'SELECT id FROM artistes WHERE LOWER(nom) = LOWER($1)',
           [artist.nom]
         );
+        
         if (existingArtiste.rows.length === 0) {
           const newArtiste = await pool.query(
             'INSERT INTO artistes (nom, prenom, role) VALUES ($1, $2, $3) RETURNING id',
             [artist.nom, artist.prenom, artist.role]
           );
           artisteId = newArtiste.rows[0].id;
+          console.log(`✅ Nouvel artiste créé: ${artist.nom} (ID: ${artisteId})`);
         } else {
           artisteId = existingArtiste.rows[0].id;
+          console.log(`♻️ Artiste existant réutilisé: ${artist.nom} (ID: ${artisteId})`);
         }
+        
         await pool.query(
           'INSERT INTO event_artistes (event_id, artiste_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
           [newId, artisteId]
@@ -838,14 +992,12 @@ router.post('/usagers', async (req, res) => {
       }
     }
     
-    // ============================================================
-    // NOTIFICATION
-    // ============================================================
+    // Notification
     try {
       await pool.query(
         `INSERT INTO notifications (message, type, usager_id, created_at) 
          VALUES ($1, $2, $3, NOW())`,
-        [`Nouveau ${type} ajouté: ${data.denomination || data.genreManifestation || 'Nouvel usager'}`, 'new', newId]
+        [`Nouveau ${type} ajouté: ${insertData.denomination || insertData.genre_manifestation || 'Nouvel usager'}`, 'new', newId]
       );
     } catch (notifError) {
       console.log('⚠️ Erreur notification:', notifError.message);
@@ -897,18 +1049,21 @@ router.put('/usagers/:id', async (req, res) => {
     let paramIndex = 1;
     const commonFields = {
       denomination, demandeur, telephone, email, region,
-      confirmation_nom, representant_cin, representant_cin_delivree,
+      confirmation_nom, representant_cin, 
+      representant_cin_delivree: toDate(representant_cin_delivree),
       representant_cin_lieu, representant_nom, representant_adresse,
-      representant_tel, representant_fonction, lieu_signature, date_signature,
+      representant_tel, representant_fonction, lieu_signature, 
+      date_signature: toDate(date_signature),
       frais_dossier, uniter, adresse_siege: adresse,
       etoiles, ravinala, activite, nombre_magasins, jauge_max, horaires,
       frequence, canal, siege, nif, stat, taux,
       nombre_vehicules, lignes, type_bus, trajet,
       organisateurs, representant_par: representant_par_occ,
-      genre_manifestation, artistes, date_evenement, lieu_evenement, lieu_ajout,
+      genre_manifestation, artistes, 
+      date_evenement: toDate(date_evenement), 
+      lieu_evenement, lieu_ajout,
       domicile
     };
-    // ✅ CORRECTION : pour OCC, ne pas ajouter montant_mensuel
     if (typeValue !== 'OCC') {
       commonFields.montant_mensuel = montant_mensuel;
     }
@@ -946,12 +1101,161 @@ router.put('/usagers/:id', async (req, res) => {
 });
 
 // ============================================================
-// DELETE - Supprimer un usager
+// DELETE - Supprimer un usager PAR TYPE
+// ============================================================
+router.delete('/usagers/:type/:id', async (req, res) => {
+  const { type, id } = req.params;
+  
+  console.log(`🗑️ DELETE /usagers/${type}/${id}`);
+  
+  const typeMapping = {
+    'hotel': 'usagers_hotel',
+    'grand-surface': 'usagers_magasin',
+    'media': 'usagers_media',
+    'occ': 'usagers_occasionnel',
+    'bus': 'usagers_bus',
+    'nightclub': 'usagers_nightclub'
+  };
+  
+  const typeNames = {
+    'hotel': 'Hôtel',
+    'grand-surface': 'Grand Surface',
+    'media': 'Télé/Radio',
+    'occ': 'OCC',
+    'bus': 'Bus',
+    'nightclub': 'Night club'
+  };
+  
+  const paiementTypes = {
+    'hotel': 'hotel',
+    'grand-surface': 'grand-surface',
+    'media': 'media',
+    'occ': 'occ',
+    'bus': 'bus',
+    'nightclub': 'nightclub'
+  };
+  
+  const tableName = typeMapping[type];
+  const typeName = typeNames[type];
+  const paiementType = paiementTypes[type];
+  
+  if (!tableName) {
+    return res.status(400).json({ success: false, message: 'Type invalide' });
+  }
+  
+  try {
+    const checkResult = await pool.query(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Usager non trouvé' });
+    }
+    
+    const usagerData = checkResult.rows[0];
+    const denomination = usagerData.denomination || usagerData.nom_evenement || 'Inconnu';
+    
+    await pool.query('BEGIN');
+    
+    try {
+      await pool.query(
+        `DELETE FROM paiements WHERE usager_id = $1 AND usager_type = $2`,
+        [id, paiementType]
+      );
+      console.log(`✅ Paiements supprimés pour ${typeName} ${id}`);
+      
+      if (type === 'occ') {
+        await pool.query(`DELETE FROM event_artistes WHERE event_id = $1`, [id]);
+        console.log(`✅ Liens artistes supprimés pour OCC ${id}`);
+        
+        await pool.query(`
+          DELETE FROM artistes a
+          WHERE NOT EXISTS (
+            SELECT 1 FROM event_artistes ea WHERE ea.artiste_id = a.id
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM usagers_occasionnel uo 
+            WHERE uo.artistes ILIKE '%' || a.nom || '%'
+          )
+        `);
+      }
+      
+      await pool.query(
+        `DELETE FROM usagers_vus WHERE usager_id = $1 AND usager_type = $2`,
+        [id, paiementType]
+      );
+      
+      await pool.query(`DELETE FROM notifications WHERE usager_id = $1`, [id]);
+      await pool.query(`DELETE FROM delete_requests WHERE usager_id = $1`, [id]);
+      await pool.query(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
+      
+      await pool.query('COMMIT');
+      console.log(`✅ Usager ${id} (${denomination}) supprimé avec succès`);
+      
+    } catch (dbError) {
+      await pool.query('ROLLBACK');
+      console.error('❌ Erreur DB:', dbError);
+      throw dbError;
+    }
+    
+    try {
+      const adminToken = req.headers.adminToken || req.headers['admintoken'];
+      let deletedBy = 'Administrateur';
+      let userId = 1;
+      
+      if (adminToken) {
+        const userResult = await pool.query(
+          `SELECT id, nom FROM utilisateurs WHERE role = 'super_admin' OR role = 'daf' LIMIT 1`
+        );
+        if (userResult.rows.length > 0) {
+          deletedBy = userResult.rows[0].nom;
+          userId = userResult.rows[0].id;
+        }
+      }
+      
+      await pool.query(
+        `INSERT INTO delete_history 
+         (usager_nom, usager_type, deleted_by, deleted_by_role, user_id, details, deleted_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+        [
+          denomination,
+          typeName,
+          deletedBy,
+          'admin',
+          userId,
+          JSON.stringify({
+            demandeur: usagerData.demandeur || 'Inconnu',
+            region: usagerData.region || 'Non spécifiée',
+            telephone: usagerData.telephone || 'Non spécifié',
+            uniter: usagerData.uniter || 1
+          })
+        ]
+      );
+    } catch (historyError) {
+      console.error('⚠️ Erreur historique:', historyError.message);
+    }
+    
+    res.json({ 
+      success: true, 
+      message: `Usager "${denomination}" supprimé avec succès` 
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur suppression:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Erreur lors de la suppression' 
+    });
+  }
+});
+
+// ============================================================
+// DELETE - Supprimer un usager (Route de fallback)
 // ============================================================
 router.delete('/usagers/:id', async (req, res) => {
   const { id } = req.params;
+  const { type_usager } = req.query;
+  
+  console.log(`🗑️ DELETE fallback /usagers/${id}, Type: ${type_usager || 'auto-détection'}`);
+  
   try {
-    console.log('🗑️ Requête DELETE reçue pour ID:', id);
     const tables = [
       { name: 'usagers_hotel', type: 'Hôtel' },
       { name: 'usagers_magasin', type: 'Grand Surface' },
@@ -960,14 +1264,38 @@ router.delete('/usagers/:id', async (req, res) => {
       { name: 'usagers_bus', type: 'Bus' },
       { name: 'usagers_nightclub', type: 'Night club' }
     ];
-    let foundTable = null, usagerData = null;
-    for (const table of tables) {
-      const result = await pool.query(`SELECT * FROM ${table.name} WHERE id = $1`, [id]);
-      if (result.rows.length > 0) { foundTable = table; usagerData = result.rows[0]; break; }
+    
+    let foundTable = null;
+    let usagerData = null;
+    
+    if (type_usager) {
+      const table = tables.find(t => t.type === type_usager);
+      if (table) {
+        const result = await pool.query(`SELECT * FROM ${table.name} WHERE id = $1`, [id]);
+        if (result.rows.length > 0) {
+          foundTable = table;
+          usagerData = result.rows[0];
+        }
+      }
     }
-    if (!foundTable || !usagerData) return res.status(404).json({ success: false, message: 'Usager non trouvé' });
-    const denomination = usagerData.denomination || 'Inconnu';
-    const typeToPaiementType = {
+    
+    if (!foundTable) {
+      for (const table of tables) {
+        const result = await pool.query(`SELECT * FROM ${table.name} WHERE id = $1`, [id]);
+        if (result.rows.length > 0) {
+          foundTable = table;
+          usagerData = result.rows[0];
+          break;
+        }
+      }
+    }
+    
+    if (!foundTable || !usagerData) {
+      return res.status(404).json({ success: false, message: 'Usager non trouvé' });
+    }
+    
+    const denomination = usagerData.denomination || usagerData.nom_evenement || 'Inconnu';
+    const paiementTypes = {
       'Hôtel': 'hotel',
       'Grand Surface': 'grand-surface',
       'Télé/Radio': 'media',
@@ -975,31 +1303,51 @@ router.delete('/usagers/:id', async (req, res) => {
       'Bus': 'bus',
       'Night club': 'nightclub'
     };
-    const paiementType = typeToPaiementType[foundTable.type];
-    if (paiementType) {
-      const deleteResult = await pool.query(`DELETE FROM paiements WHERE usager_id = $1 AND usager_type = $2`, [id, paiementType]);
-      console.log(`✅ ${deleteResult.rowCount} paiements supprimés pour l'usager ${id}`);
-    }
-    if (foundTable.type === 'OCC') await pool.query(`DELETE FROM event_artistes WHERE event_id = $1`, [id]);
-    await pool.query(`DELETE FROM delete_requests WHERE usager_id = $1`, [id]);
-    await pool.query(`DELETE FROM notifications WHERE usager_id = $1`, [id]);
-    await pool.query(`DELETE FROM ${foundTable.name} WHERE id = $1`, [id]);
+    const paiementType = paiementTypes[foundTable.type];
+    
+    await pool.query('BEGIN');
+    
     try {
-      const adminToken = req.headers.adminToken || req.headers['admintoken'];
-      let deletedBy = 'Administrateur', userId = 1;
-      if (adminToken) {
-        const userResult = await pool.query(`SELECT id, nom FROM utilisateurs WHERE role = 'super_admin' OR role = 'daf' LIMIT 1`);
-        if (userResult.rows.length > 0) { deletedBy = userResult.rows[0].nom; userId = userResult.rows[0].id; }
+      if (paiementType) {
+        await pool.query(
+          `DELETE FROM paiements WHERE usager_id = $1 AND usager_type = $2`,
+          [id, paiementType]
+        );
       }
-      await pool.query(`INSERT INTO delete_history (usager_nom, usager_type, deleted_by, deleted_by_role, user_id, details, deleted_at) VALUES ($1, $2, $3, $4, $5, $6, NOW())`, [
-        denomination, foundTable.type, deletedBy, 'admin', userId,
-        JSON.stringify({ demandeur: usagerData.demandeur || 'Inconnu', region: usagerData.region || 'Non spécifiée', telephone: usagerData.telephone || 'Non spécifié', uniter: usagerData.uniter || 1 })
-      ]);
-    } catch (historyError) { console.error('❌ Erreur historique:', historyError.message); }
-    res.json({ success: true, message: `Usager "${denomination}" et ses paiements supprimés avec succès` });
+      
+      if (foundTable.type === 'OCC') {
+        await pool.query(`DELETE FROM event_artistes WHERE event_id = $1`, [id]);
+      }
+      
+      if (paiementType) {
+        await pool.query(
+          `DELETE FROM usagers_vus WHERE usager_id = $1 AND usager_type = $2`,
+          [id, paiementType]
+        );
+      }
+      
+      await pool.query(`DELETE FROM notifications WHERE usager_id = $1`, [id]);
+      await pool.query(`DELETE FROM delete_requests WHERE usager_id = $1`, [id]);
+      await pool.query(`DELETE FROM ${foundTable.name} WHERE id = $1`, [id]);
+      
+      await pool.query('COMMIT');
+      
+      res.json({ 
+        success: true, 
+        message: `Usager "${denomination}" supprimé avec succès` 
+      });
+      
+    } catch (dbError) {
+      await pool.query('ROLLBACK');
+      throw dbError;
+    }
+    
   } catch (error) {
-    console.error('❌ Erreur suppression usager:', error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error('❌ Erreur suppression:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Erreur lors de la suppression' 
+    });
   }
 });
 

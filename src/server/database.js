@@ -62,7 +62,7 @@ async function initDB() {
         mot_de_passe VARCHAR(255) NOT NULL,
         role VARCHAR(20) DEFAULT 'user',
         statut VARCHAR(20) DEFAULT 'actif',
-        prefix VARCHAR(10),
+        prefix VARCHAR(3),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         derniere_connexion TIMESTAMP
       )
@@ -71,6 +71,10 @@ async function initDB() {
       CREATE INDEX IF NOT EXISTS idx_utilisateurs_email ON utilisateurs(email);
       CREATE INDEX IF NOT EXISTS idx_utilisateurs_role ON utilisateurs(role);
       CREATE INDEX IF NOT EXISTS idx_utilisateurs_statut ON utilisateurs(statut);
+    `);
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_utilisateurs_prefix 
+      ON utilisateurs(prefix) WHERE prefix IS NOT NULL;
     `);
     console.log('✅ Table utilisateurs prête');
 
@@ -262,6 +266,60 @@ async function initDB() {
     console.log('✅ Table backup_annuel prête');
 
     // ============================================================
+    // TABLE PARAMETRES_UTILISATEUR
+    // ============================================================
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS parametres_utilisateur (
+        id SERIAL PRIMARY KEY,
+        utilisateur_id INTEGER NOT NULL UNIQUE REFERENCES utilisateurs(id) ON DELETE CASCADE,
+        app_name VARCHAR(100) DEFAULT 'OMDA App',
+        langue VARCHAR(10) DEFAULT 'fr',
+        theme VARCHAR(20) DEFAULT 'light',
+        date_format VARCHAR(20) DEFAULT 'DD/MM/YYYY',
+        time_format VARCHAR(10) DEFAULT '24h',
+        couleur_principale VARCHAR(20) DEFAULT '#3498db',
+        police VARCHAR(50) DEFAULT 'default',
+        notifications JSONB DEFAULT '{"email":true,"push":true,"sms":false,"sound":true}',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('✅ Table parametres_utilisateur prête');
+
+    // ============================================================
+    // TABLE BACKUP_CONFIG
+    // ============================================================
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS backup_config (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        chemin_sauvegarde TEXT,
+        defini_par INTEGER REFERENCES utilisateurs(id),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT backup_config_single_row CHECK (id = 1)
+      )
+    `);
+    console.log('✅ Table backup_config prête');
+
+    // ============================================================
+    // TABLE BACKUP_HISTORIQUE
+    // ============================================================
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS backup_historique (
+        id SERIAL PRIMARY KEY,
+        type_backup VARCHAR(20) NOT NULL,
+        nom_fichier VARCHAR(255),
+        chemin_complet TEXT,
+        taille_octets BIGINT DEFAULT 0,
+        statut VARCHAR(20) DEFAULT 'succes',
+        message TEXT,
+        created_by INTEGER REFERENCES utilisateurs(id),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('✅ Table backup_historique prête');
+
+    // ============================================================
     // TABLES DES USAGERS (6 types)
     // ============================================================
     const tablesUsagers = [
@@ -340,16 +398,10 @@ async function initDB() {
     console.log('✅ Table usagers prête');
 
     // ============================================================
-    // ⭐ TABLE FACTURE_USAGER - VERSION COMPLÈTE
+    // TABLE FACTURE_USAGER
     // ============================================================
-    console.log('📝 Suppression et recréation de la table facture_usager...');
-    
-    // Supprimer l'ancienne table si elle existe
-    await pool.query(`DROP TABLE IF EXISTS omda_app.facture_usager CASCADE;`);
-    console.log('✅ Ancienne table facture_usager supprimée');
-
     await pool.query(`
-      CREATE TABLE facture_usager (
+      CREATE TABLE IF NOT EXISTS facture_usager (
         id SERIAL PRIMARY KEY,
         ref_omda INTEGER NOT NULL UNIQUE,
         num_facture VARCHAR(20) NOT NULL,
@@ -359,13 +411,13 @@ async function initDB() {
         type_facture VARCHAR(50),
         region_usager VARCHAR(100),
         date_ajout DATE DEFAULT CURRENT_DATE,
-        
+
         denomination VARCHAR(255),
         demandeur VARCHAR(255),
         telephone VARCHAR(50),
         email VARCHAR(255),
         adresse TEXT,
-        
+
         representant_nom VARCHAR(255),
         representant_adresse VARCHAR(255),
         representant_tel VARCHAR(50),
@@ -373,7 +425,7 @@ async function initDB() {
         representant_cin_delivree VARCHAR(50),
         representant_cin_lieu VARCHAR(255),
         representant_fonction VARCHAR(255),
-        
+
         activite VARCHAR(255),
         etoiles VARCHAR(10),
         ravinala BOOLEAN DEFAULT FALSE,
@@ -391,7 +443,7 @@ async function initDB() {
         nif VARCHAR(100),
         stat VARCHAR(100),
         taux DECIMAL(15,2),
-        
+
         organisateurs VARCHAR(255),
         representant_par VARCHAR(255),
         genre_manifestation VARCHAR(255),
@@ -402,71 +454,178 @@ async function initDB() {
         lieu_ajout VARCHAR(255),
         date_signature DATE,
         confirmation_nom VARCHAR(255),
-        
+
         personne_recu VARCHAR(255),
-        quittance VARCHAR(50),
+
+        quittance INTEGER,
         quittance_validee BOOLEAN DEFAULT FALSE,
-        
+
         moyens_communication JSONB,
-        
+
         a_compter_du DATE,
         echeance DATE,
-        
+
         montant_mensuel DECIMAL(15,2) DEFAULT 0,
         frais_dossier DECIMAL(15,2) DEFAULT 0,
         montant_retard DECIMAL(15,2) DEFAULT 0,
         is_retard BOOLEAN DEFAULT FALSE,
         soit_total DECIMAL(15,2) DEFAULT 0,
         uniter INTEGER DEFAULT 1,
-        
+
+        -- ✅ Renouvellement de contrat
+        is_renouvellement BOOLEAN DEFAULT FALSE,
+        frais_renouvellement DECIMAL(15,2) DEFAULT 0,
+
+        -- ✅ Renouvellement de facture (Type C)
+        is_renouvellement_facture BOOLEAN DEFAULT FALSE,
+        frais_renouvellement_facture DECIMAL(15,2) DEFAULT 0,
+
         mois_facture INTEGER CHECK (mois_facture BETWEEN 1 AND 12),
         annee_facture INTEGER,
         mois_groupes TEXT,
         type_groupe VARCHAR(10) DEFAULT 'A',
         suffixe VARCHAR(5),
-        
+
         description_personnalisee TEXT,
         annee_paiement INTEGER,
         mois_groupes_json JSONB,
-        
+
         numero_dossier_utilisateur VARCHAR(50),
         numero_dossier_global VARCHAR(50),
-        
+
         daf_nom VARCHAR(255),
-        
+
         statut VARCHAR(20) DEFAULT 'brouillon',
         created_by INTEGER REFERENCES utilisateurs(id),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    console.log('✅ Table facture_usager créée avec succès');
+    console.log('✅ Table facture_usager prête');
+    // ============================================================
+    //  TABLE USAGER_OTHER (usagers événementiels)
+    // ============================================================
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS usager_other (
+        id SERIAL PRIMARY KEY,
+        type_usager VARCHAR(50) NOT NULL,
+
+        -- Identification
+        denomination VARCHAR(255) NOT NULL,
+        nom VARCHAR(255),
+        prenom VARCHAR(255),
+        telephone VARCHAR(50),
+        email VARCHAR(255),
+        adresse TEXT,
+        region VARCHAR(100),
+
+        -- Représentant
+        representant_par VARCHAR(255),
+        representant_cin VARCHAR(100),
+        representant_cin_delivree DATE,
+        representant_cin_lieu VARCHAR(255),
+        representant_contact VARCHAR(50),
+
+        -- Mode paiement
+        mode_paiement VARCHAR(20) NOT NULL DEFAULT 'unique',
+
+        -- Références
+        numero_dossier_utilisateur VARCHAR(50),
+        numero_dossier_global VARCHAR(50),
+        quittance INTEGER,
+        quittance_validee BOOLEAN DEFAULT FALSE,
+        personne_recu VARCHAR(255),
+
+        -- Statut
+        statut VARCHAR(20) DEFAULT 'actif',
+
+        created_by INTEGER REFERENCES utilisateurs(id),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_usager_other_type ON usager_other(type_usager);
+      CREATE INDEX IF NOT EXISTS idx_usager_other_region ON usager_other(region);
+      CREATE INDEX IF NOT EXISTS idx_usager_other_mode ON usager_other(mode_paiement);
+      CREATE INDEX IF NOT EXISTS idx_usager_other_quittance ON usager_other(quittance);
+    `);
+    console.log('✅ Table usager_other prête');
+
+    // ============================================================
+    // ✅ TABLE OTHER_LIGNES (détail facture : RAKOTONAIVO, WEB, CD...)
+    // ============================================================
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS other_lignes (
+        id SERIAL PRIMARY KEY,
+        usager_other_id INTEGER NOT NULL REFERENCES usager_other(id) ON DELETE CASCADE,
+        description VARCHAR(255) NOT NULL,
+        uniter INTEGER DEFAULT 1,
+        pu DECIMAL(15,2) DEFAULT 0,
+        montant DECIMAL(15,2) DEFAULT 0,
+        ordre INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_other_lignes_usager ON other_lignes(usager_other_id);
+    `);
+    console.log('✅ Table other_lignes prête');
+    // ============================================================
+    // ✅ MIGRATION : Ajouter les colonnes de renouvellement
+    // ============================================================
+    try {
+      await pool.query(`
+        ALTER TABLE facture_usager 
+        ADD COLUMN IF NOT EXISTS is_renouvellement BOOLEAN DEFAULT FALSE
+      `);
+      await pool.query(`
+        ALTER TABLE facture_usager 
+        ADD COLUMN IF NOT EXISTS frais_renouvellement DECIMAL(15,2) DEFAULT 0
+      `);
+      await pool.query(`
+        ALTER TABLE facture_usager 
+        ADD COLUMN IF NOT EXISTS is_renouvellement_facture BOOLEAN DEFAULT FALSE
+      `);
+      await pool.query(`
+        ALTER TABLE facture_usager 
+        ADD COLUMN IF NOT EXISTS frais_renouvellement_facture DECIMAL(15,2) DEFAULT 0
+      `);
+      console.log('✅ Migration : colonnes de renouvellement prêtes');
+      console.log('   - is_renouvellement, frais_renouvellement');
+      console.log('   - is_renouvellement_facture, frais_renouvellement_facture');
+    } catch (migErr) {
+      console.warn('⚠️ Migration colonnes renouvellement:', migErr.message);
+    }
 
     // ============================================================
     // CRÉATION DES INDEX
     // ============================================================
     await pool.query(`
-      CREATE INDEX idx_facture_ref_omda ON facture_usager(ref_omda);
-      CREATE INDEX idx_facture_ref_client_type ON facture_usager(ref_client_type);
-      CREATE INDEX idx_facture_ref_usager ON facture_usager(ref_usager);
-      CREATE INDEX idx_facture_statut ON facture_usager(statut);
-      CREATE INDEX idx_facture_usager_mois_facture ON facture_usager(mois_facture);
-      CREATE INDEX idx_facture_usager_annee_facture ON facture_usager(annee_facture);
-      CREATE INDEX idx_facture_usager_type_groupe ON facture_usager(type_groupe);
-      CREATE INDEX idx_facture_usager_annee_paiement ON facture_usager(annee_paiement);
+      CREATE INDEX IF NOT EXISTS idx_facture_ref_omda ON facture_usager(ref_omda);
+      CREATE INDEX IF NOT EXISTS idx_facture_ref_client_type ON facture_usager(ref_client_type);
+      CREATE INDEX IF NOT EXISTS idx_facture_ref_usager ON facture_usager(ref_usager);
+      CREATE INDEX IF NOT EXISTS idx_facture_statut ON facture_usager(statut);
+      CREATE INDEX IF NOT EXISTS idx_facture_usager_mois_facture ON facture_usager(mois_facture);
+      CREATE INDEX IF NOT EXISTS idx_facture_usager_annee_facture ON facture_usager(annee_facture);
+      CREATE INDEX IF NOT EXISTS idx_facture_usager_type_groupe ON facture_usager(type_groupe);
+      CREATE INDEX IF NOT EXISTS idx_facture_usager_annee_paiement ON facture_usager(annee_paiement);
+      CREATE INDEX IF NOT EXISTS idx_facture_usager_quittance ON facture_usager(quittance);
+      CREATE INDEX IF NOT EXISTS idx_backup_historique_type ON backup_historique(type_backup);
+      CREATE INDEX IF NOT EXISTS idx_backup_historique_date ON backup_historique(created_at);
     `);
-    console.log('✅ Index de facture_usager créés');
+    console.log('✅ Index prêts');
 
     // ============================================================
     // CRÉATION DES UTILISATEURS PAR DÉFAUT
     // ============================================================
     const defaultUsers = [
-      { nom: 'Super Admin', email: 'superadmin@omda.mg', mot_de_passe: '1234', role: 'super_admin', prefix: 'SA' },
-      { nom: 'Admin OMDA', email: 'admin@omda.mg', mot_de_passe: '1234', role: 'admin', prefix: 'AD' },
+      { nom: 'Super Admin', email: 'superadmin@omda.mg', mot_de_passe: '1234', role: 'super_admin', prefix: 'SUP' },
+      { nom: 'Admin OMDA', email: 'admin@omda.mg', mot_de_passe: '1234', role: 'admin', prefix: 'ADM' },
       { nom: 'DAF', email: 'daf@omda.mg', mot_de_passe: '5678', role: 'daf', prefix: 'DAF' },
-      { nom: 'Jean Dupont', email: 'jean@omda.mg', mot_de_passe: '1234', role: 'user', prefix: 'JD' },
-      { nom: 'Marie Claire', email: 'marie@omda.mg', mot_de_passe: '1234', role: 'user', prefix: 'MC' },
-      { nom: 'Admin', email: 'Admin@gmail.com', mot_de_passe: '1234', role: 'super_admin', prefix: 'ADM' }
+      { nom: 'Jean Dupont', email: 'jean@omda.mg', mot_de_passe: '1234', role: 'user', prefix: 'JEA' },
+      { nom: 'Marie Claire', email: 'marie@omda.mg', mot_de_passe: '1234', role: 'user', prefix: 'MAR' },
+      { nom: 'Admin', email: 'Admin@gmail.com', mot_de_passe: '1234', role: 'super_admin', prefix: 'ADS' }
     ];
 
     const currentYear = new Date().getFullYear();
@@ -474,13 +633,14 @@ async function initDB() {
 
     for (const user of defaultUsers) {
       const exists = await pool.query('SELECT id FROM utilisateurs WHERE email = $1', [user.email]);
+      let userId;
       if (exists.rows.length === 0) {
         const result = await pool.query(
           `INSERT INTO utilisateurs (nom, email, mot_de_passe, role, statut, prefix) 
            VALUES ($1, $2, $3, $4, 'actif', $5) RETURNING id`,
           [user.nom, user.email, user.mot_de_passe, user.role, user.prefix]
         );
-        const userId = result.rows[0].id;
+        userId = result.rows[0].id;
         console.log(`✅ Utilisateur ${user.nom} (${user.role}) créé`);
 
         for (const type of typesUsager) {
@@ -491,18 +651,26 @@ async function initDB() {
             [userId, currentYear, type]
           );
         }
+      } else {
+        userId = exists.rows[0].id;
       }
+
+      await pool.query(
+        `INSERT INTO parametres_utilisateur (utilisateur_id)
+         VALUES ($1)
+         ON CONFLICT (utilisateur_id) DO NOTHING`,
+        [userId]
+      );
     }
+
+    await pool.query(`
+      INSERT INTO backup_config (id, chemin_sauvegarde)
+      VALUES (1, NULL)
+      ON CONFLICT (id) DO NOTHING
+    `);
 
     console.log('✅ Base de données initialisée avec succès !');
     console.log('📂 Schéma utilisé : omda_app');
-    console.log('📌 Comptes par défaut:');
-    console.log('   - superadmin@omda.mg / 1234 (Super Admin)');
-    console.log('   - admin@omda.mg / 1234 (Admin)');
-    console.log('   - daf@omda.mg / 5678 (DAF)');
-    console.log('   - jean@omda.mg / 1234 (User)');
-    console.log('   - marie@omda.mg / 1234 (User)');
-    console.log('   - Admin@gmail.com / 1234 (Super Admin)');
 
   } catch (error) {
     console.error('❌ Erreur init DB:', error.message);

@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Calendar, ShoppingBag, Radio, MoreHorizontal,
-  BookOpen, Send, Inbox, Settings, Users
+  BookOpen, Send, Inbox, Settings, Users,
+  Database
 } from 'lucide-react';
 
 const ParamCard = () => {
@@ -14,6 +15,35 @@ const ParamCard = () => {
     media: 0,
     hotel: 0
   });
+
+  // ===== ÉTATS POUR LA LANGUE =====
+  const [appLangue, setAppLangue] = useState('fr');
+
+  // ===== CHARGER LA LANGUE =====
+  useEffect(() => {
+    const langue = localStorage.getItem('app-langue') || 'fr';
+    setAppLangue(langue);
+    
+    const handleLangueChange = (event) => {
+      const { langue } = event.detail;
+      setAppLangue(langue);
+    };
+    
+    window.addEventListener('langue-change', handleLangueChange);
+    
+    return () => {
+      window.removeEventListener('langue-change', handleLangueChange);
+    };
+  }, []);
+
+  // ===== FONCTION DE TRADUCTION =====
+  const t = (fr, mg, en) => {
+    switch (appLangue) {
+      case 'mg': return mg || fr;
+      case 'en': return en || fr;
+      default: return fr;
+    }
+  };
 
   useEffect(() => {
     fetchCounts();
@@ -49,7 +79,7 @@ const ParamCard = () => {
       <div className="param-header">
         <h1>
           <Users size={20} strokeWidth={2} />
-          Paramètres du droit public
+          {t('Paramètres du droit public', 'Fandrindrana ny zon\'ny besinimaro', 'Public rights settings')}
         </h1>
       </div>
 
@@ -57,34 +87,42 @@ const ParamCard = () => {
         <div className="param-item">
           <div className="param-icon"><Calendar size={20} strokeWidth={1.8} /></div>
           <div className="param-number">{counts.occ}</div>
-          <a href="#" onClick={(e) => { e.preventDefault(); navigate('/date_occ'); }}>Occasionnelle</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); navigate('/date_occ'); }}>
+            {t('Occasionnelle', 'Tsindraindray', 'Occasional')}
+          </a>
         </div>
         <div className="param-item">
           <div className="param-icon"><ShoppingBag size={20} strokeWidth={1.8} /></div>
           <div className="param-number">{counts.grandSurface}</div>
-          <a href="#" onClick={(e) => { e.preventDefault(); navigate('/date-grandsurface'); }}>Grande surface</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); navigate('/date-grandsurface'); }}>
+            {t('Grande surface', 'Trano fivarotana lehibe', 'Supermarket')}
+          </a>
         </div>
         <div className="param-item">
           <div className="param-icon"><Radio size={20} strokeWidth={1.8} /></div>
           <div className="param-number">{counts.media}</div>
-          <a href="#" onClick={(e) => { e.preventDefault(); navigate('/date-bus'); }}>Media</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); navigate('/tele-radio'); }}>
+            {t('Media', 'Haino aman-jery', 'Media')}
+          </a>
         </div>
         <div className="param-item">
           <div className="param-icon"><MoreHorizontal size={20} strokeWidth={1.8} /></div>
           <div className="param-number param-other"><span>{counts.hotel}</span></div>
-          <a href="#" onClick={(e) => { e.preventDefault(); navigate('/autre-usager'); }}>Autre Usager</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); navigate('/autre-usager'); }}>
+            {t('Autre Usager', 'Mpampiasa hafa', 'Other User')}
+          </a>
         </div>
       </div>
 
-      {/* Actions sur une seule ligne */}
       <div className="param-actions">
-        <div className="action-group">
-          <button className="action-btn"><BookOpen size={15} /> Donner</button>
-          <button className="action-btn"><Send size={15} /> Envoyer</button>
-          <button className="action-btn"><Inbox size={15} /> Recevoir</button>
-        </div>
-        <button className="action-btn" style={{ marginLeft: 'auto' }}>
-          <Settings size={15} /> Paramètres
+        <button 
+          className="action-btn btn-database" 
+          onClick={() => navigate('/base-de-donnees')}
+        >
+          <Database size={18} /> {t('Gestion de bd', 'Fitandremana tahiry', 'Database management')}
+        </button>
+        <button className="action-btn" style={{ marginLeft: 'auto' }} onClick={() => navigate('/Parametre_global')}>
+          <Settings size={15} /> {t('Paramètres', 'Fandrindrana', 'Settings')}
         </button>
       </div>
     </div>

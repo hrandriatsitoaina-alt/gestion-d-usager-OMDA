@@ -7,11 +7,11 @@ import {
   Phone, Mail, MapPin, Calendar, DollarSign, CreditCard,
   Hash, Edit, CheckCircle, AlertCircle, Loader2,
   Users, Bus, Hotel, Store, Tv2, PartyPopper, Ticket,
-  UserPlus, FileCheck, Radio, Headphones
+  UserPlus, FileCheck, Radio, Headphones, Home
 } from 'lucide-react';
 import '../styles/generation-facture.css';
 import MiniSidebar from '../components/MiniSidebar';
-import { generateFacturePDF } from './pdf/facture_pdf';
+import { generateFacturePDF } from './pdf/facture_pdf_g';
 
 const GenerationFacture = () => {
   const navigate = useNavigate();
@@ -25,13 +25,18 @@ const GenerationFacture = () => {
   const [factureId, setFactureId] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editedFacture, setEditedFacture] = useState({});
+  
+  // ✅ NOUVEAU : État pour savoir si le PDF a été généré
+  const [pdfGenere, setPdfGenere] = useState(false);
+  
+  // ✅ Personne qui reçoit - TOUJOURS VIDE par défaut
   const [personneRecu, setPersonneRecu] = useState('');
-  const [isSavingPersonne, setIsSavingPersonne] = useState(false);
+  
+  // ✅ Quittance - SIMPLIFIÉ
   const [quittance, setQuittance] = useState('');
   const [quittanceValidee, setQuittanceValidee] = useState(false);
-  const [isSavingQuittance, setIsSavingQuittance] = useState(false);
 
-  // États pour les montants - NON MODIFIABLES (lecture seule)
+  // États pour les montants
   const [montant, setMontant] = useState(0);
   const [fraisDossier, setFraisDossier] = useState(0);
   const [montantRetard, setMontantRetard] = useState(0);
@@ -49,7 +54,13 @@ const GenerationFacture = () => {
 
   const getOnlyNumbers = (value) => {
     if (!value) return '';
-    return value.replace(/\D/g, '');
+    return value.toString().replace(/\D/g, '');
+  };
+
+  const formatQuittanceDisplay = (value) => {
+    const numbers = getOnlyNumbers(value);
+    if (!numbers) return '';
+    return numbers.padStart(7, '0');
   };
 
   const getTotalMoyens = () => {
@@ -80,22 +91,16 @@ const GenerationFacture = () => {
     }
   }, [location]);
 
-  // Récupération de la facture avec tous les montants
   const fetchFacture = async (id) => {
     try {
       setLoading(true);
-      console.log('🔍 Récupération de la facture ID:', id);
       
       const response = await fetch(`http://localhost:3001/api/factures/${id}`);
       const data = await response.json();
       
-      console.log('📦 Réponse API:', data);
-      
       if (data.success) {
         const factureData = data.facture;
-        console.log('✅ Facture chargée:', factureData);
         
-        // Récupération des montants depuis la facture
         let montantVal = parseFloat(factureData.montant_mensuel) || 0;
         let fraisDossierVal = parseFloat(factureData.frais_dossier) || 0;
         let montantRetardVal = parseFloat(factureData.montant_retard) || 0;
@@ -105,17 +110,6 @@ const GenerationFacture = () => {
         const type = factureData.ref_client_type || '';
         setRefClientType(type);
 
-        console.log('📊 MONTANTS DE LA FACTURE:', {
-          type,
-          montantVal,
-          fraisDossierVal,
-          montantRetardVal,
-          isRetardVal,
-          uniterVal,
-          soitTotalVal
-        });
-
-        // Récupération des moyens de communication
         let moyensComm = {
           radio: { actif: false, taux: 0 },
           lecteur: { actif: false, taux: 0 },
@@ -135,12 +129,10 @@ const GenerationFacture = () => {
           }
         }
 
-        // Si les montants sont vides, essayer de les récupérer depuis l'usager
         if (montantVal === 0 && factureData.ref_usager) {
           try {
             const usagerResponse = await fetch(`http://localhost:3001/api/usagers/${factureData.ref_usager}`);
             const usagerData = await usagerResponse.json();
-            console.log('📊 Données de l\'usager:', usagerData);
             
             if (type === 'OCC') {
               montantVal = parseFloat(usagerData.montant) || parseFloat(usagerData.montant_total) || 0;
@@ -158,20 +150,11 @@ const GenerationFacture = () => {
             if (uniterVal === 1 && usagerData.uniter) {
               uniterVal = parseInt(usagerData.uniter) || 1;
             }
-            
-            console.log('📊 MONTANTS DEPUIS L\'USAGER:', {
-              montantVal,
-              fraisDossierVal,
-              uniterVal,
-              montantRetardVal,
-              isRetardVal
-            });
           } catch (usagerError) {
             console.warn('⚠️ Impossible de récupérer l\'usager:', usagerError);
           }
         }
 
-        // Recalculer soit_total si nécessaire
         if (soitTotalVal === 0 && montantVal > 0) {
           const retard = isRetardVal ? montantRetardVal : 0;
           
@@ -185,41 +168,22 @@ const GenerationFacture = () => {
           } else {
             soitTotalVal = (montantVal * uniterVal) + fraisDossierVal + retard;
           }
-          console.log('🔄 Soit_total recalculé:', soitTotalVal);
         }
 
-        console.log('📊 MONTANTS FINAUX:', {
-          type,
-          montant: montantVal,
-          fraisDossier: fraisDossierVal,
-          montantRetard: montantRetardVal,
-          isRetard: isRetardVal,
-          uniter: uniterVal,
-          soitTotal: soitTotalVal
-        });
-
-        // Mettre à jour tous les états
         setFacture(factureData);
         setEditedFacture(factureData);
         
-        // ✅ IMPORTANT: Ne pas définir personneRecu par défaut
-        // La personne qui reçoit doit être saisie manuellement
-        setPersonneRecu(''); // Toujours vide initialement
+        setPersonneRecu('');
         
         const quittanceRaw = factureData.quittance || '';
         const quittanceNumbers = getOnlyNumbers(quittanceRaw);
-        setQuittance(quittanceNumbers);
+        if (quittanceNumbers) {
+          setQuittance(quittanceNumbers);
+        } else {
+          setQuittance('');
+        }
         setQuittanceValidee(factureData.quittance_validee || false);
         
-        setMontant(montantVal);
-        setFraisDossier(fraisDossierVal);
-        setMontantRetard(montantRetardVal);
-        setIsRetard(isRetardVal);
-        setUniter(uniterVal);
-        setMoyensCommunication(moyensComm);
-        setSoitTotalCalcule(soitTotalVal);
-        
-        // Si quittance est vide, récupérer le prochain numéro
         if (!quittanceNumbers || quittanceNumbers === '') {
           try {
             const quittanceResponse = await fetch('http://localhost:3001/api/quittance/last');
@@ -233,8 +197,15 @@ const GenerationFacture = () => {
           }
         }
         
+        setMontant(montantVal);
+        setFraisDossier(fraisDossierVal);
+        setMontantRetard(montantRetardVal);
+        setIsRetard(isRetardVal);
+        setUniter(uniterVal);
+        setMoyensCommunication(moyensComm);
+        setSoitTotalCalcule(soitTotalVal);
+        
       } else {
-        console.error('❌ Erreur API:', data.message);
         showToast('Erreur lors du chargement de la facture', 'error');
         navigate('/confirmation-dossier');
       }
@@ -246,7 +217,6 @@ const GenerationFacture = () => {
     }
   };
 
-  // Recalculer le total quand les valeurs changent
   useEffect(() => {
     if (facture) {
       const totalMoyens = getTotalMoyens();
@@ -271,16 +241,17 @@ const GenerationFacture = () => {
         soit_total: total,
         quittance: quittance,
         quittance_validee: quittanceValidee,
-        moyens_communication: moyensCommunication
+        moyens_communication: moyensCommunication,
+        personne_recu: personneRecu
       }));
     }
-  }, [montant, fraisDossier, montantRetard, isRetard, uniter, moyensCommunication, quittance, quittanceValidee, refClientType]);
+  }, [montant, fraisDossier, montantRetard, isRetard, uniter, moyensCommunication, quittance, quittanceValidee, refClientType, personneRecu]);
 
   const handleEdit = (field, value) => {
     setEditedFacture(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSave = async () => {
+  const handleSaveFacture = async () => {
     setIsSaving(true);
     try {
       const dataToSave = {
@@ -291,12 +262,11 @@ const GenerationFacture = () => {
         is_retard: isRetard,
         uniter: uniter,
         soit_total: soitTotalCalcule,
-        quittance: quittance,
+        quittance: getOnlyNumbers(quittance) || null,
         quittance_validee: quittanceValidee,
-        moyens_communication: moyensCommunication
+        moyens_communication: moyensCommunication,
+        personne_recu: personneRecu
       };
-      
-      console.log('💾 Sauvegarde des données:', dataToSave);
       
       const response = await fetch(`http://localhost:3001/api/factures/${factureId}`, {
         method: 'PUT',
@@ -321,110 +291,26 @@ const GenerationFacture = () => {
     }
   };
 
-  // ✅ Fonction pour sauvegarder la personne qui reçoit
-  const handleSavePersonneRecu = async () => {
-    // ✅ Vérifier que le nom n'est pas vide
-    if (!personneRecu.trim()) {
-      showToast('Veuillez saisir le nom de la personne qui reçoit', 'error');
-      return;
-    }
-    
-    // ✅ Vérifier que le nom n'est pas un nom par défaut
-    const defaultNames = ['FITAHIANTSOA Nemenjanahary', 'Administrateur', 'User', ''];
-    if (defaultNames.includes(personneRecu.trim())) {
-      showToast('Veuillez saisir un nom valide pour la personne qui reçoit', 'error');
-      return;
-    }
-    
-    setIsSavingPersonne(true);
-    try {
-      const response = await fetch(`http://localhost:3001/api/factures/${factureId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ personne_recu: personneRecu.trim() })
-      });
-      
-      const data = await response.json();
-      if (data.success) {
-        showToast('✅ Personne reçu enregistrée avec succès', 'success');
-        setFacture(data.facture);
-        setEditedFacture(data.facture);
-        // ✅ Garder le nom saisi
-        setPersonneRecu(personneRecu.trim());
-      } else {
-        showToast('❌ ' + data.message, 'error');
-      }
-    } catch (error) {
-      console.error('Erreur:', error);
-      showToast('❌ Erreur de sauvegarde', 'error');
-    } finally {
-      setIsSavingPersonne(false);
-    }
-  };
-
-  const handleSaveQuittance = async () => {
-    const quittanceClean = getOnlyNumbers(quittance);
-    
-    if (!quittanceClean || quittanceClean === '') {
-      showToast('Veuillez saisir un numéro de quittance', 'error');
-      return;
-    }
-    
-    setIsSavingQuittance(true);
-    try {
-      const response = await fetch(`http://localhost:3001/api/factures/${factureId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          quittance: quittanceClean,
-          quittance_validee: quittanceValidee
-        })
-      });
-      
-      const data = await response.json();
-      if (data.success) {
-        showToast('✅ Quittance enregistrée avec succès', 'success');
-        setFacture(data.facture);
-        setEditedFacture(data.facture);
-      } else {
-        showToast('❌ ' + data.message, 'error');
-      }
-    } catch (error) {
-      console.error('Erreur:', error);
-      showToast('❌ Erreur de sauvegarde', 'error');
-    } finally {
-      setIsSavingQuittance(false);
-    }
-  };
-
-  // ✅ Fonction de génération PDF avec validation de la personne reçu
+  // ✅ Génération PDF - Met à jour pdfGenere
   const handleGeneratePDF = async () => {
-    if (!facture) {
-      showToast('Aucune facture à générer', 'error');
-      return;
-    }
-    
-    // ✅ Vérifier que personne_recu est bien saisi et non vide
-    const personneName = facture.personne_recu || personneRecu;
-    if (!personneName || personneName.trim() === '') {
-      showToast('Veuillez d\'abord enregistrer le nom de la personne qui reçoit', 'error');
-      return;
-    }
-    
-    // ✅ Vérifier que ce n'est pas un nom par défaut
-    const defaultNames = ['FITAHIANTSOA Nemenjanahary', 'Administrateur', 'User'];
-    if (defaultNames.includes(personneName.trim())) {
-      showToast('Veuillez saisir un nom valide pour la personne qui reçoit', 'error');
+    // Vérifications OBLIGATOIRES
+    if (!personneRecu || personneRecu.trim() === '') {
+      showToast('⚠️ OBLIGATOIRE : Saisissez le nom de la personne qui reçoit', 'error');
       return;
     }
     
     if (!quittanceValidee) {
-      showToast('⚠️ Veuillez valider le numéro de quittance avant de générer le PDF', 'error');
+      showToast('⚠️ OBLIGATOIRE : Cochez la case pour valider la quittance', 'error');
       return;
     }
     
     if (!quittance || quittance === '') {
-      showToast('⚠️ Veuillez saisir un numéro de quittance', 'error');
+      showToast('⚠️ OBLIGATOIRE : Saisissez un numéro de quittance', 'error');
+      return;
+    }
+    
+    if (!facture) {
+      showToast('Aucune facture à générer', 'error');
       return;
     }
     
@@ -440,20 +326,17 @@ const GenerationFacture = () => {
         is_retard: isRetard,
         uniter: uniter,
         soit_total: soitTotalCalcule,
-        quittance: quittance,
+        quittance: formatQuittanceDisplay(quittance),
         quittance_validee: quittanceValidee,
-        moyens_communication: moyensCommunication
+        moyens_communication: moyensCommunication,
+        personne_recu: personneRecu
       };
-      
-      if (personneRecu) {
-        factureData.personne_recu = personneRecu;
-      }
-      
-      console.log('📄 Données envoyées au PDF:', factureData);
       
       const result = generateFacturePDF(factureData, false);
       
       if (result) {
+        // ✅ Marquer le PDF comme généré
+        setPdfGenere(true);
         showToast('✅ PDF généré avec succès !', 'success');
       } else {
         showToast('❌ Erreur lors de la génération du PDF', 'error');
@@ -464,6 +347,15 @@ const GenerationFacture = () => {
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  // ✅ Retour vers confirmation-dossier (uniquement si PDF généré)
+  const handleRetour = () => {
+    if (!pdfGenere) {
+      showToast('⚠️ Veuillez d\'abord générer le PDF avant de retourner', 'warning');
+      return;
+    }
+    navigate('/confirmation-dossier');
   };
 
   const handleMoyenCommEdit = (moyen, field, value) => {
@@ -500,13 +392,6 @@ const GenerationFacture = () => {
     return labels[type] || type;
   };
 
-  const formatNumber = (value) => {
-    if (value === '' || value === null || value === undefined) return '';
-    const num = value.toString().replace(/\s/g, '').replace(/[^0-9]/g, '');
-    if (!num) return '';
-    return num.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-  };
-
   const renderField = (label, value, field, type = 'text') => {
     const currentValue = isEditing ? editedFacture[field] : value;
     const displayValue = currentValue !== undefined && currentValue !== null ? currentValue : '';
@@ -520,7 +405,6 @@ const GenerationFacture = () => {
       'montant_mensuel', 'frais_dossier', 'montant_retard', 'is_retard', 'uniter', 'soit_total'
     ].includes(field);
     
-    // Les champs de montant sont TOUJOURS en lecture seule
     const canEdit = isEditing && !isProtected && !isMontantField;
     
     return (
@@ -571,11 +455,6 @@ const GenerationFacture = () => {
         ) : (
           <span className={`field-value ${isProtected || isMontantField ? 'protected' : ''}`}>
             {type === 'date' && displayValue ? new Date(displayValue).toLocaleDateString('fr-FR') : displayValue || '-'}
-          </span>
-        )}
-        {isMontantField && (
-          <span style={{ fontSize: '10px', color: '#6c757d', marginLeft: '5px' }}>
-            
           </span>
         )}
       </div>
@@ -702,15 +581,18 @@ const GenerationFacture = () => {
   const showRetard = hasRetard(facture.ref_client_type);
   const totalMoyens = getTotalMoyens();
 
+  // ✅ Conditions OBLIGATOIRES pour activer le PDF
+  const isPDFReady = 
+    personneRecu && personneRecu.trim() !== '' && 
+    quittanceValidee && 
+    quittance && quittance !== '';
+
   return (
     <>
       <MiniSidebar />
       <div className="generation-facture-container">
         <div className="facture-header">
           <div className="header-left">
-            <button className="btn-back" onClick={() => navigate('/confirmation-dossier')}>
-              <ArrowLeft size={20} /> Retour
-            </button>
             <div className="header-info">
               <h1>Génération de Facture</h1>
               <div className="header-type">
@@ -806,45 +688,41 @@ const GenerationFacture = () => {
             </div>
           </div>
 
-          {/* ✅ SECTION PERSONNE QUI REÇOIT - CORRIGÉE */}
+          {/* SECTION PERSONNE QUI REÇOIT */}
           <div className="facture-section personne-recu-section">
-            <h3><UserPlus size={18} /> Personne qui reçoit</h3>
+            <h3><UserPlus size={18} /> Personne qui reçoit <span style={{ color: 'red', fontSize: '14px' }}>*</span></h3>
             <div className="personne-recu-container">
               <div className="personne-recu-input-group">
                 <input
                   type="text"
                   value={personneRecu}
                   onChange={(e) => setPersonneRecu(e.target.value)}
-                  placeholder="Saisir le nom de la personne qui reçoit"
+                  placeholder="Saisir le nom de la personne qui reçoit (obligatoire)"
                   className="personne-recu-input"
-                  disabled={isSavingPersonne}
+                  style={{
+                    borderColor: personneRecu && personneRecu.trim() !== '' ? '#27ae60' : '#ddd',
+                    borderWidth: personneRecu && personneRecu.trim() !== '' ? '2px' : '1px'
+                  }}
                 />
-                <button
-                  className="btn-save-personne"
-                  onClick={handleSavePersonneRecu}
-                  disabled={isSavingPersonne || !personneRecu.trim()}
-                >
-                  {isSavingPersonne ? (
-                    <><Loader2 size={18} className="spinner" /> Enregistrement...</>
-                  ) : (
-                    <><Save size={18} /> Enregistrer</>
-                  )}
-                </button>
               </div>
-              
-              {/* ✅ Affichage conditionnel */}
-              {facture.personne_recu && facture.personne_recu.trim() !== '' && (
-                <div className="personne-recu-info success">
-                  <CheckCircle size={16} color="#27ae60" />
-                  <span>Enregistrée  <strong></strong></span>
+              {personneRecu && personneRecu.trim() !== '' && (
+                <div className="personne-recu-validee" style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '6px 10px', marginTop: '4px', fontSize: '13px',
+                  color: '#2e7d32', backgroundColor: '#e8f5e9', borderRadius: '4px'
+                }}>
+                  <CheckCircle size={14} color="#27ae60" />
+                  <span><strong>✅ {personneRecu}</strong> - Enregistré</span>
                 </div>
               )}
-              
-              {/* ✅ Message d'avertissement si vide */}
-              {(!facture.personne_recu || facture.personne_recu.trim() === '') && (
-                <div className="personne-recu-info warning">
-                  <AlertCircle size={16} color="#f39c12" />
-                  <span>⚠️ Aucune personne enregistrée - Veuillez saisir le nom</span>
+              {(!personneRecu || personneRecu.trim() === '') && (
+                <div className="personne-recu-requis" style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '6px 10px', marginTop: '4px', fontSize: '13px',
+                  color: '#e65100', backgroundColor: '#fff3e0', borderRadius: '4px'
+                }}>
+                  <AlertCircle size={14} color="#f39c12" />
+                  <span><strong>⚠️ OBLIGATOIRE</strong> - Saisissez le nom</span>
                 </div>
               )}
             </div>
@@ -852,7 +730,7 @@ const GenerationFacture = () => {
 
           {/* SECTION QUITTANCE */}
           <div className="facture-section quittance-section">
-            <h3><FileCheck size={18} /> Quittance</h3>
+            <h3><FileCheck size={18} /> Quittance <span style={{ color: 'red', fontSize: '14px' }}>*</span></h3>
             <div className="quittance-container">
               <div className="quittance-input-group">
                 <div className="quittance-input-wrapper">
@@ -863,22 +741,20 @@ const GenerationFacture = () => {
                       const value = e.target.value.replace(/\D/g, '');
                       setQuittance(value);
                     }}
-                    placeholder="Numéro de quittance"
+                    onBlur={() => {
+                      if (quittance) {
+                        setQuittance(formatQuittanceDisplay(quittance));
+                      }
+                    }}
+                    placeholder="Numéro de quittance (obligatoire)"
                     className="quittance-input"
-                    disabled={isSavingQuittance}
+                    maxLength={10}
+                    style={{
+                      borderColor: quittance && quittance !== '' ? '#27ae60' : '#ddd',
+                      borderWidth: quittance && quittance !== '' ? '2px' : '1px'
+                    }}
                   />
                 </div>
-                <button
-                  className="btn-save-quittance"
-                  onClick={handleSaveQuittance}
-                  disabled={isSavingQuittance || !quittance || quittance === ''}
-                >
-                  {isSavingQuittance ? (
-                    <><Loader2 size={18} className="spinner" /> Enregistrement...</>
-                  ) : (
-                    <><Save size={18} /> Enregistrer</>
-                  )}
-                </button>
               </div>
               
               <div className="quittance-validation">
@@ -888,7 +764,7 @@ const GenerationFacture = () => {
                     checked={quittanceValidee}
                     onChange={(e) => {
                       if (!quittance || quittance === '') {
-                        showToast('Veuillez saisir un numéro de quittance', 'error');
+                        showToast('⚠️ Veuillez saisir d\'abord un numéro de quittance', 'error');
                         return;
                       }
                       setQuittanceValidee(e.target.checked);
@@ -902,39 +778,47 @@ const GenerationFacture = () => {
                 </label>
                 
                 {quittanceValidee && quittance && (
-                  <div className="quittance-validee-info">
+                  <div className="quittance-validee-info" style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    padding: '6px 10px', marginTop: '4px', fontSize: '13px',
+                    color: '#2e7d32', backgroundColor: '#e8f5e9', borderRadius: '4px'
+                  }}>
                     <CheckCircle size={16} color="#27ae60" />
                     <span>✅ Quittance validée</span>
                   </div>
                 )}
                 {!quittanceValidee && quittance && (
-                  <div className="quittance-non-validee-info">
+                  <div className="quittance-non-validee-info" style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    padding: '6px 10px', marginTop: '4px', fontSize: '13px',
+                    color: '#e65100', backgroundColor: '#fff3e0', borderRadius: '4px'
+                  }}>
                     <AlertCircle size={16} color="#f39c12" />
-                    <span>☑️ Cochez la case pour valider la quittance</span>
+                    <span><strong>☑️ OBLIGATOIRE</strong> - Cochez la case pour valider la quittance</span>
                   </div>
                 )}
                 {!quittance && (
-                  <div className="quittance-non-validee-info">
+                  <div className="quittance-requis" style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    padding: '6px 10px', marginTop: '4px', fontSize: '13px',
+                    color: '#dc3545', backgroundColor: '#fce4ec', borderRadius: '4px'
+                  }}>
                     <AlertCircle size={16} color="#dc3545" />
-                    <span>📝 Saisissez le numéro de quittance</span>
+                    <span><strong>⚠️ OBLIGATOIRE</strong> - Saisissez le numéro de quittance</span>
                   </div>
                 )}
               </div>
             </div>
           </div>
 
-          {/* SECTION MOYENS DE COMMUNICATION - LECTURE SEULE */}
+          {/* SECTION MOYENS DE COMMUNICATION */}
           {showMoyensComm && (
             <div className="facture-section moyens-comm-section">
               <h3><Radio size={18} /> Moyens de Communication</h3>
               <div className="moyens-comm-grid">
                 <div className="moyen-comm-item">
                   <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={moyensCommunication.radio?.actif || false}
-                      disabled={true}
-                    />
+                    <input type="checkbox" checked={moyensCommunication.radio?.actif || false} disabled={true} />
                     Radio - Poste TSF
                   </label>
                   <div className="taux-display">
@@ -947,11 +831,7 @@ const GenerationFacture = () => {
 
                 <div className="moyen-comm-item">
                   <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={moyensCommunication.lecteur?.actif || false}
-                      disabled={true}
-                    />
+                    <input type="checkbox" checked={moyensCommunication.lecteur?.actif || false} disabled={true} />
                     Lecteur
                   </label>
                   <div className="taux-display">
@@ -964,11 +844,7 @@ const GenerationFacture = () => {
 
                 <div className="moyen-comm-item">
                   <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={moyensCommunication.tv?.actif || false}
-                      disabled={true}
-                    />
+                    <input type="checkbox" checked={moyensCommunication.tv?.actif || false} disabled={true} />
                     TV
                   </label>
                   <div className="taux-display">
@@ -981,11 +857,7 @@ const GenerationFacture = () => {
 
                 <div className="moyen-comm-item">
                   <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={moyensCommunication.autres?.actif || false}
-                      disabled={true}
-                    />
+                    <input type="checkbox" checked={moyensCommunication.autres?.actif || false} disabled={true} />
                     Autres
                   </label>
                   <div className="taux-display">
@@ -1006,11 +878,10 @@ const GenerationFacture = () => {
             </div>
           )}
 
-          {/* MONTANTS - EN LECTURE SEULE UNIQUEMENT */}
+          {/* MONTANTS */}
           <div className="facture-section montants">
             <h3><DollarSign size={18} /> Montants</h3>
             <div className="facture-grid montants-grid">
-              {/* Montant */}
               <div className="facture-field">
                 <span className="field-label">
                   {facture.ref_client_type === 'OCC' ? 'Montant à payer' : 
@@ -1022,18 +893,14 @@ const GenerationFacture = () => {
                 </span>
               </div>
 
-              {/* Frais de dossier */}
               <div className="facture-field">
                 <span className="field-label">Frais de dossier</span>
                 <span className="field-value protected" style={{ fontWeight: 'bold', color: '#2c3e50' }}>
                   {(fraisDossier || 0).toLocaleString('fr-FR')} Ar 
-                  <span style={{ fontSize: '11px', color: '#6c757d', marginLeft: '8px' }}>
-                    (fixe)
-                  </span>
+                  <span style={{ fontSize: '11px', color: '#6c757d', marginLeft: '8px' }}>(fixe)</span>
                 </span>
               </div>
 
-              {/* Montant retard - UNIQUEMENT pour OCC */}
               {showRetard && (
                 <div className="facture-field">
                   <span className="field-label">Montant retard</span>
@@ -1043,7 +910,6 @@ const GenerationFacture = () => {
                 </div>
               )}
 
-              {/* Retard - UNIQUEMENT pour OCC */}
               {showRetard && (
                 <div className="facture-field">
                   <span className="field-label">Retard</span>
@@ -1053,7 +919,6 @@ const GenerationFacture = () => {
                 </div>
               )}
 
-              {/* Uniter */}
               <div className="facture-field">
                 <span className="field-label">Uniter</span>
                 <span className="field-value protected" style={{ fontWeight: 'bold', color: '#2c3e50' }}>
@@ -1061,13 +926,10 @@ const GenerationFacture = () => {
                 </span>
               </div>
 
-              {/* Soit Total */}
               <div className="facture-field total">
                 <span className="field-label" style={{ fontSize: '16px', fontWeight: 'bold' }}>Soit Total</span>
                 <span className="field-value protected total-value" style={{ 
-                  fontSize: '24px', 
-                  fontWeight: 'bold', 
-                  color: '#28a745'
+                  fontSize: '24px', fontWeight: 'bold', color: '#28a745'
                 }}>
                   {soitTotalCalcule.toLocaleString('fr-FR')} Ar 
                 </span>
@@ -1079,10 +941,11 @@ const GenerationFacture = () => {
           </div>
         </div>
 
+        {/* ✅ FOOTER : Boutons Sauvegarder + Générer PDF + Retour conditionnel */}
         <div className="facture-footer">
           <button 
             className="btn-save" 
-            onClick={handleSave} 
+            onClick={handleSaveFacture} 
             disabled={isSaving || !isEditing}
           >
             {isSaving ? (
@@ -1091,19 +954,51 @@ const GenerationFacture = () => {
               <><Save size={18} /> Sauvegarder</>
             )}
           </button>
+          
           <button 
             className="btn-generate-pdf" 
             onClick={handleGeneratePDF} 
-            disabled={isGenerating || !facture.personne_recu || !quittanceValidee || !quittance}
+            disabled={isGenerating || !isPDFReady}
+            style={{
+              opacity: isPDFReady ? 1 : 0.5,
+              cursor: isPDFReady ? 'pointer' : 'not-allowed',
+              backgroundColor: pdfGenere ? '#27ae60' : (isPDFReady ? '#28a745' : '#6c757d')
+            }}
+            title={!isPDFReady ? "⚠️ OBLIGATOIRE : Saisissez la personne qui reçoit et validez la quittance" : "Générer le PDF"}
           >
             {isGenerating ? (
               <><Loader2 size={18} className="spinner" /> Génération...</>
+            ) : pdfGenere ? (
+              <><CheckCircle size={18} /> PDF généré</>
             ) : (
               <><FileText size={18} /> Générer le PDF</>
             )}
           </button>
-          <button className="btn-print" onClick={() => window.print()}>
-            <Printer size={18} /> Imprimer
+
+          {/* ✅ Bouton Retour vers confirmation-dossier - Visible UNIQUEMENT si PDF généré */}
+          <button 
+            className="btn-retour-accueil-facture"
+            onClick={handleRetour}
+            disabled={!pdfGenere}
+            style={{
+              display: pdfGenere ? 'inline-flex' : 'none',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '12px 24px',
+              backgroundColor: '#2c3e50',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '15px',
+              fontWeight: '600',
+              cursor: pdfGenere ? 'pointer' : 'not-allowed',
+              transition: 'all 0.3s ease',
+              boxShadow: '0 3px 10px rgba(44, 62, 80, 0.25)'
+            }}
+            title={pdfGenere ? "Retourner à la confirmation" : "Générez d'abord le PDF"}
+          >
+            <ArrowLeft size={18} />
+            Retour
           </button>
         </div>
       </div>

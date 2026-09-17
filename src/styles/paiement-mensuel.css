@@ -88,6 +88,25 @@
   color: #495057;
 }
 
+.pm-header-edit-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #3498db;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.pm-header-edit-btn:hover {
+  background: #2980b9;
+}
+
 /* ========== SECTIONS ========== */
 .pm-section {
   background: white;
@@ -199,18 +218,6 @@
   color: #495057;
 }
 
-.pm-type-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  padding: 10px 14px;
-  background: #fff3cd;
-  border-radius: 8px;
-  font-size: 13px;
-  color: #856404;
-}
-
 /* ========== PAIEMENT GRID ========== */
 .pm-paiement-grid {
   display: grid;
@@ -254,6 +261,72 @@
   color: #6c757d;
 }
 
+/* ========== RENOUVELLEMENT ========== */
+.pm-renouvellement-group,
+.pm-renouvellement-facture-group {
+  grid-column: span 2;
+}
+
+.pm-renouvellement-checkbox-label {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+  padding: 10px 14px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 2px solid #e9ecef;
+  transition: all 0.2s;
+}
+
+.pm-renouvellement-checkbox-label:hover {
+  background: #f0f7ff;
+  border-color: #0d6efd;
+}
+
+.pm-renouvellement-checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #e67e22;
+}
+
+.pm-renouvellement-input-wrapper {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pm-frais-renouvellement-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #f39c12;
+  border-radius: 6px;
+  font-size: 14px;
+  background: #fffbf0;
+  font-weight: 600;
+  color: #e67e22;
+  transition: all 0.2s;
+}
+
+.pm-frais-renouvellement-input:focus {
+  outline: none;
+  border-color: #e67e22;
+  box-shadow: 0 0 0 3px rgba(230, 126, 34, 0.15);
+  background: white;
+}
+
+.pm-renouvellement-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #e67e22;
+  font-size: 12px;
+}
+
 /* ========== RETARD ========== */
 .pm-retard-group {
   grid-column: span 2;
@@ -288,16 +361,17 @@
 
 .pm-total-display {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 12px;
   padding: 12px 16px;
   background: #f8f9fa;
   border-radius: 8px;
   border: 2px solid #0d6efd;
+  flex-wrap: wrap;
 }
 
 .pm-total-amount {
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 700;
   color: #0d6efd;
 }
@@ -517,7 +591,7 @@
   border: 2px solid #e9ecef;
   border-radius: 10px;
   transition: all 0.2s;
-  min-height: 100px;
+  min-height: 110px;
 }
 
 .pm-mois-item.disponible {
@@ -570,27 +644,69 @@
   border-radius: 8px;
 }
 
-/* ✅ INPUT MONTANT PAR MOIS */
 .pm-mois-montant {
   width: 100%;
   margin: 4px 0;
+  position: relative;
+  z-index: 5;
 }
 
 .pm-mois-input {
   width: 100%;
-  padding: 4px 6px;
-  border: 1px solid #ced4da;
+  padding: 6px 8px;
+  border: 2px solid #ced4da;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 14px;
   text-align: center;
   background: white;
-  transition: border-color 0.2s;
+  transition: all 0.2s;
+  font-weight: 600;
+  color: #0d6efd;
+  min-height: 32px;
+  outline: none;
+  box-sizing: border-box;
+  pointer-events: auto !important;
+  cursor: text !important;
+  z-index: 10;
+  position: relative;
+}
+
+.pm-mois-input:hover {
+  border-color: #86b7fe;
 }
 
 .pm-mois-input:focus {
-  outline: none;
   border-color: #0d6efd;
-  box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.1);
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.2);
+  background: white;
+}
+
+.pm-mois-input::placeholder {
+  color: #adb5bd;
+  font-weight: normal;
+  font-size: 11px;
+}
+
+.pm-mois-item.selected .pm-mois-input {
+  border-color: #198754;
+  background: #f8fff9;
+  color: #198754;
+}
+
+.pm-mois-item.selected .pm-mois-input:focus {
+  border-color: #198754;
+  box-shadow: 0 0 0 3px rgba(25, 135, 84, 0.2);
+}
+
+.pm-mois-input::-webkit-inner-spin-button,
+.pm-mois-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.pm-mois-input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 .pm-mois-badges {
@@ -599,6 +715,8 @@
   justify-content: center;
   gap: 4px;
   margin-top: 4px;
+  position: relative;
+  z-index: 5;
 }
 
 .pm-mois-badge {
@@ -638,6 +756,7 @@
   right: 0;
   bottom: 0;
   cursor: pointer;
+  z-index: 1;
 }
 
 /* ========== PERSONNE ========== */
@@ -769,29 +888,6 @@
   gap: 8px;
 }
 
-.pm-btn-pdf-all {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  background: #198754;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.pm-btn-pdf-all:hover:not(:disabled) {
-  background: #157347;
-}
-
-.pm-btn-pdf-all:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .pm-btn-toggle {
   padding: 8px;
   background: #f1f3f5;
@@ -847,12 +943,81 @@
   color: #0d6efd;
 }
 
+.pm-facture-quittance {
+  font-size: 12px;
+  color: #6c757d;
+  padding: 2px 8px;
+  background: #e9ecef;
+  border-radius: 10px;
+}
+
+.pm-facture-quittance.shared {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.pm-facture-uniter {
+  font-size: 12px;
+  color: #6f42c1;
+  padding: 2px 8px;
+  background: #f3f0ff;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.pm-facture-renouvellement {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #e67e22;
+  padding: 2px 8px;
+  background: #fffbf0;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.pm-facture-renouvellement-facture {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #6f42c1;
+  padding: 2px 8px;
+  background: #f3f0ff;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.pm-btn-pdf-zip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #6f42c1;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.pm-btn-pdf-zip:hover:not(:disabled) {
+  background: #5a32a3;
+}
+
+.pm-btn-pdf-zip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .pm-btn-pdf {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 6px 14px;
-  background: #dc3545;
+  background: #0d6efd;
   color: white;
   border: none;
   border-radius: 6px;
@@ -862,7 +1027,7 @@
 }
 
 .pm-btn-pdf:hover:not(:disabled) {
-  background: #bb2d3b;
+  background: #0b5ed7;
 }
 
 .pm-btn-pdf:disabled {
@@ -915,531 +1080,752 @@
   to { transform: rotate(360deg); }
 }
 
-/* ========== RESPONSIVE ========== */
-@media (max-width: 768px) {
-  .paiement-mensuel-container {
-    padding: 12px;
-    margin-left: 0;
-  }
-
-  .pm-header {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .pm-header-left {
-    flex-wrap: wrap;
-  }
-
-  .pm-paiement-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .pm-retard-group,
-  .pm-total-group {
-    grid-column: span 1;
-  }
-
-  .pm-mois-grid {
-    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-  }
-
-  .pm-quittance-input-group {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .pm-quittance-input {
-    width: 100%;
-  }
-
-  .pm-type-options {
-    flex-direction: column;
-  }
-
-  .pm-type-option {
-    min-width: unset;
-  }
-
-  .pm-mois-item {
-    min-height: 90px;
-  }
-}
-/* ========== NOUVEAUX STYLES POUR INPUTS ========== */
-
-/* Input montant mensuel */
-.pm-montant-input {
-  padding: 8px 12px;
-  border: 1px solid #ced4da;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #0d6efd;
-  background: #f8f9fa;
-  transition: border-color 0.2s;
-  width: 100%;
-}
-
-.pm-montant-input:focus {
-  outline: none;
-  border-color: #0d6efd;
-  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
-  background: white;
-}
-
-/* Input uniter */
-.pm-uniter-input {
-  padding: 8px 12px;
-  border: 1px solid #ced4da;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #6f42c1;
-  background: #f8f9fa;
-  transition: border-color 0.2s;
-  width: 100%;
-}
-
-.pm-uniter-input:focus {
-  outline: none;
-  border-color: #6f42c1;
-  box-shadow: 0 0 0 3px rgba(111, 66, 193, 0.1);
-  background: white;
-}
-
-/* Input total général */
-.pm-total-input {
-  flex: 1;
-  padding: 10px 14px;
-  border: 2px solid #0d6efd;
-  border-radius: 8px;
-  font-size: 20px;
-  font-weight: 700;
-  color: #0d6efd;
-  background: white;
-  transition: all 0.2s;
-  min-width: 150px;
-}
-
-.pm-total-input:focus {
-  outline: none;
-  border-color: #0a58ca;
-  box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.15);
-}
-
-/* Input montant par mois */
-.pm-mois-input {
-  width: 100%;
-  padding: 4px 6px;
-  border: 1px solid #ced4da;
-  border-radius: 6px;
-  font-size: 12px;
-  text-align: center;
-  background: white;
-  transition: all 0.2s;
-  font-weight: 500;
-}
-
-.pm-mois-input:focus {
-  outline: none;
-  border-color: #0d6efd;
-  box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
-  background: white;
-}
-
-.pm-mois-input:hover:not(:focus) {
-  border-color: #86b7fe;
-}
-
-/* Style pour les mois sélectionnés avec input */
-.pm-mois-item.selected .pm-mois-input {
-  border-color: #198754;
-  background: #f0fdf4;
-}
-
-.pm-mois-item.selected .pm-mois-input:focus {
-  border-color: #198754;
-  box-shadow: 0 0 0 2px rgba(25, 135, 84, 0.2);
-}
-
-/* Petit ajustement pour l'affichage du total dans le header */
-.pm-total-display {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  border: 2px solid #0d6efd;
-  flex-wrap: wrap;
-}
-
-.pm-total-detail {
-  font-size: 13px;
-  color: #6c757d;
-  white-space: nowrap;
-}
-/* ========== BOUTONS PDF ET ZIP ========== */
-
-.pm-btn-pdf-zip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  background: #6f42c1;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.pm-btn-pdf-zip:hover:not(:disabled) {
-  background: #5a32a3;
-}
-
-.pm-btn-pdf-zip:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.pm-btn-pdf {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  background: #0d6efd;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.pm-btn-pdf:hover:not(:disabled) {
-  background: #0b5ed7;
-}
-
-.pm-btn-pdf:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* ========== STYLES POUR LE TOTAL ========== */
-
-.pm-total-display {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  border: 2px solid #0d6efd;
-  flex-wrap: wrap;
-}
-
-.pm-total-amount {
-  font-size: 28px;
-  font-weight: 700;
-  color: #0d6efd;
-}
-
-.pm-total-detail {
-  font-size: 13px;
-  color: #6c757d;
-}
-
-/* ========== INPUT MONTS PAR MOIS ========== */
-
-.pm-mois-montant {
-  width: 100%;
-  margin: 4px 0;
-}
-
-.pm-mois-input {
-  width: 100%;
-  padding: 4px 6px;
-  border: 1px solid #ced4da;
-  border-radius: 6px;
-  font-size: 12px;
-  text-align: center;
-  background: white;
-  transition: all 0.2s;
-  font-weight: 500;
-}
-
-.pm-mois-input:focus {
-  outline: none;
-  border-color: #0d6efd;
-  box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
-  background: white;
-}
-
-.pm-mois-input:hover:not(:focus) {
-  border-color: #86b7fe;
-}
-
-.pm-mois-input::placeholder {
-  color: #adb5bd;
-  font-weight: normal;
-  font-size: 10px;
-}
-
-/* Style pour les mois sélectionnés avec input */
-.pm-mois-item.selected .pm-mois-input {
-  border-color: #198754;
-  background: #f0fdf4;
-}
-
-.pm-mois-item.selected .pm-mois-input:focus {
-  border-color: #198754;
-  box-shadow: 0 0 0 2px rgba(25, 135, 84, 0.2);
-}
-
-/* ========== RESPONSIVE ========== */
-
-@media (max-width: 768px) {
-  .pm-total-display {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  
-  .pm-total-amount {
-    font-size: 24px;
-  }
-  
-  .pm-factures-actions {
-    flex-wrap: wrap;
-  }
-  
-  .pm-btn-pdf-zip,
-  .pm-btn-pdf-all {
-    width: 100%;
-    justify-content: center;
-  }
-}
-
-@media (max-width: 480px) {
-  .pm-mois-grid {
-    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
-  }
-
-  .pm-mois-item {
-    padding: 8px 4px;
-    min-height: 80px;
-  }
-
-  .pm-mois-label {
-    font-size: 11px;
-  }
-
-  .pm-mois-input {
-    font-size: 10px;
-    padding: 2px 4px;
-  }
-
-  .pm-total-amount {
-    font-size: 20px;
-  }
-}
-
-/* ========== STYLES DES MOIS AVEC INPUT ========== */
-
-.pm-mois-item {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 12px 8px;
-  background: #f8f9fa;
-  border: 2px solid #e9ecef;
-  border-radius: 10px;
-  transition: all 0.2s;
-  min-height: 110px;
-}
-
-.pm-mois-item.disponible {
-  border-color: #0d6efd;
-  background: #f0f7ff;
-}
-
-.pm-mois-item.disponible:hover {
-  background: #e0edff;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(13, 110, 253, 0.15);
-}
-
-.pm-mois-item.selected {
-  border-color: #198754;
-  background: #d1e7dd;
-}
-
-.pm-mois-item.paye {
-  border-color: #6c757d;
-  background: #e9ecef;
-  opacity: 0.7;
-}
-
-.pm-mois-item.indisponible {
-  border-color: #dee2e6;
-  background: #f8f9fa;
-  opacity: 0.5;
-}
-
-.pm-mois-header {
-  display: flex;
-  justify-content: space-between;
-  width: 100%;
-  align-items: center;
-  margin-bottom: 4px;
-}
-
-.pm-mois-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: #212529;
-}
-
-.pm-mois-num {
-  font-size: 11px;
-  color: #6c757d;
-  background: #e9ecef;
-  padding: 0 6px;
-  border-radius: 8px;
-}
-
-/* ✅ INPUT NUMBER MODIFIABLE - STYLE CORRIGÉ */
-.pm-mois-montant {
-  width: 100%;
-  margin: 4px 0;
-  position: relative;
-  z-index: 5;
-}
-
-.pm-mois-input {
-  width: 100%;
-  padding: 6px 8px;
-  border: 2px solid #ced4da;
-  border-radius: 6px;
-  font-size: 14px;
-  text-align: center;
-  background: white;
-  transition: all 0.2s;
-  font-weight: 600;
-  color: #0d6efd;
-  min-height: 32px;
-  outline: none;
-  box-sizing: border-box;
-  pointer-events: auto !important;
-  cursor: text !important;
-  z-index: 10;
-  position: relative;
-}
-
-.pm-mois-input:hover {
-  border-color: #86b7fe;
-}
-
-.pm-mois-input:focus {
-  border-color: #0d6efd;
-  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.2);
-  background: white;
-  outline: none;
-}
-
-.pm-mois-input::placeholder {
-  color: #adb5bd;
-  font-weight: normal;
-  font-size: 11px;
-}
-
-/* Style pour les mois sélectionnés */
-.pm-mois-item.selected .pm-mois-input {
-  border-color: #198754;
-  background: #f8fff9;
-  color: #198754;
-}
-
-.pm-mois-item.selected .pm-mois-input:focus {
-  border-color: #198754;
-  box-shadow: 0 0 0 3px rgba(25, 135, 84, 0.2);
-}
-
-/* Style pour les mois payés */
-.pm-mois-item.paye .pm-mois-input {
-  opacity: 0.5;
-  pointer-events: none;
-  background: #e9ecef;
-}
-
-/* Supprimer les flèches des inputs number */
-.pm-mois-input::-webkit-inner-spin-button,
-.pm-mois-input::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-.pm-mois-input[type="number"] {
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-
-/* Zone cliquable pour la sélection */
-.pm-mois-click-area {
-  position: absolute;
+/* ========== MODALE DE MODIFICATION ========== */
+.pm-modal-overlay {
+  position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  cursor: pointer;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+  animation: pmFadeIn 0.2s ease-out;
+}
+
+@keyframes pmFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.pm-modal-content {
+  background-color: #fff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 800px;
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: pmModalSlideIn 0.3s ease-out;
+}
+
+@keyframes pmModalSlideIn {
+  from { opacity: 0; transform: translateY(-20px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.pm-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #eee;
+  position: sticky;
+  top: 0;
+  background-color: #fff;
   z-index: 1;
 }
 
-/* Badges */
-.pm-mois-badges {
+.pm-modal-header h2 {
+  margin: 0;
+  font-size: 20px;
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 4px;
-  margin-top: 4px;
-  position: relative;
-  z-index: 5;
+  align-items: center;
+  gap: 10px;
+  color: #212529;
 }
 
-.pm-mois-badge {
+.pm-modal-obligatoire {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 10px;
-  padding: 2px 8px;
+  font-size: 11px;
+  padding: 4px 10px;
+  background: #fff3cd;
+  color: #856404;
   border-radius: 10px;
+  font-weight: 600;
+  margin-left: 8px;
+}
+
+.pm-modal-close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #999;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.pm-modal-close-btn:hover {
+  background: #f1f3f5;
+  color: #495057;
+}
+
+.pm-modal-body {
+  padding: 24px;
+}
+
+.pm-modal-info-renouvellement {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  color: #856404;
   font-weight: 500;
 }
 
-.pm-mois-badge.paye {
-  background: #6c757d;
-  color: white;
+.pm-modal-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
 }
 
-.pm-mois-badge.selected {
-  background: #198754;
-  color: white;
+.pm-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.pm-mois-badge.disponible {
-  background: #0d6efd;
-  color: white;
+.pm-modal-field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
 }
 
-.pm-mois-badge.indisponible {
-  background: #dee2e6;
-  color: #6c757d;
+.pm-modal-field input,
+.pm-modal-field select,
+.pm-modal-field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.2s;
 }
 
+.pm-modal-field input:focus,
+.pm-modal-field select:focus,
+.pm-modal-field textarea:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.pm-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid #eee;
+  position: sticky;
+  bottom: 0;
+  background-color: #fff;
+}
+
+.pm-modal-btn-cancel {
+  padding: 10px 20px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background-color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.pm-modal-btn-cancel:hover {
+  background: #f8f9fa;
+}
+
+.pm-modal-btn-save {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  background-color: #27ae60;
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.pm-modal-btn-save:hover:not(:disabled) {
+  background: #219653;
+}
+
+.pm-modal-btn-save:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+/* ========== RENOUVELLEMENT DE CONTRAT (Type C uniquement) ========== */
+.pm-renouvellement-group {
+  grid-column: span 2;
+}
+
+.pm-renouvellement-checkbox-label {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+  padding: 10px 14px;
+  background: #fffbf0;
+  border-radius: 8px;
+  border: 2px solid #f39c12;
+  transition: all 0.2s;
+}
+
+.pm-renouvellement-checkbox-label:hover {
+  background: #fff4e0;
+  border-color: #e67e22;
+}
+
+.pm-renouvellement-checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #e67e22;
+}
+
+.pm-renouvellement-input-wrapper {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pm-frais-renouvellement-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #f39c12;
+  border-radius: 6px;
+  font-size: 14px;
+  background: #fffbf0;
+  font-weight: 600;
+  color: #e67e22;
+  transition: all 0.2s;
+}
+
+.pm-frais-renouvellement-input:focus {
+  outline: none;
+  border-color: #e67e22;
+  box-shadow: 0 0 0 3px rgba(230, 126, 34, 0.15);
+  background: white;
+}
+
+.pm-renouvellement-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #e67e22;
+  font-size: 12px;
+}
+
+.pm-facture-renouvellement {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #e67e22;
+  padding: 2px 8px;
+  background: #fffbf0;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+/* ========== MODALE DE MODIFICATION ========== */
+.pm-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+  animation: pmFadeIn 0.2s ease-out;
+}
+
+@keyframes pmFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.pm-modal-content {
+  background-color: #fff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 800px;
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: pmModalSlideIn 0.3s ease-out;
+}
+
+@keyframes pmModalSlideIn {
+  from { opacity: 0; transform: translateY(-20px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.pm-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #eee;
+  position: sticky;
+  top: 0;
+  background-color: #fff;
+  z-index: 1;
+}
+
+.pm-modal-header h2 {
+  margin: 0;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #212529;
+}
+
+.pm-modal-close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #999;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.pm-modal-close-btn:hover {
+  background: #f1f3f5;
+  color: #495057;
+}
+
+.pm-modal-body {
+  padding: 24px;
+}
+
+.pm-modal-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.pm-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pm-modal-field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+}
+
+.pm-modal-field input,
+.pm-modal-field select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.pm-modal-field input:focus,
+.pm-modal-field select:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.pm-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid #eee;
+  position: sticky;
+  bottom: 0;
+  background-color: #fff;
+}
+
+.pm-modal-btn-cancel {
+  padding: 10px 20px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background-color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.pm-modal-btn-cancel:hover {
+  background: #f8f9fa;
+}
+
+.pm-modal-btn-save {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  background-color: #27ae60;
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.pm-modal-btn-save:hover:not(:disabled) {
+  background: #219653;
+}
+
+.pm-modal-btn-save:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* ========== BOUTON MODIFIER HEADER ========== */
+.pm-header-edit-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background-color: #3498db;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.pm-header-edit-btn:hover {
+  background-color: #2980b9;
+}
+/* ========== RENOUVELLEMENT DE CONTRAT (Type C) ========== */
+.pm-renouvellement-group {
+  grid-column: span 2;
+}
+
+.pm-renouvellement-direct-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #e67e22;
+  margin-bottom: 4px;
+}
+
+.pm-frais-renouvellement-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #f39c12;
+  border-radius: 6px;
+  font-size: 14px;
+  background: #fffbf0;
+  font-weight: 600;
+  color: #e67e22;
+  transition: all 0.2s;
+}
+
+.pm-frais-renouvellement-input:focus {
+  outline: none;
+  border-color: #e67e22;
+  box-shadow: 0 0 0 3px rgba(230, 126, 34, 0.15);
+  background: white;
+}
+
+.pm-renouvellement-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #e67e22;
+  font-size: 12px;
+}
+
+/* Montant calculé automatiquement pour Type C */
+.pm-mois-montant-auto {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0d6efd;
+  padding: 4px 6px;
+  text-align: center;
+  background: #f0f7ff;
+  border-radius: 6px;
+  margin: 4px 0;
+  width: 100%;
+}
+
+.pm-mois-item.selected .pm-mois-montant-auto {
+  color: #198754;
+  background: #f0fdf4;
+}
+
+/* Modale obligatoire */
+.pm-modal-obligatoire {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 4px 10px;
+  background: #fff3cd;
+  color: #856404;
+  border-radius: 10px;
+  font-weight: 600;
+  margin-left: 8px;
+}
+
+.pm-modal-info-renouvellement {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  color: #856404;
+  font-weight: 500;
+}
+/* ========== TYPE C : Sélecteur mois simplifié ========== */
+.pm-mois-selecteur-typeC {
+  background: #fffbf0;
+  border: 1px solid #f39c12;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.pm-mois-selecteur-typeC .pm-mois-selecteur-label {
+  font-weight: 600;
+  color: #e67e22;
+}
+
+.pm-mois-selecteur-typeC .pm-mois-selected-list {
+  color: #e67e22;
+  font-weight: 600;
+}
+
+/* ========== Renouvellement direct ========== */
+.pm-renouvellement-group {
+  grid-column: span 2;
+}
+
+.pm-renouvellement-direct-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #e67e22;
+  margin-bottom: 4px;
+}
+
+.pm-frais-renouvellement-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #f39c12;
+  border-radius: 6px;
+  font-size: 14px;
+  background: #fffbf0;
+  font-weight: 600;
+  color: #e67e22;
+  transition: all 0.2s;
+}
+
+.pm-frais-renouvellement-input:focus {
+  outline: none;
+  border-color: #e67e22;
+  box-shadow: 0 0 0 3px rgba(230, 126, 34, 0.15);
+  background: white;
+}
+
+.pm-renouvellement-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #e67e22;
+  font-size: 12px;
+}
+/* ========== INPUT OBLIGATOIRE — FRAIS RENOUVELLEMENT ========== */
+.pm-frais-renouvellement-input.pm-input-error {
+  border-color: #dc3545 !important;
+  background: #fce4ec !important;
+  box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.1);
+}
+
+.pm-frais-renouvellement-input.pm-input-error:focus {
+  border-color: #dc3545 !important;
+  box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.2);
+}
+
+.pm-frais-renouvellement-input.pm-input-valid {
+  border-color: #27ae60 !important;
+  background: #e8f5e9 !important;
+  color: #1b5e20;
+}
+
+.pm-hint-error {
+  color: #dc3545 !important;
+  font-weight: 600;
+}
+
+.pm-hint-valid {
+  color: #27ae60 !important;
+  font-weight: 600;
+}
+/* ========== GRILLE MOIS : 6 en haut + 6 en bas ========== */
+.pm-mois-grid-2-lignes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pm-mois-grid-ligne {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+}
+
+.pm-mois-item {
+  position: relative;
+  z-index: 2;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* ✅ Zone cliquable sur TOUT le mois (remplace .pm-mois-click-area) */
+.pm-mois-item * {
+  pointer-events: none;
+}
+
+.pm-mois-item input,
+.pm-mois-item button,
+.pm-mois-item select {
+  pointer-events: auto !important;
+  position: relative;
+  z-index: 10;
+}
+
+@media (max-width: 900px) {
+  .pm-mois-grid-ligne {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .pm-mois-grid-ligne {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+/* ========== GRILLE MOIS : 6 en haut + 6 en bas ========== */
+.pm-mois-grid-2-lignes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pm-mois-grid-ligne {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .pm-mois-grid-ligne {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .pm-mois-grid-ligne {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+/* ========== WARNING SOUS LE BOUTON GÉNÉRER ========== */
+.pm-generate-warning {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 16px;
+  background: #fce4ec;
+  border: 1px solid #dc3545;
+  border-radius: 8px;
+  color: #c62828;
+  font-size: 13px;
+  font-weight: 600;
+}
+/* ========== Modale obligatoire ========== */
+.pm-modal-obligatoire {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 4px 10px;
+  background: #fff3cd;
+  color: #856404;
+  border-radius: 10px;
+  font-weight: 600;
+  margin-left: 8px;
+}
+
+.pm-modal-info-renouvellement {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  color: #856404;
+  font-weight: 500;
+}
+/* ========== RESPONSIVE MODALE ========== */
+@media (max-width: 768px) {
+  .pm-modal-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .pm-renouvellement-group {
+    grid-column: span 1;
+  }
+}
 /* ========== RESPONSIVE ========== */
-
 @media (max-width: 768px) {
   .paiement-mensuel-container {
     padding: 12px;
@@ -1459,6 +1845,8 @@
     grid-template-columns: 1fr;
   }
 
+  .pm-renouvellement-group,
+  .pm-renouvellement-facture-group,
   .pm-retard-group,
   .pm-total-group {
     grid-column: span 1;
@@ -1485,8 +1873,17 @@
     min-width: unset;
   }
 
-  .pm-mois-item {
-    min-height: 100px;
+  .pm-total-display {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .pm-total-amount {
+    font-size: 24px;
+  }
+
+  .pm-modal-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1512,134 +1909,6 @@
 
   .pm-total-amount {
     font-size: 20px;
-  }
-}
-
-/* ========== BOUTONS PDF ET ZIP ========== */
-
-.pm-btn-pdf-zip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  background: #6f42c1;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.pm-btn-pdf-zip:hover:not(:disabled) {
-  background: #5a32a3;
-}
-
-.pm-btn-pdf-zip:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.pm-btn-pdf {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  background: #0d6efd;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.pm-btn-pdf:hover:not(:disabled) {
-  background: #0b5ed7;
-}
-
-.pm-btn-pdf:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* ========== TOTAL DISPLAY ========== */
-
-.pm-total-display {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  border: 2px solid #0d6efd;
-  flex-wrap: wrap;
-}
-
-.pm-total-amount {
-  font-size: 28px;
-  font-weight: 700;
-  color: #0d6efd;
-}
-
-.pm-total-detail {
-  font-size: 13px;
-  color: #6c757d;
-}
-
-@media (max-width: 768px) {
-  .pm-total-display {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  
-  .pm-total-amount {
-    font-size: 24px;
-  }
-  
-  .pm-factures-actions {
-    flex-wrap: wrap;
-  }
-  
-  .pm-btn-pdf-zip {
-    width: 100%;
-    justify-content: center;
-  }
-}
-/* Responsive pour les inputs */
-@media (max-width: 768px) {
-  .pm-total-display {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  
-  .pm-total-input {
-    width: 100%;
-    font-size: 18px;
-  }
-  
-  .pm-montant-input,
-  .pm-uniter-input {
-    font-size: 16px;
-  }
-}
-@media (max-width: 480px) {
-  .pm-mois-grid {
-    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
-  }
-
-  .pm-mois-item {
-    padding: 8px 4px;
-    min-height: 80px;
-  }
-
-  .pm-mois-label {
-    font-size: 11px;
-  }
-
-  .pm-mois-input {
-    font-size: 10px;
-    padding: 2px 4px;
   }
 
   .pm-facture-item {

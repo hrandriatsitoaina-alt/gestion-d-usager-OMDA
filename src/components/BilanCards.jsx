@@ -1,18 +1,65 @@
 // ============================================================
-// COMPOSANT : BilanCards.jsx (version finale avec donut)
+// COMPOSANT : BilanCards.jsx (version finale avec Recharts)
 // ============================================================
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   DollarSign, Users, Calendar, TrendingUp, PieChart,
-  BarChart, Activity, AlertTriangle, Layers, Plus, Eye
+  BarChart, Activity, AlertTriangle, Layers, Plus, Eye,
+  Bot, Sparkles, Zap, Brain, Cpu
 } from 'lucide-react';
+import {
+  PieChart as RePieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  ResponsiveContainer,
+  Legend
+} from 'recharts';
+
+// ✅ Fonction pour formater les nombres avec espaces
+const formatNumber = (value) => {
+  if (value === undefined || value === null) return '0';
+  const num = Number(value);
+  if (isNaN(num)) return '0';
+  return num.toLocaleString('fr-FR');
+};
 
 const BilanCards = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
+  const [globalStats, setGlobalStats] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // ===== ÉTATS POUR LA LANGUE =====
+  const [appLangue, setAppLangue] = useState('fr');
+
+  // ===== CHARGER LA LANGUE =====
+  useEffect(() => {
+    const langue = localStorage.getItem('app-langue') || 'fr';
+    setAppLangue(langue);
+    
+    const handleLangueChange = (event) => {
+      const { langue } = event.detail;
+      setAppLangue(langue);
+    };
+    
+    window.addEventListener('langue-change', handleLangueChange);
+    
+    return () => {
+      window.removeEventListener('langue-change', handleLangueChange);
+    };
+  }, []);
+
+  // ===== FONCTION DE TRADUCTION =====
+  const t = (fr, mg, en) => {
+    switch (appLangue) {
+      case 'mg': return mg || fr;
+      case 'en': return en || fr;
+      default: return fr;
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -24,6 +71,7 @@ const BilanCards = () => {
         const data = await res.json();
         if (data.success) {
           setStats(data.stats);
+          setGlobalStats(data.global || null);
         }
       } catch (error) {
         console.error('❌ Erreur chargement bilan:', error);
@@ -34,64 +82,165 @@ const BilanCards = () => {
     fetchData();
   }, []);
 
-  // Calculs
-  const totalUsagers = stats ? Object.values(stats).reduce((sum, s) => sum + s.total, 0) : 0;
-  const totalPayes = stats ? Object.values(stats).reduce((sum, s) => sum + s.totalPayes, 0) : 0;
-  const totalMontant = stats ? Object.values(stats).reduce((sum, s) => sum + s.montantTotal, 0) : 0;
-  const tauxPaiement = totalUsagers > 0 ? ((totalPayes / totalUsagers) * 100).toFixed(1) : 0;
+  // ============================================================
+  // ✅ CALCULS
+  // ============================================================
+  const totalUsagers = globalStats?.totalUsagers
+    ?? (stats ? Object.values(stats).reduce((sum, s) => sum + (s.total || 0), 0) : 0);
+
+  const totalPayes = globalStats?.totalPayes
+    ?? (stats ? Object.values(stats).reduce((sum, s) => sum + (s.totalPayes || 0), 0) : 0);
+
+  const totalMontant = stats
+    ? Object.values(stats).reduce((sum, s) => sum + (s.montantTotal || 0), 0)
+    : 0;
+
+  // ✅ En attente = usagers sans paiement (toujours >= 0)
+  const enAttente = Math.max(0, totalUsagers - totalPayes);
 
   // Données pour le diagramme avec couleurs personnalisées
   const typeColors = {
-    hotel: '#E53935',         // Rouge
-    'grand-surface': '#4CAF50', // Vert
-    bus: '#9E9E9E',           // Gris
-    nightclub: '#E91E63',     // Rose
-    media: '#9C27B0',         // Violet
-    occ: '#00BCD4'            // Bleu
+    hotel: '#E53935',
+    'grand-surface': '#4CAF50',
+    bus: '#9E9E9E',
+    nightclub: '#E91E63',
+    media: '#9C27B0',
+    occ: '#00BCD4'
   };
 
   const typeLabels = {
-    hotel: 'Hôtel',
-    'grand-surface': 'Grande Surface',
-    bus: 'Bus',
-    nightclub: 'Night Club',
-    media: 'Média',
-    occ: 'Occasionnelle'
+    hotel: t('Hôtel', 'Trano fandraisam-bahiny', 'Hotel'),
+    'grand-surface': t('Grande Surface', 'Trano fivarotana lehibe', 'Supermarket'),
+    bus: t('Bus', 'Fiarakodia', 'Bus'),
+    nightclub: t('Night Club', 'Kliobina alina', 'Night Club'),
+    media: t('Média', 'Haino aman-jery', 'Media'),
+    occ: t('Occasionnelle', 'Tsindraindray', 'Occasional')
   };
 
-  const chartData = stats ? Object.keys(stats).map(key => ({
-    label: typeLabels[key] || key,
-    value: stats[key].montantTotal || 0,
-    color: typeColors[key] || '#3d99f5'
-  })).filter(item => item.value > 0) : [];
+  const legendOrder = ['bus', 'grand-surface', 'hotel', 'media', 'nightclub', 'occ'];
 
-  const total = chartData.reduce((sum, item) => sum + item.value, 0);
+  const chartData = stats ? legendOrder
+    .filter(key => stats[key] && stats[key].montantTotal > 0)
+    .map(key => ({
+      name: typeLabels[key] || key,
+      value: stats[key].montantTotal || 0,
+      color: typeColors[key] || '#3d99f5',
+      formattedValue: formatNumber(stats[key].montantTotal || 0)
+    })) : [];
 
-  // Construction du conic-gradient pour le donut
-  let gradient = '';
-  let startAngle = 0;
-  chartData.forEach((item, index) => {
-    const percent = (item.value / total) * 100;
-    const angle = (percent / 100) * 360;
-    const endAngle = startAngle + angle;
-    if (index === 0) {
-      gradient += `${item.color} ${startAngle}deg ${endAngle}deg`;
-    } else {
-      gradient += `, ${item.color} ${startAngle}deg ${endAngle}deg`;
+  const COLORS = chartData.map(item => item.color);
+
+  // Tooltip personnalisé
+  const CustomTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div style={{
+          background: '#fff',
+          padding: '8px 14px',
+          border: '1px solid #ddd',
+          borderRadius: 6,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          fontSize: 13
+        }}>
+          <strong>{data.name}</strong>
+          <br />
+          <span style={{ color: data.color, fontWeight: 'bold' }}>
+            {formatNumber(data.value)} Ar
+          </span>
+        </div>
+      );
     }
-    startAngle = endAngle;
-  });
+    return null;
+  };
+
+  // Légende personnalisée
+  const renderCustomLegend = (props) => {
+    const { payload } = props;
+    const firstRow = payload.slice(0, 3);
+    const secondRow = payload.slice(3, 6);
+
+    return (
+      <div style={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center',
+        gap: '4px',
+        marginTop: '5px'
+      }}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          gap: '20px',
+          flexWrap: 'wrap'
+        }}>
+          {firstRow.map((entry, index) => (
+            <div key={`row1-${index}`} style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '5px',
+              fontSize: '11px',
+              color: '#555'
+            }}>
+              <span style={{
+                display: 'inline-block',
+                width: '10px',
+                height: '10px',
+                borderRadius: '3px',
+                backgroundColor: entry.color
+              }} />
+              <span>{entry.value}</span>
+            </div>
+          ))}
+        </div>
+
+        {secondRow.length > 0 && (
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            gap: '20px',
+            flexWrap: 'wrap'
+          }}>
+            {secondRow.map((entry, index) => (
+              <div key={`row2-${index}`} style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '5px',
+                fontSize: '11px',
+                color: '#555'
+              }}>
+                <span style={{
+                  display: 'inline-block',
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '3px',
+                  backgroundColor: entry.color
+                }} />
+                <span>{entry.value}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="bilan-container">
       {/* En-tête */}
       <div className="bilan-header">
         <h2>
-          <PieChart size={28} strokeWidth={2} />
-          Bilan & Diagnostic
+          <PieChart size={24} strokeWidth={2} />
+          {t('Bilan & Diagnostic', 'Famerenana sy Diagnostika', 'Assessment & Diagnosis')}
         </h2>
         <p className="bilan-sub">
-          {loading ? 'Chargement...' : `${totalUsagers} usagers · ${totalPayes} paiements · ${totalMontant.toFixed(0)} Ar`}
+          {loading ? t('Chargement...', 'Mandrindra...', 'Loading...') : 
+            t('{users} usagers · {payments} paiements · {amount} Ar',
+              '{users} mpampiasa · {payments} fandoavana · {amount} Ar',
+              '{users} users · {payments} payments · {amount} Ar')
+              .replace('{users}', totalUsagers)
+              .replace('{payments}', totalPayes)
+              .replace('{amount}', formatNumber(totalMontant))}
         </p>
       </div>
 
@@ -100,90 +249,376 @@ const BilanCards = () => {
         <div className="bilan-left">
           <div className="bilan-stats">
             <div className="bilan-stat-item">
-              <span className="bilan-stat-icon"><Users size={18} /></span>
+              <span className="bilan-stat-icon"><Users size={16} /></span>
               <div>
                 <div className="bilan-stat-number">{totalUsagers}</div>
-                <div className="bilan-stat-label">Usagers</div>
+                <div className="bilan-stat-label">{t('Usagers', 'Mpampiasa', 'Users')}</div>
               </div>
             </div>
             <div className="bilan-stat-item">
-              <span className="bilan-stat-icon"><DollarSign size={18} /></span>
+              <span className="bilan-stat-icon"><DollarSign size={16} /></span>
               <div>
-                <div className="bilan-stat-number">{totalMontant.toFixed(0)} Ar</div>
-                <div className="bilan-stat-label">Total collecté</div>
+                <div className="bilan-stat-number" style={{ fontSize: '16px' }}>
+                  {formatNumber(totalMontant)} Ar
+                </div>
+                <div className="bilan-stat-label">{t('Total collecté', 'Vola voangona', 'Total collected')}</div>
               </div>
             </div>
             <div className="bilan-stat-item">
-              <span className="bilan-stat-icon"><TrendingUp size={18} /></span>
+              <span className="bilan-stat-icon"><TrendingUp size={16} /></span>
               <div>
-                <div className="bilan-stat-number">{tauxPaiement}%</div>
-                <div className="bilan-stat-label">Taux de paiement</div>
+                {/* ✅ Chiffre brut — plus fiable qu'un pourcentage */}
+                <div className="bilan-stat-number">{totalPayes}</div>
+                <div className="bilan-stat-label">{t('Usagers payés', 'Mpampiasa nandoa', 'Paid users')}</div>
               </div>
             </div>
             <div className="bilan-stat-item">
-              <span className="bilan-stat-icon"><AlertTriangle size={18} /></span>
+              <span className="bilan-stat-icon"><AlertTriangle size={16} /></span>
               <div>
-                <div className="bilan-stat-number">{totalUsagers - totalPayes}</div>
-                <div className="bilan-stat-label">En attente</div>
+                <div className="bilan-stat-number">{enAttente}</div>
+                <div className="bilan-stat-label">{t('En attente', 'Miandry', 'Pending')}</div>
               </div>
             </div>
           </div>
 
+          {/* Boutons d'action - Sans "Ajouter événement" */}
           <div className="bilan-actions">
             <button className="btn-primary" onClick={() => navigate('/tableau-db')}>
-              <BarChart size={18} /> Tableau de bord
+              <BarChart size={16} /> {t('Tableau de bord', 'Tabilao', 'Dashboard')}
             </button>
-            <button className="btn-secondary" onClick={() => navigate('/ajout-evenement')}>
-              <Plus size={18} /> Ajouter événement
-            </button>
-            <button className="btn-secondary" onClick={() => navigate('/billan')}>
-              <Activity size={18} /> Diagnostic avancé
+            
+            {/* ✅ Bouton IA - Analyse IA */}
+            <button 
+              className="btn-ia-diagnostic" 
+              onClick={() => navigate('/diagnostique')}
+            >
+              <Brain size={18} className="ia-icon" />
+              {t('Analyse IA', 'Famakafakana IA', 'AI Analysis')}
+              <Sparkles size={14} className="ia-sparkle" />
+              <span className="ia-pulse-dot" />
             </button>
           </div>
 
+          {/* Liens rapides */}
           <div className="bilan-links">
             <a href="#" onClick={(e) => { e.preventDefault(); navigate('/facture-usager'); }}>
-              <Eye size={14} /> Voir les factures
+              <Eye size={13} /> {t('Voir les factures', 'Hijery ny faktiora', 'View invoices')}
             </a>
             <a href="#" onClick={(e) => { e.preventDefault(); navigate('/gere-dossier'); }}>
-              <Layers size={14} /> Gestion des dossiers
+              <Layers size={13} /> {t('Gestion des dossiers', 'Fitandremana ny rakitra', 'Folder management')}
             </a>
           </div>
         </div>
 
         {/* Partie droite : diagramme circulaire */}
         <div className="bilan-right">
-          <h5>Répartition des montants par catégorie</h5>
+          <h5>{t('Répartition des montants par catégorie', 'Fizarana ny vola araka ny sokajy', 'Amount distribution by category')}</h5>
           {loading ? (
-            <div className="chart-loading">Chargement...</div>
+            <div className="chart-loading">{t('Chargement...', 'Mandrindra...', 'Loading...')}</div>
           ) : chartData.length > 0 ? (
             <div className="donut-container">
-              <div
-                className="donut-chart"
-                style={{
-                  background: `conic-gradient(${gradient})`
-                }}
-              >
-                {/* Centre du donut – on affiche simplement un label "Total" sans montant */}
-                <div className="donut-center">
-                  <span className="donut-label">Total</span>
-                </div>
-              </div>
-              <div className="donut-legend">
-                {chartData.map((item, idx) => (
-                  <div className="donut-legend-item" key={idx}>
-                    <span className="donut-legend-dot" style={{ background: item.color }}></span>
-                    <span className="donut-legend-label">{item.label}</span>
-                    <span className="donut-legend-value">{item.value.toFixed(0)} Ar</span>
-                  </div>
-                ))}
-              </div>
+              <ResponsiveContainer width="100%" height={280}>
+                <RePieChart>
+                  <Pie
+                    data={chartData}
+                    cx="50%"
+                    cy="42%"
+                    innerRadius={50}
+                    outerRadius={80}
+                    paddingAngle={2}
+                    dataKey="value"
+                  >
+                    {chartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend 
+                    verticalAlign="bottom"
+                    align="center"
+                    layout="horizontal"
+                    content={renderCustomLegend}
+                    wrapperStyle={{ 
+                      fontSize: 11, 
+                      paddingTop: 5,
+                      width: '100%'
+                    }}
+                  />
+                </RePieChart>
+              </ResponsiveContainer>
             </div>
           ) : (
-            <div className="chart-empty">Aucune donnée disponible</div>
+            <div className="chart-empty">{t('Aucune donnée disponible', 'Tsy misy data', 'No data available')}</div>
           )}
         </div>
       </div>
+
+      {/* ===== STYLES CSS INJECTÉS ===== */}
+      <style>{`
+        /* === BOUTON IA ANALYSE === */
+        .btn-ia-diagnostic {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 20px;
+          border-radius: 30px;
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          border: none;
+          background: linear-gradient(135deg, #4ba9f0, #2b7fd4);
+          color: white;
+          box-shadow: 0 3px 12px rgba(43, 127, 212, 0.25);
+          position: relative;
+          overflow: hidden;
+          text-decoration: none;
+        }
+
+        .btn-ia-diagnostic:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 20px rgba(43, 127, 212, 0.35);
+        }
+
+        .btn-ia-diagnostic:active {
+          transform: scale(0.97);
+        }
+
+        /* Icône IA plus grande */
+        .btn-ia-diagnostic .ia-icon {
+          stroke-width: 2.5;
+        }
+
+        /* Effet shimmer */
+        .btn-ia-diagnostic::before {
+          content: '';
+          position: absolute;
+          top: -50%;
+          left: -50%;
+          width: 200%;
+          height: 200%;
+          background: linear-gradient(
+            45deg,
+            transparent 30%,
+            rgba(255, 255, 255, 0.1) 50%,
+            transparent 70%
+          );
+          animation: shimmer 3s infinite;
+        }
+
+        @keyframes shimmer {
+          0% { transform: translateX(-100%) rotate(45deg); }
+          100% { transform: translateX(100%) rotate(45deg); }
+        }
+
+        .btn-ia-diagnostic:hover::before {
+          animation-duration: 1.2s;
+        }
+
+        /* Point pulsant */
+        .btn-ia-diagnostic .ia-pulse-dot {
+          position: absolute;
+          top: -3px;
+          right: -3px;
+          width: 10px;
+          height: 10px;
+          background: #FFD700;
+          border-radius: 50%;
+          border: 2px solid white;
+          animation: pulse-dot 2s infinite;
+        }
+
+        @keyframes pulse-dot {
+          0% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.6); opacity: 0.6; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* Icône Sparkle */
+        .btn-ia-diagnostic .ia-sparkle {
+          animation: sparkle 2s infinite ease-in-out;
+        }
+
+        @keyframes sparkle {
+          0%, 100% { opacity: 0.7; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.2); }
+        }
+
+        /* === STATISTIQUES AMÉLIORÉES === */
+        .bilan-stat-item {
+          background: #f8fcff;
+          border-radius: 10px;
+          padding: 10px 14px;
+          transition: all 0.3s ease;
+          border: 1px solid rgba(43, 127, 212, 0.06);
+        }
+
+        .bilan-stat-item:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+          border-color: rgba(43, 127, 212, 0.12);
+        }
+
+        .bilan-stat-number {
+          font-size: 20px;
+          font-weight: 700;
+          color: #1a3a5c;
+          line-height: 1.2;
+        }
+
+        .bilan-stat-label {
+          font-size: 12px;
+          color: #7a8a9d;
+          font-weight: 500;
+          margin-top: 1px;
+        }
+
+        .bilan-stat-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 32px;
+          height: 32px;
+          border-radius: 8px;
+          background: rgba(43, 127, 212, 0.08);
+          color: #2b7fd4;
+          flex-shrink: 0;
+        }
+
+        /* === SOUS-TITRE === */
+        .bilan-sub {
+          font-size: 14px;
+          color: #7a8a9d;
+          margin: 0;
+          padding-left: 36px;
+          font-weight: 500;
+        }
+
+        /* === BOUTONS D'ACTION === */
+        .bilan-actions {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          margin-top: 4px;
+        }
+
+        .bilan-actions .btn-primary {
+          padding: 7px 16px;
+          font-size: 12px;
+          border-radius: 25px;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.25s ease;
+          border: none;
+          text-decoration: none;
+          background: linear-gradient(135deg, #4ba9f0, #2b7fd4);
+          color: white;
+        }
+
+        .bilan-actions .btn-primary:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(43, 127, 212, 0.3);
+        }
+
+        /* === LIENS RAPIDES === */
+        .bilan-links {
+          display: flex;
+          gap: 16px;
+          padding: 6px 2px;
+          flex-wrap: wrap;
+        }
+
+        .bilan-links a {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          color: #2b7fd4;
+          text-decoration: none;
+          font-size: 12px;
+          font-weight: 500;
+          transition: color 0.2s;
+        }
+
+        .bilan-links a:hover {
+          color: #1a6bb0;
+          text-decoration: underline;
+        }
+
+        /* === DIAGRAMME === */
+        .bilan-right h5 {
+          font-size: 13px;
+          font-weight: 600;
+          color: #1a3a5c;
+          margin: 0 0 10px 0;
+          text-align: center;
+        }
+
+        .chart-empty {
+          text-align: center;
+          padding: 30px;
+          color: #8a9aa8;
+          font-size: 14px;
+        }
+
+        .chart-loading {
+          text-align: center;
+          padding: 20px;
+          color: #6c7a8d;
+          font-size: 14px;
+        }
+
+        /* === RESPONSIVE === */
+        @media (max-width: 768px) {
+          .bilan-stat-number {
+            font-size: 17px;
+          }
+          .bilan-stat-label {
+            font-size: 11px;
+          }
+          .bilan-actions .btn-primary {
+            padding: 6px 12px;
+            font-size: 11px;
+          }
+          .btn-ia-diagnostic {
+            padding: 6px 14px;
+            font-size: 11px;
+          }
+          .btn-ia-diagnostic .ia-icon {
+            width: 16px;
+            height: 16px;
+          }
+          .bilan-sub {
+            font-size: 12px;
+            padding-left: 0;
+          }
+          .bilan-header h2 {
+            font-size: 18px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .bilan-stats {
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+          }
+          .bilan-stat-item {
+            padding: 8px 10px;
+          }
+          .bilan-stat-number {
+            font-size: 15px;
+          }
+          .bilan-actions {
+            flex-direction: column;
+          }
+          .bilan-actions button {
+            width: 100%;
+            justify-content: center;
+          }
+        }
+      `}</style>
     </div>
   );
 };

@@ -521,6 +521,7 @@ body {
 
 .action-btn {
   background: var(--blanc);
+  width: 160px;
   border: 1px solid #ddd;
   border-radius: 30px;
   padding: 7px 12px;

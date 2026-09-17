@@ -149,7 +149,7 @@ const MediaAjout = ({ onCancel }) => {
     const tauxVal = parseFloat(mediaData.taux) || 0;
     const fraisVal = parseFloat(fraisDossier) || 0;
     const uniterVal = parseInt(uniter) || 1;
-    
+
     const totalFinal = (tauxVal * uniterVal) + fraisVal;
     setSoitTotal(totalFinal);
   }, [mediaData.taux, fraisDossier, uniter]);
@@ -215,7 +215,7 @@ const MediaAjout = ({ onCancel }) => {
     }
   };
 
-  // ✅ HANDLE FINAL SUBMIT CORRIGÉ - comme Hotel et OCC
+  // ✅ HANDLE FINAL SUBMIT CORRIGÉ - montant_mensuel/montant_total = TOTAL (taux x uniter + frais)
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
     const currentUser = getCurrentUser();
@@ -228,7 +228,7 @@ const MediaAjout = ({ onCancel }) => {
     const fraisVal = parseFloat(fraisDossier) || 0;
     const tauxVal = parseFloat(mediaData.taux) || 0;
     const uniterVal = parseInt(uniter) || 1;
-    
+
     const totalFinal = (tauxVal * uniterVal) + fraisVal;
 
     const finalData = {
@@ -237,8 +237,8 @@ const MediaAjout = ({ onCancel }) => {
       prefix: userInfo.prefix || currentUser.prefix || '',
       ...mediaData,
       frais_dossier: fraisVal,
-      montant_mensuel: tauxVal,
-      montant_total: tauxVal,
+      montant_mensuel: totalFinal,
+      montant_total: totalFinal,
       soit_total: totalFinal,
       uniter: uniterVal
     };
@@ -252,7 +252,7 @@ const MediaAjout = ({ onCancel }) => {
         body: JSON.stringify(finalData)
       });
       const result = await response.json();
-      
+
       if (result.success) {
         const updatedUser = getCurrentUser();
         if (updatedUser) {
@@ -260,7 +260,7 @@ const MediaAjout = ({ onCancel }) => {
           const nouveauCompteur = (updatedUser.compteurs['Télé/Radio'] || 0) + 1;
           updatedUser.compteurs['Télé/Radio'] = nouveauCompteur;
           localStorage.setItem('user', JSON.stringify(updatedUser));
-          
+
           setUserInfo(prev => ({
             ...prev,
             compteurs: {
@@ -268,15 +268,15 @@ const MediaAjout = ({ onCancel }) => {
               'Télé/Radio': nouveauCompteur
             }
           }));
-          
+
           console.log(`✅ Compteur Télé/Radio incrémenté à ${nouveauCompteur}`);
         }
-        
+
         showToast('✅ Télé/Radio ajouté avec succès !', 'success');
-        
-        navigate('/confirme-paiement', { 
-          state: { 
-            usager: { 
+
+        navigate('/confirme-paiement', {
+          state: {
+            usager: {
               id: result.id,
               denomination: mediaData.denomination,
               demandeur: mediaData.proprietaireNom,
@@ -314,15 +314,15 @@ const MediaAjout = ({ onCancel }) => {
               confirmation_nom: mediaData.confirmationNom,
               lieu_signature: mediaData.lieuSignature,
               date_signature: mediaData.dateSignature,
-              montant_mensuel: tauxVal,
+              montant_mensuel: totalFinal,
               frais_dossier: fraisVal,
-              montant_total: tauxVal,
+              montant_total: totalFinal,
               soit_total: totalFinal,
               uniter: uniterVal,
               numero_dossier_utilisateur: `${userInfo.prefix || ''} ${(userInfo.compteurs?.['Télé/Radio'] || 0) + 1}/${getTrimestreFromMonth(new Date().getMonth() + 1)}/${userInfo.anneeEnCours || new Date().getFullYear()}`
-            }, 
+            },
             type: 'media'
-          } 
+          }
         });
       } else {
         showToast('❌ Erreur: ' + result.message, 'error');
@@ -506,6 +506,82 @@ const MediaAjout = ({ onCancel }) => {
 
   const renderStep3 = () => (
     <>
+      {/* ✅ CSS ajouté directement dans le JSX pour les checkboxes (Couverture + Horaires) */}
+      <style>{`
+        .checkbox-group-modern {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 12px;
+          padding: 8px 0;
+          width: 100%;
+        }
+
+        .checkbox-label-modern {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 12px 16px;
+          background: #f8f9fa;
+          border: 2px solid #e0e0e0;
+          border-radius: 10px;
+          cursor: pointer;
+          transition: all 0.25s ease;
+          font-size: 14px;
+          font-weight: 500;
+          color: #495057;
+          user-select: none;
+        }
+
+        .checkbox-label-modern:hover {
+          background: #eef4ff;
+          border-color: #4A90D9;
+          transform: translateY(-1px);
+          box-shadow: 0 3px 8px rgba(74, 144, 217, 0.15);
+        }
+
+        .checkbox-label-modern input[type="checkbox"] {
+          width: 18px;
+          height: 18px;
+          accent-color: #4A90D9;
+          cursor: pointer;
+          flex-shrink: 0;
+        }
+
+        .checkbox-label-modern.checked {
+          background: linear-gradient(135deg, #e8f0fe 0%, #d4e4fc 100%);
+          border-color: #4A90D9;
+          color: #1a5490;
+          font-weight: 600;
+          box-shadow: 0 3px 10px rgba(74, 144, 217, 0.2);
+        }
+
+        .checkbox-label-modern.checked::after {
+          content: '✓';
+          margin-left: auto;
+          color: #27ae60;
+          font-weight: bold;
+          font-size: 16px;
+        }
+
+        .checkbox-label-modern.horaire.checked {
+          background: linear-gradient(135deg, #e8f0fe 0%, #d4e4fc 100%);
+          border-color: #4A90D9;
+          color: #1a5490;
+          font-weight: 600;
+          box-shadow: 0 3px 10px rgba(74, 144, 217, 0.2);
+        }
+
+        .checkbox-label-modern.horaire.checked::after {
+          color: #27ae60;
+        }
+
+        .checkbox-label-modern.horaire:hover {
+          background: #eef4ff;
+          border-color: #4A90D9;
+          box-shadow: 0 3px 8px rgba(74, 144, 217, 0.15);
+        }
+      `}</style>
+
       <div className="form-section-title">
         <Monitor size={18} strokeWidth={2} /> 3) RENSEIGNEMENTS SUR LA STATION RADIO/TV :
       </div>
@@ -579,45 +655,49 @@ const MediaAjout = ({ onCancel }) => {
         </div>
       </div>
 
-      <div className="form-section-subtitle">
-        <Globe size={16} strokeWidth={2} /> Couverture :
+      <div className="form-section-subtitle" style={{ color: '#000' }}>
+        <Globe size={16} strokeWidth={2} style={{ color: '#000', stroke: '#000' }} /> Couverture :
       </div>
       <div className="form-row">
         <div className="form-label"></div>
-        <div className="form-input checkbox-group">
-          <label className="checkbox-label">
-            <input type="checkbox" name="couvertureCapitale" checked={mediaData.couvertureCapitale} onChange={handleMediaChange} />
-            Capitale
-          </label>
-          <label className="checkbox-label">
-            <input type="checkbox" name="couvertureChefLieuProvince" checked={mediaData.couvertureChefLieuProvince} onChange={handleMediaChange} />
-            Chef-lieu de Province
-          </label>
-          <label className="checkbox-label">
-            <input type="checkbox" name="couvertureChefLieuRegion" checked={mediaData.couvertureChefLieuRegion} onChange={handleMediaChange} />
-            Chef-lieu de Région
-          </label>
-          <label className="checkbox-label">
-            <input type="checkbox" name="couvertureDistrict" checked={mediaData.couvertureDistrict} onChange={handleMediaChange} />
-            District
-          </label>
+        <div className="form-input">
+          <div className="checkbox-group-modern">
+            <label className={`checkbox-label-modern ${mediaData.couvertureCapitale ? 'checked' : ''}`}>
+              <input type="checkbox" name="couvertureCapitale" checked={mediaData.couvertureCapitale} onChange={handleMediaChange} />
+              Capitale
+            </label>
+            <label className={`checkbox-label-modern ${mediaData.couvertureChefLieuProvince ? 'checked' : ''}`}>
+              <input type="checkbox" name="couvertureChefLieuProvince" checked={mediaData.couvertureChefLieuProvince} onChange={handleMediaChange} />
+              Chef-lieu de Province
+            </label>
+            <label className={`checkbox-label-modern ${mediaData.couvertureChefLieuRegion ? 'checked' : ''}`}>
+              <input type="checkbox" name="couvertureChefLieuRegion" checked={mediaData.couvertureChefLieuRegion} onChange={handleMediaChange} />
+              Chef-lieu de Région
+            </label>
+            <label className={`checkbox-label-modern ${mediaData.couvertureDistrict ? 'checked' : ''}`}>
+              <input type="checkbox" name="couvertureDistrict" checked={mediaData.couvertureDistrict} onChange={handleMediaChange} />
+              District
+            </label>
+          </div>
         </div>
       </div>
 
-      <div className="form-section-subtitle">
-        <Clock size={16} strokeWidth={2} /> Horaires de diffusion :
+      <div className="form-section-subtitle" style={{ color: '#000' }}>
+        <Clock size={16} strokeWidth={2} style={{ color: '#000', stroke: '#000' }} /> Horaires de diffusion :
       </div>
       <div className="form-row">
         <div className="form-label"></div>
-        <div className="form-input checkbox-group">
-          <label className="checkbox-label">
-            <input type="checkbox" name="horairesJusqua12" checked={mediaData.horairesJusqua12} onChange={handleMediaChange} />
-            Jusqu'à 12 heures
-          </label>
-          <label className="checkbox-label">
-            <input type="checkbox" name="horaires13a24" checked={mediaData.horaires13a24} onChange={handleMediaChange} />
-            13 à 24 heures
-          </label>
+        <div className="form-input">
+          <div className="checkbox-group-modern">
+            <label className={`checkbox-label-modern horaire ${mediaData.horairesJusqua12 ? 'checked' : ''}`}>
+              <input type="checkbox" name="horairesJusqua12" checked={mediaData.horairesJusqua12} onChange={handleMediaChange} />
+              Jusqu'à 12 heures
+            </label>
+            <label className={`checkbox-label-modern horaire ${mediaData.horaires13a24 ? 'checked' : ''}`}>
+              <input type="checkbox" name="horaires13a24" checked={mediaData.horaires13a24} onChange={handleMediaChange} />
+              13 à 24 heures
+            </label>
+          </div>
         </div>
       </div>
 
@@ -634,8 +714,19 @@ const MediaAjout = ({ onCancel }) => {
       <div className="form-row">
         <div className="form-label"><h2><Hash size={18} strokeWidth={2} /> Uniter :</h2></div>
         <div className="form-input">
-          <input type="number" min="1" max="9" value={uniter} onChange={(e) => setUniter(Math.min(9, Math.max(1, parseInt(e.target.value) || 1)))} className="input-style" style={{ width: '80px' }} placeholder="1" />
-          <span style={{ marginLeft: '10px', fontSize: '14px', color: '#6c757d' }}>(1 à 9 unités)</span>
+          <input
+            type="number"
+            min="1"
+            value={uniter}
+            onChange={(e) => {
+              const val = parseInt(e.target.value);
+              setUniter(isNaN(val) || val < 1 ? 1 : val);
+            }}
+            className="input-style"
+            style={{ width: '100px' }}
+            placeholder="1"
+          />
+          <span style={{ marginLeft: '10px', fontSize: '14px', color: '#6c757d' }}>(nombre d'unités)</span>
         </div>
       </div>
 

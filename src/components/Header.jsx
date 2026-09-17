@@ -1,14 +1,42 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Home, LayoutDashboard, Users, CreditCard, Settings, 
-  Bell, UserCircle, LogOut, Menu, X 
+  Bell, UserCircle, LogOut, Menu, X,
+  Bot, UserCheck
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import '../styles/App.css';
 
 const Header = ({ onLogout, user }) => {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [appLangue, setAppLangue] = useState('fr');
   const navigate = useNavigate();
+
+  // ===== CHARGER LA LANGUE DEPUIS LOCALSTORAGE =====
+  useEffect(() => {
+    const langue = localStorage.getItem('app-langue') || 'fr';
+    setAppLangue(langue);
+    
+    const handleLangueChange = (event) => {
+      const { langue } = event.detail;
+      setAppLangue(langue);
+    };
+    
+    window.addEventListener('langue-change', handleLangueChange);
+    
+    return () => {
+      window.removeEventListener('langue-change', handleLangueChange);
+    };
+  }, []);
+
+  // ===== FONCTION DE TRADUCTION =====
+  const t = (fr, mg, en) => {
+    switch (appLangue) {
+      case 'mg': return mg || fr;
+      case 'en': return en || fr;
+      default: return fr;
+    }
+  };
 
   // Gestionnaire pour la navigation
   const handleNavigation = (path) => {
@@ -18,15 +46,10 @@ const Header = ({ onLogout, user }) => {
 
   // Gestionnaire pour la déconnexion
   const handleLogout = () => {
-    // Appeler la fonction onLogout passée en prop (pour nettoyer le state/auth)
     if (onLogout) {
       onLogout();
     }
-    
-    // Rediriger vers la page d'accueil (racine)
     navigate('/', { replace: true });
-    
-    // Fermer le menu mobile
     setMenuOpen(false);
   };
 
@@ -42,47 +65,58 @@ const Header = ({ onLogout, user }) => {
         {/* Navigation principale (desktop) */}
         <nav className="header-nav">
           <a href="/dashboard" className="nav-link active">
-            <Home size={20} /> Accueil
+            <Home size={20} /> {t('Accueil', 'Fandraisana', 'Home')}
           </a>
           <a href="/tableau-db" className="nav-link">
-            <LayoutDashboard size={20} /> Tableau de bord
+            <LayoutDashboard size={20} /> {t('Tableau de bord', 'Tabilao', 'Dashboard')}
           </a>
           <a href="/gere-dossier" className="nav-link">
-            <Users size={20} /> Gestion
+            <Users size={20} /> {t('Gestion', 'Fitandremana', 'Management')}
           </a>
           <a href="/billan" className="nav-link">
-            <CreditCard size={20} /> Paiements
+            <CreditCard size={20} /> {t('Paiements', 'Fandoavana', 'Payments')}
           </a>
-          <a href="/parametres" className="nav-link">
-            <Settings size={20} /> Paramètres
+          <a href="/Parametre_global" className="nav-link">
+            <Settings size={20} /> {t('Paramètres', 'Fandrindrana', 'Settings')}
           </a>
         </nav>
 
         {/* Actions utilisateur */}
         <div className="header-actions">
-          {/* Bouton Notifications - redirige vers /notification_admin */}
+          {/* Bouton Assistant IA */}
           <button 
             className="icon-btn" 
-            aria-label="Notifications"
+            aria-label={t('Assistant IA', 'Mpanampy IA', 'AI Assistant')}
+            onClick={() => handleNavigation('/diagnostique')}
+          >
+            <Bot size={22} />
+          </button>
+
+
+
+          {/* Bouton Notifications */}
+          <button 
+            className="icon-btn" 
+            aria-label={t('Notifications', 'Fampahafantarana', 'Notifications')}
             onClick={() => handleNavigation('/notification_admin')}
           >
             <Bell size={22} />
           </button>
 
-          {/* Bouton Profil - redirige vers /profil (à créer) */}
+          {/* Bouton Profil */}
           <button 
             className="icon-btn" 
-            aria-label="Profil"
+            aria-label={t('Profil', 'Momba ahy', 'Profile')}
             onClick={() => handleNavigation('/profil')}
           >
             <UserCircle size={22} />
           </button>
 
-          {/* Bouton Déconnexion - redirige vers / */}
+          {/* Bouton Déconnexion */}
           <button 
             className="icon-btn logout-btn" 
             onClick={handleLogout} 
-            aria-label="Déconnexion"
+            aria-label={t('Déconnexion', 'Fivoahana', 'Logout')}
           >
             <LogOut size={22} />
           </button>
@@ -98,22 +132,40 @@ const Header = ({ onLogout, user }) => {
       {menuOpen && (
         <div className="mobile-nav">
           <a href="/dashboard" className="nav-link" onClick={() => setMenuOpen(false)}>
-            <Home size={20} /> Accueil
+            <Home size={20} /> {t('Accueil', 'Fandraisana', 'Home')}
           </a>
           <a href="/tableau-db" className="nav-link" onClick={() => setMenuOpen(false)}>
-            <LayoutDashboard size={20} /> Tableau de bord
+            <LayoutDashboard size={20} /> {t('Tableau de bord', 'Tabilao', 'Dashboard')}
           </a>
           <a href="/gere-dossier" className="nav-link" onClick={() => setMenuOpen(false)}>
-            <Users size={20} /> Gestion
+            <Users size={20} /> {t('Gestion', 'Fitandremana', 'Management')}
           </a>
           <a href="/billan" className="nav-link" onClick={() => setMenuOpen(false)}>
-            <CreditCard size={20} /> Paiements
+            <CreditCard size={20} /> {t('Paiements', 'Fandoavana', 'Payments')}
           </a>
           <a href="/parametres" className="nav-link" onClick={() => setMenuOpen(false)}>
-            <Settings size={20} /> Paramètres
+            <Settings size={20} /> {t('Paramètres', 'Fandrindrana', 'Settings')}
           </a>
 
           <hr className="mobile-divider" />
+
+          {/* Bouton Assistant IA dans le menu mobile */}
+          <button 
+            className="mobile-logout" 
+            onClick={() => handleNavigation('/assistant-ia')}
+            style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', padding: '12px 16px' }}
+          >
+            <Bot size={20} /> {t('Assistant IA', 'Mpanampy IA', 'AI Assistant')}
+          </button>
+
+          {/* Bouton Vérification dans le menu mobile */}
+          <button 
+            className="mobile-logout" 
+            onClick={() => handleNavigation('/verification-usager')}
+            style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', padding: '12px 16px' }}
+          >
+            <UserCheck size={20} /> {t('Vérification', 'Fanamarinana', 'Verify')}
+          </button>
 
           {/* Bouton Notifications dans le menu mobile */}
           <button 
@@ -121,7 +173,7 @@ const Header = ({ onLogout, user }) => {
             onClick={() => handleNavigation('/notification_admin')}
             style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', padding: '12px 16px' }}
           >
-            <Bell size={20} /> Notifications
+            <Bell size={20} /> {t('Notifications', 'Fampahafantarana', 'Notifications')}
           </button>
 
           {/* Bouton Profil dans le menu mobile */}
@@ -130,7 +182,7 @@ const Header = ({ onLogout, user }) => {
             onClick={() => handleNavigation('/profil')} 
             style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', padding: '12px 16px' }}
           >
-            <UserCircle size={20} /> Profil
+            <UserCircle size={20} /> {t('Profil', 'Momba ahy', 'Profile')}
           </button>
 
           {/* Bouton Déconnexion dans le menu mobile */}
@@ -138,7 +190,7 @@ const Header = ({ onLogout, user }) => {
             className="mobile-logout" 
             onClick={handleLogout}
           >
-            <LogOut size={20} /> Déconnexion
+            <LogOut size={20} /> {t('Déconnexion', 'Fivoahana', 'Logout')}
           </button>
         </div>
       )}

@@ -5,7 +5,8 @@ import {
   Users, User, Building2, MapPin, FileText, Phone, Mail,
   Star, CheckCircle, CreditCard, Calendar, Clock, DollarSign,
   ArrowLeft, ArrowRight, Save, X, Edit, Hash, Radio, Tv,
-  Headphones, MoreHorizontal, Briefcase, Home, PlusCircle
+  Headphones, MoreHorizontal, Briefcase, Home, PlusCircle,
+  Info, BarChart
 } from 'lucide-react';
 import { useToast } from '../../components/Toast';
 
@@ -14,15 +15,16 @@ const HotelAjout = ({ onCancel }) => {
   const showToast = useToast();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [userInfo, setUserInfo] = useState({ 
-    id: null, nom: '', prefix: '', 
-    compteurs: { 'Hôtel': 0 }, 
-    anneeEnCours: new Date().getFullYear() 
+  const [userInfo, setUserInfo] = useState({
+    id: null, nom: '', prefix: '',
+    compteurs: { 'Hôtel': 0 },
+    anneeEnCours: new Date().getFullYear()
   });
   const [fraisDossier, setFraisDossier] = useState('');
   const [montant, setMontant] = useState('');
   const [uniter, setUniter] = useState(1);
   const [soitTotal, setSoitTotal] = useState(0);
+  const [globalTotalCount, setGlobalTotalCount] = useState(0);
 
   const [regionsList, setRegionsList] = useState([]);
   const [newRegion, setNewRegion] = useState('');
@@ -63,8 +65,7 @@ const HotelAjout = ({ onCancel }) => {
   };
 
   const getDisplayValue = (rawValue) => formatNumber(rawValue);
-  
-  // ✅ FONCTION DE CALCUL CORRIGÉE
+
   const calculateSoitTotal = () => {
     let totalMoyens = 0;
     if (hotelData.moyensCommunication.radio.actif) {
@@ -83,16 +84,14 @@ const HotelAjout = ({ onCancel }) => {
     const fraisVal = parseFloat(fraisDossier) || 0;
     const montantVal = parseFloat(montant) || 0;
     const uniterVal = parseInt(uniter) || 1;
-    
-    // ✅ RÈGLE: (Montant + Somme des taux) × Uniter + Frais de dossier
+
     const totalCalcule = (montantVal + totalMoyens) * uniterVal;
     const totalFinal = totalCalcule + fraisVal;
-    
+
     setHotelData(prev => ({ ...prev, total: totalFinal.toString() }));
     return totalFinal;
   };
 
-  // ✅ Mise à jour du calcul
   useEffect(() => {
     setSoitTotal(calculateSoitTotal());
   }, [hotelData.moyensCommunication, fraisDossier, montant, uniter]);
@@ -138,6 +137,34 @@ const HotelAjout = ({ onCancel }) => {
       }
     } catch (error) {
       console.error('Erreur chargement régions:', error);
+    }
+  };
+
+  const loadGlobalTotal = async () => {
+    try {
+      const currentYear = new Date().getFullYear();
+      const response = await fetch(`http://localhost:3001/api/hotel/total-count?year=${currentYear}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setGlobalTotalCount(data.total || 0);
+          console.log(`✅ Total Hôtels ${currentYear}: ${data.total}`);
+        }
+      } else {
+        const fallbackResponse = await fetch('http://localhost:3001/api/usagers');
+        if (fallbackResponse.ok) {
+          const usagers = await fallbackResponse.json();
+          const currentYear = new Date().getFullYear();
+          const hotelCount = usagers.filter(u => {
+            const createdAt = new Date(u.created_at);
+            return u.type_usager === 'Hôtel' && createdAt.getFullYear() === currentYear;
+          }).length;
+          setGlobalTotalCount(hotelCount);
+          console.log(`✅ Total Hôtels (fallback) ${currentYear}: ${hotelCount}`);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Erreur chargement total Hôtel:', error);
     }
   };
 
@@ -187,19 +214,42 @@ const HotelAjout = ({ onCancel }) => {
     }
   };
 
-  useEffect(() => {
-    const currentUser = getCurrentUser();
-    if (currentUser) {
-      setUserInfo(prev => ({ 
-        ...prev, 
-        id: currentUser.id,
-        nom: currentUser.nom, 
-        prefix: currentUser.prefix,
-        compteurs: currentUser.compteurs || { 'Hôtel': 0 },
-        anneeEnCours: currentUser.anneeEnCours || new Date().getFullYear()
-      }));
+  const loadUserCounters = async (userId) => {
+    try {
+      const year = new Date().getFullYear();
+      const response = await fetch(`http://localhost:3001/api/users/counters/${userId}?year=${year}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          console.log('✅ Compteurs chargés depuis la base:', data.compteurs);
+          return data.compteurs;
+        }
+      }
+    } catch (error) {
+      console.error('❌ Erreur chargement compteurs:', error);
     }
-    loadRegions();
+    return null;
+  };
+
+  useEffect(() => {
+    const loadUserData = async () => {
+      const currentUser = getCurrentUser();
+      if (currentUser) {
+        const compteurs = await loadUserCounters(currentUser.id);
+
+        setUserInfo(prev => ({
+          ...prev,
+          id: currentUser.id,
+          nom: currentUser.nom,
+          prefix: currentUser.prefix || '',
+          compteurs: compteurs || currentUser.compteurs || { 'Hôtel': 0 },
+          anneeEnCours: new Date().getFullYear()
+        }));
+      }
+      loadRegions();
+      loadGlobalTotal();
+    };
+    loadUserData();
   }, []);
 
   const handleHotelChange = (e) => {
@@ -258,7 +308,6 @@ const HotelAjout = ({ onCancel }) => {
     }
   };
 
-  // ✅ HANDLE FINAL SUBMIT CORRIGÉ AVEC LES BONS NOMS DE CHAMPS
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
     const currentUser = getCurrentUser();
@@ -268,12 +317,10 @@ const HotelAjout = ({ onCancel }) => {
       return;
     }
 
-    // ✅ Récupérer les valeurs pour l'envoi
     const fraisVal = parseFloat(fraisDossier) || 0;
     const montantVal = parseFloat(montant) || 0;
     const uniterVal = parseInt(uniter) || 1;
-    
-    // ✅ Recalcul du total (Montant + Taux) × Uniter + Frais
+
     let totalMoyens = 0;
     if (hotelData.moyensCommunication.radio.actif) {
       totalMoyens += parseInt(hotelData.moyensCommunication.radio.taux) || 0;
@@ -287,17 +334,15 @@ const HotelAjout = ({ onCancel }) => {
     if (hotelData.moyensCommunication.autres.actif) {
       totalMoyens += parseInt(hotelData.moyensCommunication.autres.taux) || 0;
     }
-    
+
     const totalCalcule = (montantVal + totalMoyens) * uniterVal;
     const totalFinal = totalCalcule + fraisVal;
 
-    // ✅ CORRECTION: utiliser les bons noms de champs avec underscores
     const finalData = {
       type: 'Hôtel',
       userId: currentUser.id,
       prefix: userInfo.prefix || currentUser.prefix || '',
       ...hotelData,
-      // ✅ NOMS CORRECTS POUR LE BACKEND
       frais_dossier: fraisVal,
       montant_mensuel: montantVal,
       montant_total: montantVal,
@@ -314,31 +359,35 @@ const HotelAjout = ({ onCancel }) => {
         body: JSON.stringify(finalData)
       });
       const result = await response.json();
-      
+
       if (result.success) {
+        const updatedCompteurs = await loadUserCounters(currentUser.id);
+
         const updatedUser = getCurrentUser();
         if (updatedUser) {
-          updatedUser.compteurs = updatedUser.compteurs || {};
-          const nouveauCompteur = (updatedUser.compteurs['Hôtel'] || 0) + 1;
-          updatedUser.compteurs['Hôtel'] = nouveauCompteur;
+          updatedUser.compteurs = updatedCompteurs || updatedUser.compteurs || {};
           localStorage.setItem('user', JSON.stringify(updatedUser));
-          
+
           setUserInfo(prev => ({
             ...prev,
-            compteurs: {
-              ...prev.compteurs,
-              'Hôtel': nouveauCompteur
-            }
+            compteurs: updatedCompteurs || prev.compteurs
           }));
-          
-          console.log(`✅ Compteur Hôtel incrémenté à ${nouveauCompteur}`);
+
+          console.log(`✅ Compteurs mis à jour:`, updatedCompteurs);
         }
-        
+
+        await loadGlobalTotal();
+
         showToast('✅ Hôtel ajouté avec succès !', 'success');
-        
-        navigate('/confirme-paiement', { 
-          state: { 
-            usager: { 
+
+        const nouveauCompteur = (userInfo.compteurs?.['Hôtel'] || 0) + 1;
+        const prefix = userInfo.prefix || '';
+        const currentTrimestre = getTrimestreFromMonth(new Date().getMonth() + 1);
+        const anneeEnCours = new Date().getFullYear();
+
+        navigate('/confirme-paiement', {
+          state: {
+            usager: {
               id: result.id,
               denomination: hotelData.denomination,
               demandeur: hotelData.demandeur,
@@ -363,16 +412,15 @@ const HotelAjout = ({ onCancel }) => {
               confirmation_nom: hotelData.confirmationNom,
               lieu_signature: hotelData.lieuSignature,
               date_signature: hotelData.dateSignature,
-              // ✅ ENVOYER AVEC LES BONS NOMS
               montant_mensuel: montantVal,
               frais_dossier: fraisVal,
               montant_total: montantVal,
               soit_total: totalFinal,
               uniter: uniterVal,
-              numero_dossier_utilisateur: `${userInfo.prefix || ''} ${(userInfo.compteurs?.['Hôtel'] || 0) + 1}/${getTrimestreFromMonth(new Date().getMonth() + 1)}/${userInfo.anneeEnCours || new Date().getFullYear()}`
-            }, 
-            type: 'hotel' 
-          } 
+              numero_dossier_utilisateur: `${prefix} ${nouveauCompteur}/${currentTrimestre}/${anneeEnCours}`
+            },
+            type: 'hotel'
+          }
         });
       } else {
         showToast('❌ Erreur: ' + result.message, 'error');
@@ -401,6 +449,12 @@ const HotelAjout = ({ onCancel }) => {
           <div className="user-info-row">
             <FileText size={18} strokeWidth={2} />
             <span>Prochain dossier: <strong>{userDossierDisplay}</strong></span>
+          </div>
+          <div className="user-info-row" style={{ fontSize: '12px', color: '#6c757d' }}>
+            <span><BarChart size={14} strokeWidth={2} /> Total dossiers Hôtel: <strong>{globalTotalCount}</strong></span>
+            <span style={{ marginLeft: '15px' }}>
+              <BarChart size={14} strokeWidth={2} /> Vos dossiers cette année: <strong>{userInfo.compteurs?.['Hôtel'] || 0}</strong>
+            </span>
           </div>
         </div>
 
@@ -469,8 +523,8 @@ const HotelAjout = ({ onCancel }) => {
             <select name="region" value={hotelData.region || ''} onChange={handleHotelChange} className="input-style" style={{ flex: 1 }} required>
               <option value="">Sélectionner une région</option>
               {regionsList.map((region) => {
-                const phone = region.telephone && region.telephone.trim() !== '' 
-                  ? formatPhoneNumber(region.telephone) 
+                const phone = region.telephone && region.telephone.trim() !== ''
+                  ? formatPhoneNumber(region.telephone)
                   : null;
                 return (
                   <option key={region.id} value={region.nom}>
@@ -487,21 +541,21 @@ const HotelAjout = ({ onCancel }) => {
           <div className="form-row">
             <div className="form-label"><h2><PlusCircle size={18} strokeWidth={2} /> Nouvelle région :</h2></div>
             <div className="form-input" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              <input 
-                type="text" 
-                value={newRegion} 
-                onChange={(e) => setNewRegion(e.target.value)} 
-                placeholder="Nom de la région" 
-                className="input-style" 
-                style={{ flex: 1, minWidth: '150px' }} 
+              <input
+                type="text"
+                value={newRegion}
+                onChange={(e) => setNewRegion(e.target.value)}
+                placeholder="Nom de la région"
+                className="input-style"
+                style={{ flex: 1, minWidth: '150px' }}
               />
-              <input 
-                type="text" 
-                value={newRegionPhone} 
-                onChange={(e) => setNewRegionPhone(e.target.value)} 
-                placeholder="Téléphone (optionnel)" 
-                className="input-style" 
-                style={{ flex: 1, minWidth: '150px' }} 
+              <input
+                type="text"
+                value={newRegionPhone}
+                onChange={(e) => setNewRegionPhone(e.target.value)}
+                placeholder="Téléphone (optionnel)"
+                className="input-style"
+                style={{ flex: 1, minWidth: '150px' }}
               />
               <button type="button" onClick={handleAddRegion} className="btn-add-region-confirm">Ajouter</button>
             </div>
@@ -513,6 +567,11 @@ const HotelAjout = ({ onCancel }) => {
 
   const renderStep2 = () => (
     <>
+      <div className="info-banner">
+        <Info size={18} strokeWidth={2} />
+        <span>Demandeur : <strong>{hotelData.demandeur || 'Non renseigné'}</strong> - Dénomination : <strong>{hotelData.denomination || 'Non renseigné'}</strong></span>
+      </div>
+
       <div className="form-row">
         <div className="form-label"><h2><User size={18} strokeWidth={2} /> Nom et prénoms :</h2></div>
         <div className="form-input">
@@ -560,6 +619,11 @@ const HotelAjout = ({ onCancel }) => {
 
   const renderStep3 = () => (
     <>
+      <div className="info-banner">
+        <Info size={18} strokeWidth={2} />
+        <span>Représentant : <strong>{hotelData.representantNom || 'Non renseigné'}</strong> - CIN : <strong>{hotelData.representantCin || 'Non renseigné'}</strong></span>
+      </div>
+
       <div className="form-row">
         <div className="form-label"><h2><Briefcase size={18} strokeWidth={2} /> Activité :</h2></div>
         <div className="form-input radio-group">
@@ -632,18 +696,24 @@ const HotelAjout = ({ onCancel }) => {
         </div>
       </div>
 
-      {/* <div className="form-row">
-        <div className="form-label"><h2><DollarSign size={18} strokeWidth={2} /> Montant mensuel :</h2></div>
-        <div className="form-input">
-          <input type="text" value={getDisplayValue(montant)} onChange={handleMontantChange} className="input-style" placeholder="Montant mensuel en Ar" />
-        </div>
-      </div> */}
+
 
       <div className="form-row">
         <div className="form-label"><h2><Hash size={18} strokeWidth={2} /> Uniter :</h2></div>
         <div className="form-input">
-          <input type="number" min="1" max="9" value={uniter} onChange={(e) => setUniter(Math.min(9, Math.max(1, parseInt(e.target.value) || 1)))} className="input-style" style={{ width: '80px' }} placeholder="1" />
-          <span style={{ marginLeft: '10px', fontSize: '14px', color: '#6c757d' }}>(1 à 9 unités)</span>
+          <input
+            type="number"
+            min="1"
+            value={uniter}
+            onChange={(e) => {
+              const val = parseInt(e.target.value);
+              setUniter(isNaN(val) || val < 1 ? 1 : val);
+            }}
+            className="input-style"
+            style={{ width: '100px' }}
+            placeholder="1"
+          />
+          <span style={{ marginLeft: '10px', fontSize: '14px', color: '#6c757d' }}>(nombre d'unités)</span>
         </div>
       </div>
 
@@ -652,7 +722,7 @@ const HotelAjout = ({ onCancel }) => {
         <div className="form-input">
           <input type="text" value={getSoitTotalDisplay()} readOnly className="input-style total-field" />
           <span style={{ marginLeft: '10px', fontSize: '12px', color: '#6c757d' }}>
-            (Montant × Uniter + Frais de dossier)
+            (Montant + Moyens comm.) × Uniter + Frais
           </span>
         </div>
       </div>
@@ -703,7 +773,7 @@ const HotelAjout = ({ onCancel }) => {
     const fraisVal = parseFloat(fraisDossier) || 0;
     const montantVal = parseFloat(montant) || 0;
     const uniterVal = parseInt(uniter) || 1;
-    
+
     let totalMoyens = 0;
     if (hotelData.moyensCommunication.radio.actif) {
       totalMoyens += parseInt(hotelData.moyensCommunication.radio.taux) || 0;
@@ -717,7 +787,7 @@ const HotelAjout = ({ onCancel }) => {
     if (hotelData.moyensCommunication.autres.actif) {
       totalMoyens += parseInt(hotelData.moyensCommunication.autres.taux) || 0;
     }
-    
+
     const totalCalcule = (montantVal + totalMoyens) * uniterVal;
     const totalFinal = totalCalcule + fraisVal;
 
@@ -727,6 +797,8 @@ const HotelAjout = ({ onCancel }) => {
         <div className="user-info-recap">
           <p><Users size={16} strokeWidth={2} /> Utilisateur: <strong>{userInfo.nom}</strong> ({userInfo.prefix})</p>
           <p><FileText size={16} strokeWidth={2} /> Prochain dossier: <strong>{userDossierDisplay}</strong></p>
+          <p><BarChart size={16} strokeWidth={2} /> Total dossiers Hôtel: <strong>{globalTotalCount}</strong></p>
+          <p><BarChart size={16} strokeWidth={2} /> Vos dossiers cette année: <strong>{userInfo.compteurs?.['Hôtel'] || 0}</strong></p>
         </div>
         <table className="recap-table">
           <tbody>
@@ -742,6 +814,9 @@ const HotelAjout = ({ onCancel }) => {
             <tr><td><MoreHorizontal size={16} strokeWidth={2} /> Autres</td><td>{hotelData.moyensCommunication.autres.actif ? formatNumber(hotelData.moyensCommunication.autres.taux || 0) + ' Ar/an' : 'Non actif'}</td></tr>
             <tr><td><Hash size={16} strokeWidth={2} /> Uniter</td><td>{uniterVal}</td></tr>
             <tr><td><DollarSign size={16} strokeWidth={2} /> Soit Total</td><td><strong style={{ color: '#28a745' }}>{formatNumber(totalFinal)} Ar</strong></td></tr>
+            <tr><td><User size={16} strokeWidth={2} /> Représentant</td><td>{hotelData.representantNom || '-'}</td></tr>
+            <tr><td><CreditCard size={16} strokeWidth={2} /> CIN</td><td>{hotelData.representantCin || '-'}</td></tr>
+            <tr><td><Edit size={16} strokeWidth={2} /> Signataire</td><td>{hotelData.confirmationNom || '-'}</td></tr>
           </tbody>
         </table>
       </div>

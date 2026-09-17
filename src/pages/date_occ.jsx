@@ -7,7 +7,6 @@ import {
   MapPin,
   Building2,
   Search,
-  X,
   Eye,
   RotateCcw,
   ArrowLeft,
@@ -20,13 +19,21 @@ import {
   Clock,
   AlertCircle,
   CheckCircle,
+  FileText,
+  Hash,
+  MapPinned,
+  CreditCard,
+  CalendarClock,
+  Ban,
+  Users,
+  TrendingUp,
+  Activity,
+  Layers,
+  RefreshCw,
 } from 'lucide-react';
 
-import Header from '../components/Header';
-import Sidebar from '../components/Sidebar';
 import MiniSidebar from '../components/MiniSidebar';
 import '../styles/date_occ.css';
-
 
 const DateOcc = () => {
   const navigate = useNavigate();
@@ -47,17 +54,38 @@ const DateOcc = () => {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [availableYears, setAvailableYears] = useState([]);
 
-  // ========== Fonctions utilitaires ==========
+  // ========== Helpers ==========
   const formatDateComplete = (dateString) => {
-    if (!dateString) return '';
+    if (!dateString) return '—';
     const date = new Date(dateString);
-    if (isNaN(date)) return '';
+    if (isNaN(date)) return '—';
     return date.toLocaleDateString('fr-FR', {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
       year: 'numeric',
     });
+  };
+
+  const formatDateShort = (dateString) => {
+    if (!dateString) return '—';
+    const date = new Date(dateString);
+    if (isNaN(date)) return '—';
+    return date.toLocaleDateString('fr-FR');
+  };
+
+  const formatMoney = (value) => {
+    const num = parseFloat(value) || 0;
+    return num.toLocaleString('fr-FR') + ' Ar';
+  };
+
+  const firstNonEmpty = (...values) => {
+    for (const v of values) {
+      if (v !== undefined && v !== null && String(v).trim() !== '') {
+        return v;
+      }
+    }
+    return null;
   };
 
   const extractAvailableYears = (eventsList) => {
@@ -129,13 +157,11 @@ const DateOcc = () => {
 
     let filtered = [...events];
 
-    // Recherche par ID
     if (referenceId.trim()) {
       const found = findEventById(referenceId);
       return found ? [found] : [];
     }
 
-    // Recherche textuelle
     if (searchTerm.trim()) {
       const lower = searchTerm.toLowerCase().trim();
       filtered = filtered.filter((ev) => {
@@ -147,15 +173,16 @@ const DateOcc = () => {
         return (
           (ev.denomination && ev.denomination.toLowerCase().includes(lower)) ||
           (ev.demandeur && ev.demandeur.toLowerCase().includes(lower)) ||
+          (ev.organisateurs && ev.organisateurs.toLowerCase().includes(lower)) ||
           (ev.nom_evenement && ev.nom_evenement.toLowerCase().includes(lower)) ||
           (ev.lieu_evenement && ev.lieu_evenement.toLowerCase().includes(lower)) ||
           (ev.genre_manifestation && ev.genre_manifestation.toLowerCase().includes(lower)) ||
+          (ev.email && ev.email.toLowerCase().includes(lower)) ||
           artistesMatch
         );
       });
     }
 
-    // Filtres date
     if (selectedDay) {
       const day = parseInt(selectedDay, 10);
       filtered = filtered.filter(
@@ -164,18 +191,8 @@ const DateOcc = () => {
     }
     if (selectedMonth) {
       const moisMap = {
-        janvier: 0,
-        février: 1,
-        mars: 2,
-        avril: 3,
-        mai: 4,
-        juin: 5,
-        juillet: 6,
-        août: 7,
-        septembre: 8,
-        octobre: 9,
-        novembre: 10,
-        décembre: 11,
+        janvier: 0, février: 1, mars: 2, avril: 3, mai: 4, juin: 5,
+        juillet: 6, août: 7, septembre: 8, octobre: 9, novembre: 10, décembre: 11,
       };
       const moisNum = moisMap[selectedMonth.toLowerCase()];
       filtered = filtered.filter(
@@ -188,29 +205,53 @@ const DateOcc = () => {
         (ev) => ev.date_evenement && new Date(ev.date_evenement).getFullYear() === year
       );
     }
-
-    // Filtre région
     if (selectedRegion) {
       filtered = filtered.filter((ev) => ev.region === selectedRegion);
     }
 
-    // Tri par date décroissante
     filtered.sort((a, b) => new Date(b.date_evenement) - new Date(a.date_evenement));
     return filtered;
   }, [
-    events,
-    searchTerm,
-    referenceId,
-    selectedDay,
-    selectedMonth,
-    selectedYear,
-    selectedRegion,
+    events, searchTerm, referenceId,
+    selectedDay, selectedMonth, selectedYear, selectedRegion,
   ]);
 
-  // Statistiques
-  const totalEvents = events.length;
-  const uniqueOrgs = new Set(events.map((e) => e.denomination).filter(Boolean)).size;
-  const uniqueLieux = new Set(events.map((e) => e.lieu_evenement).filter(Boolean)).size;
+  // ========== Statistiques (basées sur FILTRÉ) ==========
+  const totalEvents = getFilteredEvents.length;
+
+  const totalArtistesUniques = useMemo(() => {
+    const s = new Set();
+    getFilteredEvents.forEach((ev) => {
+      (ev.artistesList || []).forEach((a) => {
+        if (a.nom) s.add(a.nom.toLowerCase());
+      });
+    });
+    return s.size;
+  }, [getFilteredEvents]);
+
+  const totalRegionsCouvertes = useMemo(() => {
+    const s = new Set();
+    getFilteredEvents.forEach((ev) => {
+      if (ev.region) s.add(ev.region);
+    });
+    return s.size;
+  }, [getFilteredEvents]);
+
+  const chiffreAffaireTotal = useMemo(() => {
+    return getFilteredEvents.reduce(
+      (sum, ev) => sum + (parseFloat(ev.montant_total) || 0),
+      0
+    );
+  }, [getFilteredEvents]);
+
+  const uniqueOrgs = useMemo(() => {
+    const s = new Set();
+    getFilteredEvents.forEach((ev) => {
+      const org = ev.organisateurs || ev.denomination;
+      if (org) s.add(org);
+    });
+    return s.size;
+  }, [getFilteredEvents]);
 
   // ========== Statut ==========
   const getEventStatus = (dateOriginal) => {
@@ -226,10 +267,11 @@ const DateOcc = () => {
   };
 
   const statusConfig = {
-    passed: { label: 'Passé', icon: AlertCircle, className: 'status-passed' },
-    today: { label: "Aujourd'hui", icon: CheckCircle, className: 'status-today' },
-    near: { label: 'Proche', icon: Clock, className: 'status-near' },
-    upcoming: { label: 'Futur', icon: Calendar, className: 'status-upcoming' },
+    passed: { label: 'Passé', icon: AlertCircle, className: 'occ-status-passed' },
+    today: { label: "Aujourd'hui", icon: CheckCircle, className: 'occ-status-today' },
+    near: { label: 'Proche', icon: Clock, className: 'occ-status-near' },
+    upcoming: { label: 'Futur', icon: Calendar, className: 'occ-status-upcoming' },
+    unknown: { label: 'Inconnu', icon: AlertCircle, className: 'occ-status-unknown' },
   };
 
   // ========== Modal ==========
@@ -242,7 +284,6 @@ const DateOcc = () => {
     document.body.style.overflow = 'auto';
   };
 
-  // Réinitialisation
   const resetFilters = () => {
     setSearchTerm('');
     setReferenceId('');
@@ -254,47 +295,122 @@ const DateOcc = () => {
 
   return (
     <>
-      <Header />
-      <Sidebar />
+      {/* <Header /> */}
       <MiniSidebar />
-      <main className="contenu">
-        {/* ===== EN‑TÊTE ===== */}
-        <div className="page-header">
-          <div className="header-left">
-            <h1>
-              <CalendarDays className="header-icon" size={28} />
-              OMDA : <span>Occasionnelles</span>
-            </h1>
-            <div className="header-stats">
-              <span className="stat-badge">
-                <strong>{totalEvents}</strong> Événements
-              </span>
-              <span className="stat-badge">
-                <strong>{uniqueOrgs}</strong> Organisations
-              </span>
-              <span className="stat-badge">
-                <strong>{uniqueLieux}</strong> Lieux
-              </span>
+
+      <main className="occ-page">
+        {/* ============ HEADER INDÉPENDANT ============ */}
+        <header className="occ-header">
+          <div className="occ-header-bg" />
+          <div className="occ-header-content">
+            <div className="occ-header-left">
+              <div className="occ-header-icon-wrapper">
+                <CalendarDays size={32} strokeWidth={2} />
+              </div>
+              <div>
+                <h1 className="occ-header-title">
+                  OMDA <span>Occasionnelles</span>
+                </h1>
+                <p className="occ-header-subtitle">
+                  Gestion et suivi des événements occasionnels
+                </p>
+              </div>
+            </div>
+
+            <div className="occ-header-right">
+              <button
+                className="occ-btn-refresh"
+                onClick={fetchOccasionnels}
+                title="Rafraîchir"
+              >
+                <RefreshCw size={16} />
+                Rafraîchir
+              </button>
+              <button
+                className="occ-btn-back"
+                onClick={() => navigate('/dashboard')}
+              >
+                <ArrowLeft size={16} />
+                Retour
+              </button>
             </div>
           </div>
-          <button className="btn-back" onClick={() => navigate('/dashboard')}>
-            <ArrowLeft size={18} /> Retour
-          </button>
-        </div>
 
-        {/* ===== FILTRES INDÉPENDANTS ===== */}
-        <div className="filters-container">
-          <div className="filters-row">
-            {/* Jour */}
-            <div className="filter-item">
-              <label htmlFor="daySelect">
-                <Calendar size={14} className="filter-icon" /> Jour
+          {/* ===== KPI CARDS ===== */}
+          <div className="occ-kpi-grid">
+            <div className="occ-kpi-card occ-kpi-blue">
+              <div className="occ-kpi-icon">
+                <Layers size={22} />
+              </div>
+              <div className="occ-kpi-data">
+                <span className="occ-kpi-value">{totalEvents}</span>
+                <span className="occ-kpi-label">Événements</span>
+              </div>
+            </div>
+
+            <div className="occ-kpi-card occ-kpi-purple">
+              <div className="occ-kpi-icon">
+                <Users size={22} />
+              </div>
+              <div className="occ-kpi-data">
+                <span className="occ-kpi-value">{uniqueOrgs}</span>
+                <span className="occ-kpi-label">Organisateurs</span>
+              </div>
+            </div>
+
+            <div className="occ-kpi-card occ-kpi-green">
+              <div className="occ-kpi-icon">
+                <Music size={22} />
+              </div>
+              <div className="occ-kpi-data">
+                <span className="occ-kpi-value">{totalArtistesUniques}</span>
+                <span className="occ-kpi-label">Artistes uniques</span>
+              </div>
+            </div>
+
+            <div className="occ-kpi-card occ-kpi-orange">
+              <div className="occ-kpi-icon">
+                <MapPin size={22} />
+              </div>
+              <div className="occ-kpi-data">
+                <span className="occ-kpi-value">{totalRegionsCouvertes}</span>
+                <span className="occ-kpi-label">Régions couvertes</span>
+              </div>
+            </div>
+
+            <div className="occ-kpi-card occ-kpi-teal">
+              <div className="occ-kpi-icon">
+                <TrendingUp size={22} />
+              </div>
+              <div className="occ-kpi-data">
+                <span className="occ-kpi-value">
+                  {chiffreAffaireTotal.toLocaleString('fr-FR')}
+                </span>
+                <span className="occ-kpi-label">Chiffre total (Ar)</span>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* ============ FILTRES ============ */}
+        <section className="occ-filters-section">
+          <div className="occ-filters-header">
+            <h3>
+              <Activity size={16} />
+              Filtres de recherche
+            </h3>
+          </div>
+
+          <div className="occ-filters-row">
+            <div className="occ-filter-item">
+              <label htmlFor="occ-day">
+                <Calendar size={13} /> Jour
               </label>
               <select
-                id="daySelect"
+                id="occ-day"
                 value={selectedDay}
                 onChange={(e) => setSelectedDay(e.target.value)}
-                className="form-select"
+                className="occ-form-select"
               >
                 <option value="">Tous</option>
                 {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
@@ -303,16 +419,15 @@ const DateOcc = () => {
               </select>
             </div>
 
-            {/* Mois */}
-            <div className="filter-item">
-              <label htmlFor="monthSelect">
-                <Calendar size={14} className="filter-icon" /> Mois
+            <div className="occ-filter-item">
+              <label htmlFor="occ-month">
+                <Calendar size={13} /> Mois
               </label>
               <select
-                id="monthSelect"
+                id="occ-month"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="form-select"
+                className="occ-form-select"
               >
                 <option value="">Tous</option>
                 {[
@@ -326,16 +441,15 @@ const DateOcc = () => {
               </select>
             </div>
 
-            {/* Année */}
-            <div className="filter-item">
-              <label htmlFor="yearSelect">
-                <Calendar size={14} className="filter-icon" /> Année
+            <div className="occ-filter-item">
+              <label htmlFor="occ-year">
+                <Calendar size={13} /> Année
               </label>
               <select
-                id="yearSelect"
+                id="occ-year"
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(e.target.value)}
-                className="form-select"
+                className="occ-form-select"
               >
                 <option value="">Tous</option>
                 {availableYears.map((y) => (
@@ -344,75 +458,83 @@ const DateOcc = () => {
               </select>
             </div>
 
-            {/* Région */}
-            <div className="filter-item">
-              <label htmlFor="regionSelect">
-                <MapPin size={14} className="filter-icon" /> Région
+            <div className="occ-filter-item">
+              <label htmlFor="occ-region">
+                <MapPin size={13} /> Région
               </label>
               <select
-                id="regionSelect"
+                id="occ-region"
                 value={selectedRegion}
                 onChange={(e) => setSelectedRegion(e.target.value)}
-                className="form-select"
+                className="occ-form-select"
               >
-                <option value="">Toutes les régions</option>
+                <option value="">Toutes</option>
                 {regionsDisponibles.map((r) => (
                   <option key={r.id} value={r.nom}>{r.nom}</option>
                 ))}
               </select>
             </div>
 
-            {/* Réinitialiser */}
-            <div className="filter-item filter-actions">
+            <div className="occ-filter-item occ-filter-actions">
               <label>&nbsp;</label>
-              <button className="btn-reset" onClick={resetFilters}>
-                <RotateCcw size={16} /> Réinitialiser
+              <button className="occ-btn-reset" onClick={resetFilters}>
+                <RotateCcw size={14} /> Réinitialiser
               </button>
             </div>
           </div>
 
-          {/* Barre de recherche */}
-          <div className="search-bar">
-            <div className="search-input-wrapper">
-
+          <div className="occ-search-bar">
+            <div className="occ-search-wrapper">
+              <Search size={16} className="occ-search-icon" />
               <input
                 type="text"
-                placeholder="Rechercher par nom, lieu, artiste…"
+                placeholder="Rechercher par nom, lieu, artiste, organisateur…"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="search-input"
+                className="occ-search-input"
               />
             </div>
-            <div className="reference-input-wrapper">
-              <Tag size={16} className="ref-icon" />
+            <div className="occ-ref-wrapper">
+              <Tag size={16} className="occ-ref-icon" />
               <input
                 type="text"
                 placeholder="ID événement"
                 value={referenceId}
                 onChange={(e) => setReferenceId(e.target.value)}
-                className="reference-input"
+                className="occ-ref-input"
               />
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* ===== TABLEAU ===== */}
-        <section className="events-table-wrapper">
+        {/* ============ TABLEAU ============ */}
+        <section className="occ-table-section">
+          <div className="occ-table-header">
+            <h3>
+              <FileText size={16} />
+              Liste des événements
+              <span className="occ-table-count">
+                {getFilteredEvents.length} résultat
+                {getFilteredEvents.length > 1 ? 's' : ''}
+              </span>
+            </h3>
+          </div>
+
           {loading ? (
-            <div className="loading-state">
-              <div className="spinner" />
+            <div className="occ-state occ-state-loading">
+              <div className="occ-spinner" />
               <p>Chargement des événements…</p>
             </div>
           ) : error ? (
-            <div className="error-state">
-              <AlertCircle size={32} />
+            <div className="occ-state occ-state-error">
+              <AlertCircle size={36} />
               <p>{error}</p>
-              <button className="btn-retry" onClick={fetchOccasionnels}>
-                Réessayer
+              <button className="occ-btn-retry" onClick={fetchOccasionnels}>
+                <RefreshCw size={14} /> Réessayer
               </button>
             </div>
           ) : getFilteredEvents.length === 0 ? (
-            <div className="empty-state">
+            <div className="occ-state occ-state-empty">
               <Search size={40} />
               <p>
                 {referenceId
@@ -421,65 +543,73 @@ const DateOcc = () => {
               </p>
             </div>
           ) : (
-            <div className="table-responsive">
-              <table className="events-table">
+            <div className="occ-table-scroll">
+              <table className="occ-table">
                 <thead>
                   <tr>
                     <th>Réf.</th>
                     <th>Date</th>
-                    <th>Organisation</th>
+                    <th>Organisateur</th>
                     <th>Événement</th>
                     <th>Lieu</th>
                     <th>Artistes</th>
+                    <th>Montant</th>
                     <th>Statut</th>
-                    <th style={{ width: '50px' }}>Détail</th>
+                    <th className="occ-th-action">Détail</th>
                   </tr>
                 </thead>
                 <tbody>
                   {getFilteredEvents.map((event) => {
                     const status = getEventStatus(event.date_evenement);
-                    const { label, icon: StatusIcon, className } = statusConfig[status] || {};
-                    const artistNames = (event.artistesList || [])
-                      .map((a) => a.nom)
-                      .filter(Boolean)
-                      .join(', ') || '—';
+                    const cfg = statusConfig[status] || statusConfig.unknown;
+                    const StatusIcon = cfg.icon;
+                    const artistNames =
+                      (event.artistesList || [])
+                        .map((a) => a.nom)
+                        .filter(Boolean)
+                        .join(', ') || '—';
+
+                    const eventName = firstNonEmpty(
+                      event.nom_evenement,
+                      event.genre_manifestation,
+                      event.denomination
+                    ) || '—';
 
                     return (
-                      <tr key={event.id} className={`event-row ${className}`}>
-                        <td className="col-id">{event.id}</td>
-                        <td className="col-date" title={formatDateComplete(event.date_evenement)}>
-                          {formatDateComplete(event.date_evenement)}
+                      <tr key={event.id} className="occ-row">
+                        <td className="occ-col-id">#{event.id}</td>
+                        <td className="occ-col-date" title={formatDateComplete(event.date_evenement)}>
+                          {formatDateShort(event.date_evenement)}
                         </td>
-                        <td className="col-org">
-                          <Building2 size={14} className="inline-icon" />
-                          {event.denomination || '—'}
+                        <td className="occ-col-org">
+                          <Building2 size={13} className="occ-inline-icon" />
+                          <span>{event.organisateurs || event.denomination || '—'}</span>
                         </td>
-                        <td className="col-event">
-                          {event.nom_evenement || event.denomination || '—'}
+                        <td className="occ-col-event">{eventName}</td>
+                        <td className="occ-col-lieu">
+                          <MapPin size={13} className="occ-inline-icon" />
+                          <span>{event.lieu_evenement || '—'}</span>
                         </td>
-                        <td className="col-lieu">
-                          <MapPin size={14} className="inline-icon" />
-                          {event.lieu_evenement || '—'}
+                        <td className="occ-col-artists" title={artistNames}>
+                          <Music size={13} className="occ-inline-icon" />
+                          <span>{artistNames}</span>
                         </td>
-                        <td className="col-artists">
-                          <Music size={14} className="inline-icon" />
-                          {artistNames}
+                        <td className="occ-col-montant">
+                          {formatMoney(event.montant_total || event.montant || 0)}
                         </td>
-                        <td className="col-status">
-                          {status && (
-                            <span className={`status-badge ${className}`}>
-                              <StatusIcon size={14} />
-                              {label}
-                            </span>
-                          )}
+                        <td className="occ-col-status">
+                          <span className={`occ-status-badge ${cfg.className}`}>
+                            <StatusIcon size={13} />
+                            {cfg.label}
+                          </span>
                         </td>
-                        <td className="col-action">
+                        <td className="occ-col-action">
                           <button
-                            className="btn-view"
+                            className="occ-btn-view"
                             onClick={() => openModal(event)}
                             aria-label="Voir les détails"
                           >
-                            <Eye size={18} />
+                            <Eye size={17} />
                           </button>
                         </td>
                       </tr>
@@ -490,95 +620,234 @@ const DateOcc = () => {
             </div>
           )}
         </section>
+
+        {/* ============ FOOTER INDÉPENDANT ============ */}
+        <footer className="occ-footer">
+          <div className="occ-footer-content">
+            <div className="occ-footer-brand">
+              <CalendarDays size={18} />
+              <span>OMDA · Occasionnelles</span>
+            </div>
+            <div className="occ-footer-info">
+              <span>
+                <Layers size={13} /> {totalEvents} événement{totalEvents > 1 ? 's' : ''}
+              </span>
+              <span className="occ-footer-sep">•</span>
+              <span>
+                <Users size={13} /> {uniqueOrgs} organisateur{uniqueOrgs > 1 ? 's' : ''}
+              </span>
+              <span className="occ-footer-sep">•</span>
+              <span>
+                <Music size={13} /> {totalArtistesUniques} artiste{totalArtistesUniques > 1 ? 's' : ''}
+              </span>
+              <span className="occ-footer-sep">•</span>
+              <span>
+                <TrendingUp size={13} /> {chiffreAffaireTotal.toLocaleString('fr-FR')} Ar
+              </span>
+            </div>
+            <div className="occ-footer-date">
+              <Calendar size={13} />
+              {new Date().toLocaleDateString('fr-FR', {
+                day: '2-digit',
+                month: 'long',
+                year: 'numeric',
+              })}
+            </div>
+          </div>
+        </footer>
       </main>
 
-      {/* ===== MODAL ===== */}
+      {/* ============ MODAL ============ */}
       {selectedEvent && (
-        <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>
-                <Tag size={18} /> Détails – Réf. {selectedEvent.id}
-              </h3>
-              <button className="modal-close" onClick={closeModal}>
-                <X size={20} />
+        <div className="occ-modal-overlay" onClick={closeModal}>
+          <div className="occ-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="occ-modal-header">
+              <div className="occ-modal-title-group">
+                <div className="occ-modal-icon-badge">
+                  <Tag size={18} />
+                </div>
+                <div>
+                  <h3 className="occ-modal-title">
+                    Détails de l'événement
+                  </h3>
+                  <span className="occ-modal-ref">Réf. #{selectedEvent.id}</span>
+                </div>
+              </div>
+              <button className="occ-modal-close" onClick={closeModal} aria-label="Fermer">
+                ✕
               </button>
             </div>
-            <div className="modal-body">
-              <div className="modal-section">
+
+            <div className="occ-modal-body">
+              {/* ===== Événement ===== */}
+              <div className="occ-modal-section">
                 <h4>
-                  <Calendar size={16} /> Événement
+                  <Calendar size={15} /> Événement
                 </h4>
-                <div className="modal-row">
-                  <span>Date</span>
-                  <strong>{formatDateComplete(selectedEvent.date_evenement)}</strong>
-                </div>
-                <div className="modal-row">
-                  <span>Lieu</span>
-                  <strong>{selectedEvent.lieu_evenement || '—'}</strong>
-                </div>
-                <div className="modal-row">
-                  <span>Nom</span>
-                  <strong>{selectedEvent.nom_evenement || '—'}</strong>
-                </div>
-                <div className="modal-row">
-                  <span>Genre</span>
-                  <strong>{selectedEvent.genre_manifestation || '—'}</strong>
-                </div>
-                <div className="modal-row">
-                  <span>Région</span>
-                  <strong>{selectedEvent.region || '—'}</strong>
-                </div>
-                <div className="modal-row">
-                  <span>
-                    <DollarSign size={14} /> Montant
-                  </span>
-                  <strong>{(selectedEvent.montant_total || 0).toLocaleString()} Ar</strong>
+                <div className="occ-modal-grid">
+                  <div className="occ-modal-row">
+                    <span><CalendarClock size={13} /> Date</span>
+                    <strong>{formatDateComplete(selectedEvent.date_evenement)}</strong>
+                  </div>
+                  <div className="occ-modal-row">
+                    <span><Tag size={13} /> Genre</span>
+                    <strong>{selectedEvent.genre_manifestation || '—'}</strong>
+                  </div>
+                  <div className="occ-modal-row">
+                    <span><MapPin size={13} /> Lieu</span>
+                    <strong>{selectedEvent.lieu_evenement || '—'}</strong>
+                  </div>
+                  <div className="occ-modal-row">
+                    <span><MapPinned size={13} /> Région</span>
+                    <strong>{selectedEvent.region || '—'}</strong>
+                  </div>
+                  <div className="occ-modal-row">
+                    <span><Music size={13} /> Artistes (texte)</span>
+                    <strong>{selectedEvent.artistes || '—'}</strong>
+                  </div>
                 </div>
               </div>
 
-              <div className="modal-section">
+              {/* ===== Organisateur ===== */}
+              <div className="occ-modal-section">
                 <h4>
-                  <Building2 size={16} /> Organisateur
+                  <Building2 size={15} /> Organisateur
                 </h4>
-                <div className="modal-row">
-                  <span>Structure</span>
-                  <strong>{selectedEvent.denomination || '—'}</strong>
-                </div>
-                <div className="modal-row">
-                  <span>
-                    <User size={14} /> Demandeur
-                  </span>
-                  <strong>{selectedEvent.demandeur || '—'}</strong>
-                </div>
-                <div className="modal-row">
-                  <span>
-                    <Phone size={14} /> Téléphone
-                  </span>
-                  <strong>{selectedEvent.telephone || '—'}</strong>
-                </div>
-                <div className="modal-row">
-                  <span>
-                    <Mail size={14} /> Email
-                  </span>
-                  <strong>{selectedEvent.email || '—'}</strong>
+                <div className="occ-modal-grid">
+                  <div className="occ-modal-row">
+                    <span><Users size={13} /> Organisateurs</span>
+                    <strong className="occ-highlight">
+                      {selectedEvent.organisateurs || '—'}
+                    </strong>
+                  </div>
+                  <div className="occ-modal-row">
+                    <span><Building2 size={13} /> Dénomination</span>
+                    <strong>{selectedEvent.denomination || '—'}</strong>
+                  </div>
+                  <div className="occ-modal-row">
+                    <span><User size={13} /> Demandeur</span>
+                    <strong>{selectedEvent.demandeur || '—'}</strong>
+                  </div>
+                  <div className="occ-modal-row">
+                    <span><User size={13} /> Représenté par</span>
+                    <strong>{selectedEvent.representant_par || '—'}</strong>
+                  </div>
+                  <div className="occ-modal-row">
+                    <span><CreditCard size={13} /> CIN représentant</span>
+                    <strong>{selectedEvent.representant_cin || '—'}</strong>
+                  </div>
+                  <div className="occ-modal-row">
+                    <span><Calendar size={13} /> CIN délivrée le</span>
+                    <strong>{formatDateShort(selectedEvent.representant_cin_delivree)}</strong>
+                  </div>
+                  <div className="occ-modal-row">
+                    <span><MapPin size={13} /> CIN lieu</span>
+                    <strong>{selectedEvent.representant_cin_lieu || '—'}</strong>
+                  </div>
+                  <div className="occ-modal-row">
+                    <span><Phone size={13} /> Téléphone</span>
+                    <strong>{selectedEvent.telephone || '—'}</strong>
+                  </div>
+                  <div className="occ-modal-row">
+                    <span><MapPin size={13} /> Adresse</span>
+                    <strong>{selectedEvent.adresse || '—'}</strong>
+                  </div>
+                  <div className="occ-modal-row">
+                    <span><MapPin size={13} /> Domicile</span>
+                    <strong>{selectedEvent.domicile || '—'}</strong>
+                  </div>
                 </div>
               </div>
 
+              {/* ===== Dossier ===== */}
+              <div className="occ-modal-section">
+                <h4>
+                  <FileText size={15} /> Dossier
+                </h4>
+                <div className="occ-modal-grid">
+                  <div className="occ-modal-row">
+                    <span><Hash size={13} /> N° global</span>
+                    <strong>{selectedEvent.numero_dossier_global || '—'}</strong>
+                  </div>
+                  <div className="occ-modal-row">
+                    <span><Hash size={13} /> N° utilisateur</span>
+                    <strong>{selectedEvent.numero_dossier_utilisateur || '—'}</strong>
+                  </div>
+                  <div className="occ-modal-row">
+                    <span><Calendar size={13} /> Date d'ajout</span>
+                    <strong>{formatDateShort(selectedEvent.date_ajout)}</strong>
+                  </div>
+                  <div className="occ-modal-row">
+                    <span><MapPin size={13} /> Lieu d'ajout</span>
+                    <strong>{selectedEvent.lieu_ajout || '—'}</strong>
+                  </div>
+                  <div className="occ-modal-row">
+                    <span><User size={13} /> Confirmation</span>
+                    <strong>{selectedEvent.confirmation_nom || '—'}</strong>
+                  </div>
+                  <div className="occ-modal-row">
+                    <span><Calendar size={13} /> Date signature</span>
+                    <strong>{formatDateShort(selectedEvent.date_signature)}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* ===== Finances ===== */}
+              <div className="occ-modal-section">
+                <h4>
+                  <DollarSign size={15} /> Finances
+                </h4>
+                <div className="occ-modal-grid">
+                  <div className="occ-modal-row">
+                    <span>Frais dossier</span>
+                    <strong>{formatMoney(selectedEvent.frais_dossier)}</strong>
+                  </div>
+                  <div className="occ-modal-row">
+                    <span>Montant</span>
+                    <strong>{formatMoney(selectedEvent.montant)}</strong>
+                  </div>
+                  <div className="occ-modal-row">
+                    <span><Ban size={13} /> Montant retard</span>
+                    <strong>{formatMoney(selectedEvent.montant_retard)}</strong>
+                  </div>
+                  <div className="occ-modal-row">
+                    <span>En retard ?</span>
+                    <strong
+                      style={{
+                        color: selectedEvent.is_retard ? '#dc3545' : '#28a745',
+                      }}
+                    >
+                      {selectedEvent.is_retard ? 'Oui' : 'Non'}
+                    </strong>
+                  </div>
+                  <div className="occ-modal-row">
+                    <span>Soit total</span>
+                    <strong>{formatMoney(selectedEvent.soit_total)}</strong>
+                  </div>
+                </div>
+
+                <div className="occ-modal-total">
+                  <span>
+                    <DollarSign size={16} /> MONTANT TOTAL
+                  </span>
+                  <strong>{formatMoney(selectedEvent.montant_total)}</strong>
+                </div>
+              </div>
+
+              {/* ===== Artistes ===== */}
               {selectedEvent.artistesList && selectedEvent.artistesList.length > 0 && (
-                <div className="modal-section">
+                <div className="occ-modal-section">
                   <h4>
-                    <Music size={16} /> Artistes
+                    <Music size={15} /> Artistes ({selectedEvent.artistesList.length})
                   </h4>
-                  <ul className="artist-list">
+                  <ul className="occ-artist-list">
                     {selectedEvent.artistesList.map((artist, idx) => (
                       <li key={idx}>
-                        <span className="artist-name">
+                        <span className="occ-artist-name">
                           {artist.nom} {artist.prenom || ''}
                         </span>
-                        {artist.role && <span className="artist-role">🎭 {artist.role}</span>}
-                        {artist.nombre_chansons && (
-                          <span className="artist-songs">🎵 {artist.nombre_chansons} chansons</span>
+                        {artist.role && (
+                          <span className="occ-artist-role">🎭 {artist.role}</span>
                         )}
                       </li>
                     ))}
@@ -586,8 +855,9 @@ const DateOcc = () => {
                 </div>
               )}
             </div>
-            <div className="modal-footer">
-              <button className="btn-modal-close" onClick={closeModal}>
+
+            <div className="occ-modal-footer">
+              <button className="occ-btn-close-modal" onClick={closeModal}>
                 Fermer
               </button>
             </div>

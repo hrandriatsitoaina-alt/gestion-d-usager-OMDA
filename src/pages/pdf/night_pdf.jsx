@@ -371,7 +371,7 @@ export const generateNightPDF = (usager, paymentDetails) => {
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
     
-    doc.text(`Montant mensuel : ${formatNumber(montantMensuel)} Ariary`, marginX + 5, yPos);
+
     yPos += lineSpacing;
     
     doc.text(`Frais de dossier : ${formatNumber(fraisDossier)} Ariary (fixe, non multiplié par Uniter)`, marginX + 5, yPos);

@@ -143,6 +143,9 @@ const NotificationAdmin = () => {
     return allUsagers.find(u => u.id === parseInt(usagerId));
   };
 
+  // ============================================================
+  // UNIQUEMENT MARQUER COMME LU - SUPPRESSION DE markAsUnread
+  // ============================================================
   const markAsRead = async (id) => {
     try {
       await fetch(`http://localhost:3001/api/notifications/${id}/read`, {
@@ -194,18 +197,6 @@ const NotificationAdmin = () => {
       case 'delete_rejected': return 'badge-secondary';
       case 'update': return 'badge-primary';
       default: return 'badge-info';
-    }
-  };
-
-  const getTypeColor = (type) => {
-    switch(type) {
-      case 'OCC': return '#f59e0b';
-      case 'Grand Surface': return '#10b981';
-      case 'Bus': return '#3b82f6';
-      case 'Night club': return '#8b5cf6';
-      case 'Télé/Radio': return '#ec4899';
-      case 'Hôtel': return '#06b6d4';
-      default: return '#6b7280';
     }
   };
 
@@ -293,8 +284,12 @@ const NotificationAdmin = () => {
               <CheckCheck size={18} style={{ marginRight: '6px' }} /> Tout marquer comme lu
             </button>
           )}
-          <button className="btn-refresh" onClick={() => fetchNotifications(token || 'super_admin_secret_2026')}>
-            <RefreshCw size={18} style={{ marginRight: '6px' }} /> Rafraîchir
+          <button 
+            className="btn-refresh-icon" 
+            onClick={() => fetchNotifications(token || 'super_admin_secret_2026')}
+            title="Rafraîchir"
+          >
+            <RefreshCw size={20} />
           </button>
         </div>
 

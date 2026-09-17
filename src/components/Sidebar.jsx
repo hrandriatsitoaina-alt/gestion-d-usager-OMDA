@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, FolderOpen, UserPlus, Search, CreditCard,
@@ -12,30 +12,66 @@ const Sidebar = ({ isOpen, toggleSidebar, isCollapsed, toggleCollapse }) => {
   const [hoveredItem, setHoveredItem] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
 
+  // ===== ÉTATS POUR LA LANGUE =====
+  const [appLangue, setAppLangue] = useState('fr');
+
+  // ===== CHARGER LA LANGUE =====
+  useEffect(() => {
+    const langue = localStorage.getItem('app-langue') || 'fr';
+    setAppLangue(langue);
+
+    const handleLangueChange = (event) => {
+      const { langue } = event.detail;
+      setAppLangue(langue);
+    };
+
+    window.addEventListener('langue-change', handleLangueChange);
+
+    return () => {
+      window.removeEventListener('langue-change', handleLangueChange);
+    };
+  }, []);
+
+  // ===== FONCTION DE TRADUCTION =====
+  const t = (fr, mg, en) => {
+    switch (appLangue) {
+      case 'mg': return mg || fr;
+      case 'en': return en || fr;
+      default: return fr;
+    }
+  };
+
+  // ===== TRADUCTIONS DES TITRES DE SECTION =====
+  const sectionTitles = {
+    usagers: t('Usagers', 'Mpampiasa', 'Users'),
+    paiements: t('Paiements', 'Fandoavana', 'Payments'),
+    outils: t('Outils', 'Fitaovana', 'Tools'),
+    bd: t('Gestion de bd', 'Fitantanana angona', 'Database')
+  };
+
   const navItems = [
-    { icon: LayoutDashboard, label: 'Accueil', path: '/dashboard' },
-    { icon: FolderOpen, label: 'Catégories', path: '/autre-usager' },
+    { icon: LayoutDashboard, label: t('Accueil', 'Fandraisana', 'Home'), path: '/dashboard' },
+    { icon: FolderOpen, label: t('Catégories', 'Sokajy', 'Categories'), path: '/autre-usager' },
   ];
 
   const usagerItems = [
-    { icon: UserPlus, label: 'Ajouter un usager', path: '/ajout-usager' },
-    { icon: Search, label: 'Vérifier le statut', path: '/verification-usager' },
+    { icon: UserPlus, label: t('Ajouter un usager', 'Manampy mpampiasa', 'Add user'), path: '/ajout-usager' },
+    { icon: Search, label: t('Vérifier le statut', 'Hanamarina ny sata', 'Check status'), path: '/verification-usager' },
   ];
 
   const paiementItems = [
-    { icon: CreditCard, label: 'Gestion des paiements', path: '/gestion-paiement' },
-    { icon: FileText, label: 'Factures', path: '/factures' },
+    { icon: CreditCard, label: t('Gestion des paiements', 'Fitantanana fandoavana', 'Payment management'), path: '/billan' },
+    { icon: FileText, label: t('Factures', 'Faktiora', 'Invoices'), path: '/facture-usager' },
   ];
 
   const outilsItems = [
-    { icon: BarChart, label: 'Statistiques', path: '/statistiques' },
-    { icon: CalendarPlus, label: 'Ajouter un événement', path: '/ajout-evenement' },
+    { icon: BarChart, label: t('Statistiques', 'Statistika', 'Statistics'), path: '/tableau-db' },
+    { icon: CalendarPlus, label: t('Assistant IA', 'Mpanampy IA', 'AI Assistant'), path: '/diagnostique' },
   ];
 
   const bdItems = [
-    { icon: Download, label: 'Collecter', path: '#' },
-    { icon: Share2, label: 'Partager', path: '#' },
-    { icon: Upload, label: 'Recevoir', path: '#' },
+    { icon: Download, label: t('Collecter', 'Manangona', 'Collect'), path: '/base-de-donnees' },
+    { icon: Upload, label: t('Recevoir', 'Mandefa', 'Receive'), path: '/base-de-donnees' },
   ];
 
   const handleMouseEnter = (e, index) => {
@@ -90,10 +126,20 @@ const Sidebar = ({ isOpen, toggleSidebar, isCollapsed, toggleCollapse }) => {
             {!isCollapsed && <span className="brand-dot">•</span>}
           </div>
           {!isCollapsed && (
-            <div className="sub-brand">Office Malagasy du Droit d'Auteur</div>
+            <div className="sub-brand">
+              {t(
+                "Office Malagasy du Droit d'Auteur",
+                "Birao Malagasy misahana ny Zon'ny Mpanoratra",
+                "Malagasy Copyright Office"
+              )}
+            </div>
           )}
           {/* Bouton de collapse */}
-          <button className="collapse-btn" onClick={toggleCollapse} title={isCollapsed ? 'Agrandir' : 'Réduire'}>
+          <button
+            className="collapse-btn"
+            onClick={toggleCollapse}
+            title={isCollapsed ? t('Agrandir', 'Halehibe', 'Expand') : t('Réduire', 'Hakelezina', 'Collapse')}
+          >
             {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
         </div>
@@ -105,22 +151,24 @@ const Sidebar = ({ isOpen, toggleSidebar, isCollapsed, toggleCollapse }) => {
           </ul>
 
           {/* Usagers */}
-          {renderSection('Usagers', <Users size={16} />, usagerItems)}
+          {renderSection(sectionTitles.usagers, <Users size={16} />, usagerItems)}
 
           {/* Paiements */}
-          {renderSection('Paiements', <DollarSign size={16} />, paiementItems)}
+          {renderSection(sectionTitles.paiements, <DollarSign size={16} />, paiementItems)}
 
           {/* Outils */}
-          {renderSection('Outils', <Settings size={16} />, outilsItems)}
+          {renderSection(sectionTitles.outils, <Settings size={16} />, outilsItems)}
 
           {/* Gestion BD */}
-          {renderSection('Gestion de bd', <Download size={16} />, bdItems)}
+          {renderSection(sectionTitles.bd, <Download size={16} />, bdItems)}
         </nav>
 
         <footer className="sidebar-footer">
           {!isCollapsed ? (
             <>
-              <span className="footer-email">Omda</span>
+              <span className="footer-email">
+                {t('Omda', 'Omda', 'Omda')}
+              </span>
             </>
           ) : (
             <span className="footer-icon">©</span>
@@ -130,7 +178,7 @@ const Sidebar = ({ isOpen, toggleSidebar, isCollapsed, toggleCollapse }) => {
 
       {/* Tooltip flottant pour le mode réduit */}
       {isCollapsed && hoveredItem !== null && (
-        <div 
+        <div
           className="sidebar-tooltip"
           style={{
             top: tooltipPosition.top,
@@ -138,8 +186,8 @@ const Sidebar = ({ isOpen, toggleSidebar, isCollapsed, toggleCollapse }) => {
             transform: 'translateY(-50%)'
           }}
         >
-          {hoveredItem < 100 
-            ? navItems[hoveredItem]?.label 
+          {hoveredItem < 100
+            ? navItems[hoveredItem]?.label
             : [...usagerItems, ...paiementItems, ...outilsItems, ...bdItems][hoveredItem - 100]?.label
           }
         </div>

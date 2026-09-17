@@ -1,4 +1,4 @@
-// src/pages/pdf/facture_pdf.jsx
+// src/pages/pdf/facture_pdf_g.jsx
 import jsPDF from 'jspdf';
 import { formatNumber } from './occ_pdf';
 import logoRepoblika from '../../assets/repoblika.jpg';
@@ -128,27 +128,29 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     doc.addImage(logoRepoblika, 'JPEG', (pageWidth / 2) - (logoWidth / 2), yPos, logoWidth, logoHeight);
     yPos += logoHeight + 6;
 
-    // ========================================================================
+    // ============================================================
     // 2 - EN-TÊTE ADMINISTRATIF
-    // ========================================================================
+    // ============================================================
     doc.setFont('times', 'bold');
-    doc.setFontSize(9.5);
-    doc.text('MINISTERE DE LA COMMUNICATION', marginX, yPos);
+    doc.setFontSize(9);
+    doc.text('MINISTERE DE LA COMMUNICATION', marginX + 8, yPos);
     yPos += 4.5;
-    doc.text('ET DE LA CULTURE', marginX + 14, yPos);
+    doc.text('ET DE LA CULTURE', marginX + 20, yPos);
     yPos += 3.5;
     doc.setFont('helvetica', 'normal');
-    doc.text('********', marginX + 22, yPos);
+    doc.setFontSize(9);
+    doc.text('********', marginX + 30, yPos);
     yPos += 4.5;
     doc.setFont('times', 'bold');
-    doc.text('SECRETARIAT GENERAL', marginX + 10, yPos);
+    doc.setFontSize(9);
+    doc.text('SECRETARIAT GENERAL', marginX + 18, yPos);
     yPos += 3.5;
     doc.setFont('helvetica', 'normal');
-    doc.text('********', marginX + 22, yPos);
+    doc.text('********', marginX + 30, yPos);
     yPos += 5.5;
 
     doc.setFont('times', 'bold');
-    doc.setFontSize(11);
+    doc.setFontSize(10);
     doc.text('OFFICE MALAGASY DU DROIT D\'AUTEUR', marginX, yPos);
 
     const currentDate = new Date();
@@ -160,11 +162,12 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     const currentYear = currentDate.getFullYear().toString().slice(-2);
 
     doc.setFont('times', 'bold');
-    doc.setFontSize(10.5);
+    doc.setFontSize(10);
     doc.text(`Antananarivo, le ${dateStr}`, pageWidth - marginX, yPos, { align: 'right' });
 
     yPos += 5;
     doc.setFont('times', 'bold');
+    doc.setFontSize(10);
     const omdaWidth = doc.getTextWidth('OFFICE MALAGASY DU DROIT D\'AUTEUR ');
     doc.text('( OMDA )', marginX + (omdaWidth / 2), yPos, { align: 'center' });
     yPos += 12;
@@ -192,7 +195,7 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     }
 
     const factureNum = `${currentYear} / ${numFactureFormatted} / ${typeFactureLabel}`;
-    doc.text(`FACTURE n° ${factureNum}`, marginX, yPos + 4.5);
+    doc.text(`FACTURE n° ${factureNum}`, marginX + 50, yPos + 4);
     yPos += 5;
 
     doc.setFont('times', 'normal');
@@ -246,16 +249,16 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     doc.text(contact, contentX, clientY);
     clientY += 6;
 
-    const typeFactureObjet = factureData.type_facture || 'Redevances';
+    // ✅ OBJET : TOUJOURS "Redevances d'auteur"
     doc.setFont('times', 'bold');
     doc.text('OBJET :', labelX, clientY);
     doc.setFont('times', 'bold');
-    doc.text(typeFactureObjet, contentX, clientY);
+    doc.text("Redevances d'auteur", contentX, clientY);
 
     yPos += boxHeight + 8;
 
     // ========================================================================
-    // 5 - RÉCUPÉRATION DES MONTANTS - VERSION CORRIGÉE
+    // 5 - RÉCUPÉRATION DES MONTANTS
     // ========================================================================
     console.log('🔍 RECHERCHE DES MONTANTS...');
 
@@ -266,7 +269,6 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     let uniter = 1;
     let totalGeneral = 0;
 
-    // ✅ ÉTAPE 1: Récupérer depuis factureData d'abord
     console.log('📊 Données factureData reçues:', {
       montant_mensuel: factureData.montant_mensuel,
       frais_dossier: factureData.frais_dossier,
@@ -277,7 +279,6 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
       uniter: factureData.uniter
     });
 
-    // Récupérer le montant mensuel (plusieurs alias possibles selon le type d'usager)
     if (factureData.montant_mensuel && factureData.montant_mensuel !== '') {
       montantMensuel = parseFloat(factureData.montant_mensuel) || 0;
     }
@@ -291,18 +292,15 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
       montantMensuel = parseFloat(factureData.montant_total) || 0;
     }
 
-    // Récupérer les frais de dossier
     if (factureData.frais_dossier && factureData.frais_dossier !== '') {
       fraisDossier = parseFloat(factureData.frais_dossier) || 0;
     }
 
-    // Récupérer uniter
     if (factureData.uniter && factureData.uniter !== '') {
       uniter = parseInt(factureData.uniter) || 1;
     }
     if (!uniter || uniter <= 0) uniter = 1;
 
-    // Récupérer le retard
     if (factureData.montant_retard && factureData.montant_retard !== '') {
       montantRetard = parseFloat(factureData.montant_retard) || 0;
     }
@@ -310,13 +308,7 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
       isRetard = factureData.is_retard === true || factureData.is_retard === 'true' || factureData.is_retard === 1;
     }
 
-    console.log('📊 Après factureData:', {
-      montantMensuel,
-      fraisDossier,
-      uniter,
-      montantRetard,
-      isRetard
-    });
+    console.log('📊 Après factureData:', { montantMensuel, fraisDossier, uniter, montantRetard, isRetard });
 
     // ✅ ÉTAPE 2: Si les montants sont à 0, récupérer depuis l'API usager
     if (montantMensuel === 0 && factureData.ref_usager) {
@@ -329,7 +321,6 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
           const usager = usagerData.usager;
           console.log('📊 Données usager récupérées:', usager);
 
-          // Récupérer le montant
           if (usager.montant_mensuel && usager.montant_mensuel !== '') {
             montantMensuel = parseFloat(usager.montant_mensuel) || 0;
           }
@@ -343,17 +334,14 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
             montantMensuel = parseFloat(usager.montant_total) || 0;
           }
 
-          // Récupérer les frais de dossier
           if (fraisDossier === 0 && usager.frais_dossier && usager.frais_dossier !== '') {
             fraisDossier = parseFloat(usager.frais_dossier) || 0;
           }
 
-          // Récupérer uniter
           if (uniter === 1 && usager.uniter && usager.uniter !== '') {
             uniter = parseInt(usager.uniter) || 1;
           }
 
-          // Récupérer le retard
           if (montantRetard === 0 && usager.montant_retard && usager.montant_retard !== '') {
             montantRetard = parseFloat(usager.montant_retard) || 0;
           }
@@ -361,13 +349,7 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
             isRetard = usager.is_retard === true || usager.is_retard === 'true' || usager.is_retard === 1;
           }
 
-          console.log('📊 Après usager API:', {
-            montantMensuel,
-            fraisDossier,
-            uniter,
-            montantRetard,
-            isRetard
-          });
+          console.log('📊 Après usager API:', { montantMensuel, fraisDossier, uniter, montantRetard, isRetard });
         }
       } catch (err) {
         console.warn('⚠️ Erreur récupération usager:', err);
@@ -384,18 +366,13 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
           if (montantData.frais_dossier) {
             fraisDossier = parseFloat(montantData.frais_dossier) || 0;
           }
-          console.log('📊 Montant récupéré depuis API montants:', montantMensuel);
         }
       } catch (err) {
         console.warn('⚠️ Erreur récupération montants:', err);
       }
     }
 
-    // ✅ ÉTAPE 4 (CORRECTIF PRINCIPAL) : si le montant mensuel est TOUJOURS à 0,
-    // le déduire de soit_total. Avant, cette déduction ne se déclenchait que si
-    // le total global valait 0 — or dès que les frais de dossier étaient connus
-    // (ex: 5000 Ar), le total n'était plus à 0, et le montant restait donc bloqué
-    // à 0 dans le PDF (seul le frais de dossier s'affichait).
+    // ✅ ÉTAPE 4 : déduire de soit_total si montant toujours 0
     if (montantMensuel === 0 && factureData.soit_total && parseFloat(factureData.soit_total) > 0) {
       const soitTotalValue = parseFloat(factureData.soit_total) || 0;
       const retardValue = isRetard ? montantRetard : 0;
@@ -407,14 +384,11 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
       }
     }
 
-    // ✅ CALCUL DU TOTAL (fait APRÈS la récupération complète du montant)
+    // ✅ CALCUL DU TOTAL
     const montantAffiche = montantMensuel * uniter;
     const baseTotal = montantAffiche + fraisDossier;
     totalGeneral = isRetard ? baseTotal + montantRetard : baseTotal;
 
-    // Sécurité : si un soit_total a été enregistré en base, on l'utilise comme
-    // référence d'affichage pour le TOTAL final (évite les écarts d'arrondi),
-    // sans jamais écraser le montant mensuel déjà déterminé ci-dessus.
     if (factureData.soit_total && parseFloat(factureData.soit_total) > 0) {
       totalGeneral = parseFloat(factureData.soit_total);
     }
@@ -466,16 +440,13 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     // ✅ CONSTRUCTION DE LA DESCRIPTION
     let descLine = '';
 
-    // Nom/Denomination
     const nomPrincipal = factureData.denomination || factureData.demandeur || factureData.organisateurs || 'Prestation OMDA';
     descLine = nomPrincipal;
 
-    // Ajouter le type d'activité si disponible
     if (factureData.activite) {
       descLine += ` - ${factureData.activite}`;
     }
 
-    // Pour HOTEL
     if (refClientType === 'HTL') {
       if (factureData.etoiles) {
         descLine += ` - ${factureData.etoiles}⭐`;
@@ -485,14 +456,12 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
       }
     }
 
-    // Pour MAGASIN
     if (refClientType === 'MGS') {
       if (factureData.nombre_magasins) {
         descLine += ` - ${factureData.nombre_magasins} magasins`;
       }
     }
 
-    // Pour OCC
     if (refClientType === 'OCC') {
       if (factureData.genre_manifestation) {
         descLine += ` - ${factureData.genre_manifestation}`;
@@ -513,7 +482,6 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
       }
     }
 
-    // Pour BUS
     if (refClientType === 'TRP') {
       if (factureData.lignes) {
         descLine += ` - Lignes: ${factureData.lignes}`;
@@ -523,7 +491,6 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
       }
     }
 
-    // Pour NIGHT CLUB
     if (refClientType === 'NGT') {
       if (factureData.jauge_max) {
         descLine += ` - Jauge: ${factureData.jauge_max}`;
@@ -533,7 +500,6 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
       }
     }
 
-    // Pour RADIO/TELE
     if (refClientType === 'RDP') {
       if (factureData.frequence) {
         descLine += ` - ${factureData.frequence}`;
@@ -543,8 +509,7 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
       }
     }
 
-    // ✅ AFFICHAGE DES VALEURS DANS LE TABLEAU
-    // Utiliser montantMensuel (corrigé) comme prix unitaire
+    // ✅ VALEURS
     const puValue = montantMensuel > 0 ? montantMensuel : 0;
     const montantValue = puValue * uniter;
 
@@ -554,18 +519,33 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     console.log('  - pu (montantMensuel):', puValue);
     console.log('  - montant:', montantValue);
 
-    doc.text(descLine, xDesc + 3, yPos);
+    // ✅ Retour à la ligne automatique dans la description
+    const maxWidthDesc = xU - xDesc - 6;
+    doc.setFont('times', 'normal');
+    doc.setFontSize(10);
+    const descLines = doc.splitTextToSize(descLine, maxWidthDesc);
+    const lineHeightDesc = 5;
+    const hauteurDesc = descLines.length * lineHeightDesc;
+
+    for (let i = 0; i < descLines.length; i++) {
+      const currentY = yPos + (i * lineHeightDesc);
+      doc.text(descLines[i], xDesc + 3, currentY);
+    }
+
+    // U., P.U., MONTANT alignés sur la PREMIÈRE ligne
     doc.text(String(uniter), xU + 5, yPos);
     doc.text(formatNumber(puValue), xPu + 3, yPos);
     doc.text(formatNumber(montantValue), xEnd - 3, yPos, { align: 'right' });
 
-    yPos += 4;
+    yPos += hauteurDesc + 2;
     doc.setDrawColor(235, 235, 235);
     doc.line(xDesc, yPos, xEnd, yPos);
 
     // ✅ FRAIS DE DOSSIER
     yPos += 6;
     doc.setDrawColor(26, 26, 26);
+    doc.setFont('times', 'normal');
+    doc.setFontSize(10);
     doc.text('Frais de dossier', xDesc + 3, yPos);
     doc.text('1', xU + 5, yPos);
     doc.text(formatNumber(fraisDossier), xPu + 3, yPos);
@@ -593,8 +573,6 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     // ========================================================================
     // 7 - TOTAL
     // ========================================================================
-    // On affiche totalGeneral (qui reflète soit_total si présent en base) pour
-    // garantir la cohérence entre la facture PDF et les montants validés.
     const totalValue = totalGeneral;
     doc.setFillColor(248, 248, 248);
     doc.rect(xMnt, yPos, xEnd - xMnt, 8, 'FD');
@@ -641,7 +619,7 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     doc.setTextColor(17, 17, 17);
 
     const dafTextWidth = doc.getTextWidth(dafName);
-    const dafX = (xEnd - 55) + 27 - (dafTextWidth / 2);
+    const dafX = (xEnd - 55) + 27 - (dafTextWidth / 2) - 10;
     doc.text(dafName, dafX, yPos);
 
     doc.setFont('times', 'normal');
@@ -649,7 +627,7 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     doc.setTextColor(80, 80, 80);
     const dafSubText = '(Directeur Administratif et Financier)';
     const dafSubWidth = doc.getTextWidth(dafSubText);
-    const dafSubX = (xEnd - 55) + 27 - (dafSubWidth / 2);
+    const dafSubX = (xEnd - 55) + 27 - (dafSubWidth / 2) - 10;
     doc.text(dafSubText, dafSubX, yPos + 5);
 
     yPos += 15;

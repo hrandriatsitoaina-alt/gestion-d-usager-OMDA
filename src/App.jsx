@@ -1,6 +1,7 @@
 // src/App.jsx
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
+import { ParametreProvider } from './context/ParametreContext';
 import './styles/App.css';
 
 import Authentification from './pages/Authentification';
@@ -9,7 +10,6 @@ import Dashboard from './pages/Dashboard';
 import Profil from './pages/Profil';
 import AjoutUsager from './pages/AjoutUsager';
 import VerificationUsager from './pages/VerificationUsager';
-import AjoutEvenement from './pages/AjoutEvenement';
 import PayementChoix from './pages/PayementChoix';
 import TableauDB from './pages/TableauDB';
 import DateOcc from './pages/date_occ';
@@ -29,39 +29,54 @@ import NotificationAdmin from './pages/notification_admin';
 import ConfirmePaiement from './pages/ConfirmePaiement';
 import ConfirmationDossier from './pages/ConfirmationDossier';
 import GenerationFacture from './pages/GenerationFacture';
-import PaiementMensuel from './pages/PaiementMensuel'; // Import de la nouvelle page
+import PaiementMensuel from './pages/PaiementMensuel';
+import Parametre from './pages/parametre';
+import BaseDeDonnees from './pages/base_de_donnees';
+import Quitance from './pages/quitance';
+import RepartitionArtister from './pages/repartition_artister';
+import Diagnostique from './pages/diagnostique';
+import OtherAjout from './pages/OtherAjout';        
+import DateOther from './pages/DateOther';           
 
 function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Authentification />} />
-      <Route path="/register" element={<Register />} />
-      <Route path="/dashboard" element={<Dashboard />} />
-      <Route path="/profil" element={<Profil />} />
-      <Route path="/ajout-usager" element={<AjoutUsager />} />
-      <Route path="/verification-usager" element={<VerificationUsager />} />
-      <Route path="/ajout-evenement" element={<AjoutEvenement />} />
-      <Route path="/billan" element={<PayementChoix />} />
-      <Route path="/tableau-db" element={<TableauDB />} />
-      <Route path="/date_occ" element={<DateOcc />} />
-      <Route path="/date-grandsurface" element={<DateGrandSurface />} />
-      <Route path="/date-bus" element={<DateBus />} />
-      <Route path="/night-club" element={<DateNigth />} />
-      <Route path="/autre-usager" element={<Dateautre />} />
-      <Route path="/facture-usager" element={<Facture />} />
-      <Route path="/tele-radio" element={<Tele />} />
-      <Route path="/Hotel_occ" element={<Hotel />} />
-      <Route path="/gere-payer" element={<Gerepaiement />} />
-      <Route path="/paiement-mensuel" element={<PaiementMensuel />} /> {/* Nouvelle route */}
-      <Route path="/gere-contra" element={<Gestioncontra />} />
-      <Route path="/gere-dossier" element={<Gestiondossier />} />
-      <Route path="/gestion_crud" element={<Gestusagercrud />} />
-      <Route path="/gestion-region" element={<GestionRegionCrud />} />
-      <Route path="/notification_admin" element={<NotificationAdmin />} />
-      <Route path="/confirme-paiement" element={<ConfirmePaiement />} />
-      <Route path="/confirmation-dossier" element={<ConfirmationDossier />} />
-      <Route path="/generation-facture" element={<GenerationFacture />} />
-    </Routes>
+    <ParametreProvider>
+      <Routes>
+        <Route path="/" element={<Authentification />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/profil" element={<Profil />} />
+        <Route path="/ajout-usager" element={<AjoutUsager />} />
+        <Route path="/verification-usager" element={<VerificationUsager />} />
+        <Route path="/billan" element={<PayementChoix />} />
+        <Route path="/tableau-db" element={<TableauDB />} />
+        <Route path="/date_occ" element={<DateOcc />} />
+        <Route path="/date-grandsurface" element={<DateGrandSurface />} />
+        <Route path="/date-bus" element={<DateBus />} />
+        <Route path="/night-club" element={<DateNigth />} />
+        <Route path="/autre-usager" element={<Dateautre />} />
+        <Route path="/facture-usager" element={<Facture />} />
+        <Route path="/tele-radio" element={<Tele />} />
+        <Route path="/Hotel_occ" element={<Hotel />} />
+        <Route path="/gere-payer" element={<Gerepaiement />} />
+        <Route path="/paiement-mensuel" element={<PaiementMensuel />} />
+        <Route path="/gere-contra" element={<Gestioncontra />} />
+        <Route path="/gere-dossier" element={<Gestiondossier />} />
+        <Route path="/gestion_crud" element={<Gestusagercrud />} />
+        <Route path="/gestion-region" element={<GestionRegionCrud />} />
+        <Route path="/notification_admin" element={<NotificationAdmin />} />
+        <Route path="/confirme-paiement" element={<ConfirmePaiement />} />
+        <Route path="/confirmation-dossier" element={<ConfirmationDossier />} />
+        <Route path="/generation-facture" element={<GenerationFacture />} />
+        <Route path="/Parametre_global" element={<Parametre />} />
+        <Route path="/base-de-donnees" element={<BaseDeDonnees />} />
+        <Route path="/quitance" element={<Quitance />} />
+        <Route path="/repartition-artistes" element={<RepartitionArtister />} />
+        <Route path="/diagnostique" element={<Diagnostique />} />
+        <Route path="/other-ajout" element={<OtherAjout />} />       
+        <Route path="/date_other" element={<DateOther />} />           
+      </Routes>
+    </ParametreProvider>
   );
 }
 

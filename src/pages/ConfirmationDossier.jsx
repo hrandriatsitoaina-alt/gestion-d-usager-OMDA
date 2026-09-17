@@ -39,6 +39,13 @@ const ConfirmationDossier = () => {
   const [validatedDossiers, setValidatedDossiers] = useState({});
   const [currentUser, setCurrentUser] = useState(null);
   const [isCreatingFacture, setIsCreatingFacture] = useState(false);
+  
+  // ✅ État pour suivre si la facture avancée a déjà été créée
+  const [factureAvanceeCreee, setFactureAvanceeCreee] = useState(false);
+  // ✅ État pour suivre si le contrat a déjà été généré
+  const [contratGenere, setContratGenere] = useState(false);
+  // ✅ État pour suivre si le QR code a déjà été généré
+  const [qrGenere, setQrGenere] = useState(false);
 
   // Mapping des types
   const typeLabels = {
@@ -191,6 +198,14 @@ const ConfirmationDossier = () => {
         
         setUsager(usagerData);
         setUsagerType(state.type || 'hotel');
+
+        // ✅ CORRECTION : on sauvegarde toujours l'usager courant en sessionStorage.
+        try {
+          sessionStorage.setItem('lastUsager', JSON.stringify({ usager: usagerData, type: state.type || 'hotel' }));
+        } catch (e) {
+          console.warn('⚠️ Impossible de sauvegarder lastUsager en sessionStorage:', e);
+        }
+
         setLoading(false);
       } else {
         const savedUsager = sessionStorage.getItem('lastUsager');
@@ -248,6 +263,35 @@ const ConfirmationDossier = () => {
     fetchCurrentUser();
   }, []);
 
+  // ✅ NOUVEAU : vérifier la persistance de TOUS les documents (contrat, facture, QR) via localStorage
+  useEffect(() => {
+    if (usager && usager.id && usagerType) {
+      // Facture avancée
+      const keyFacture = `facture_avancee_${usagerType}_${usager.id}`;
+      const factureDejaCreee = localStorage.getItem(keyFacture);
+      if (factureDejaCreee === 'true') {
+        setFactureAvanceeCreee(true);
+        setValidatedDossiers(prev => ({ ...prev, 'FactureAvancee': true }));
+      }
+
+      // Contrat
+      const keyContrat = `contrat_genere_${usagerType}_${usager.id}`;
+      const contratDejaGenere = localStorage.getItem(keyContrat);
+      if (contratDejaGenere === 'true') {
+        setContratGenere(true);
+        setValidatedDossiers(prev => ({ ...prev, 'Contrat': true }));
+      }
+
+      // QR Code
+      const keyQr = `qr_genere_${usagerType}_${usager.id}`;
+      const qrDejaGenere = localStorage.getItem(keyQr);
+      if (qrDejaGenere === 'true') {
+        setQrGenere(true);
+        setValidatedDossiers(prev => ({ ...prev, 'QR Code': true }));
+      }
+    }
+  }, [usager, usagerType]);
+
   // Fonctions utilitaires
   const formatDateForQR = (dateString) => {
     if (!dateString) return 'Date non specifiee';
@@ -268,13 +312,14 @@ const ConfirmationDossier = () => {
     return `${day}/${month}/${year}`;
   };
 
-  // ✅ QR CODE avec TOUS les artistes
+  // ✅ QR CODE avec le vrai numéro de dossier
+  // ⚠️ Pour les types AUTRES que 'occ', on enlève les noms de personnes MAIS on garde la dénomination
   const generateQRTextContent = (usager, type) => {
     if (!usager) return 'OMDA - Document officiel';
     
+    // ✅ Utiliser le numero_dossier_utilisateur s'il existe
+    const numeroDossier = usager.numero_dossier_utilisateur || `ID-${usager.id}`;
     const dateStr = formatDateForReference();
-    const compteurValue = usager.id || 1;
-    const andReference = `AND ${dateStr}-${compteurValue}`;
     const omdaPhone = '034 05 533 88';
     const omdaRegion = 'Analamanga';
     
@@ -284,6 +329,7 @@ const ConfirmationDossier = () => {
 
     switch(type) {
       case 'occ':
+        // ⚠️ NE PAS TOUCHER - Le OCC reste à 100% identique
         typePrefix = 'OCC';
         nomPrincipal = usager.organisateurs || usager.demandeur || 'Non specifie';
         const dateEvent = usager.date_evenement ? formatDateForQR(usager.date_evenement) : '';
@@ -291,7 +337,6 @@ const ConfirmationDossier = () => {
         const evenement = usager.genreManifestation || usager.nom_evenement || '';
         const region = usager.region || 'Non specifiee';
         
-        // ✅ Récupérer TOUS les artistes (priorité à artistes_detail de la base)
         let artistesStr = 'Aucun artiste spécifié';
         if (usager.artistes_detail && Array.isArray(usager.artistes_detail) && usager.artistes_detail.length > 0) {
           artistesStr = usager.artistes_detail.map(a => {
@@ -300,7 +345,6 @@ const ConfirmationDossier = () => {
             return a;
           }).join(', ');
         } else {
-          // Fallback: chercher dans d'autres sources
           const fallbackArtistes = getArtistes(usager);
           if (fallbackArtistes.length > 0) {
             artistesStr = fallbackArtistes.join(', ');
@@ -325,50 +369,47 @@ const ConfirmationDossier = () => {
         }
         lines.push(
           `Region : ${region}`,
-          `Ref : ${andReference}`,
+          `Ref : ${numeroDossier}`,
           `© OMDA ${omdaRegion} - Tel : ${omdaPhone}`
         );
         break;
 
       case 'hotel':
+        // ✅ Sans nom de personne MAIS avec la dénomination
         typePrefix = 'HOTEL';
-        nomPrincipal = usager.denomination || usager.nom || 'Non specifie';
+        const denominationHotel = usager.denomination || usager.nom || 'Non specifie';
         const adresseHotel = usager.adresse_siege || usager.ville || usager.adresse || '';
-        const etoiles = usager.etoiles ? `⭐`.repeat(parseInt(usager.etoiles) || 0) : '';
-        const demandeurH = usager.demandeur || '';
+        const etoiles = usager.etoiles ? `${usager.etoiles} etoile(s)` : '';
         const regionH = usager.region || 'Non specifiee';
         
         lines = [
           `OMDA affirme un etablissement ${typePrefix}`,
-          `Nom : ${nomPrincipal}`,
+          `Denomination : ${denominationHotel}`,
         ];
         if (adresseHotel) {
           lines.push(`Adresse : ${adresseHotel}`);
         }
         if (etoiles) {
-          lines.push(`Etoiles : ${etoiles}`);
-        }
-        if (demandeurH) {
-          lines.push(`Demandeur : ${demandeurH}`);
+          lines.push(`Categorie : ${etoiles}`);
         }
         lines.push(
           `Region : ${regionH}`,
-          `Ref : ${andReference}`,
+          `Ref : ${numeroDossier}`,
           `© OMDA ${omdaRegion} - Tel : ${omdaPhone}`
         );
         break;
 
       case 'grand-surface':
+        // ✅ Sans nom de personne MAIS avec la dénomination
         typePrefix = 'MAGASIN';
-        nomPrincipal = usager.denomination || usager.nom || 'Non specifie';
+        const denominationGS = usager.denomination || usager.nom || 'Non specifie';
         const adresseGS = usager.adresse_siege || usager.ville || usager.adresse || '';
         const nbMagasins = usager.nombre_magasins || 0;
-        const demandeurGS = usager.demandeur || '';
         const regionGS = usager.region || 'Non specifiee';
         
         lines = [
           `OMDA affirme un etablissement ${typePrefix}`,
-          `Nom : ${nomPrincipal}`,
+          `Denomination : ${denominationGS}`,
         ];
         if (adresseGS) {
           lines.push(`Adresse : ${adresseGS}`);
@@ -376,28 +417,25 @@ const ConfirmationDossier = () => {
         if (nbMagasins > 0) {
           lines.push(`Nb magasins : ${nbMagasins}`);
         }
-        if (demandeurGS) {
-          lines.push(`Demandeur : ${demandeurGS}`);
-        }
         lines.push(
           `Region : ${regionGS}`,
-          `Ref : ${andReference}`,
+          `Ref : ${numeroDossier}`,
           `© OMDA ${omdaRegion} - Tel : ${omdaPhone}`
         );
         break;
 
       case 'bus':
+        // ✅ Sans nom de personne MAIS avec la dénomination
         typePrefix = 'BUS';
-        nomPrincipal = usager.denomination || usager.nom || 'Non specifie';
+        const denominationBus = usager.denomination || usager.nom || 'Non specifie';
         const adresseBus = usager.adresse_siege || usager.ville || usager.adresse || '';
         const lignes = usager.lignes || '';
         const nbVehicules = usager.nombre_vehicules || 0;
-        const demandeurB = usager.demandeur || '';
         const regionB = usager.region || 'Non specifiee';
         
         lines = [
           `OMDA affirme une societe ${typePrefix}`,
-          `Nom : ${nomPrincipal}`,
+          `Denomination : ${denominationBus}`,
         ];
         if (adresseBus) {
           lines.push(`Adresse : ${adresseBus}`);
@@ -408,28 +446,25 @@ const ConfirmationDossier = () => {
         if (nbVehicules > 0) {
           lines.push(`Vehicules : ${nbVehicules}`);
         }
-        if (demandeurB) {
-          lines.push(`Demandeur : ${demandeurB}`);
-        }
         lines.push(
           `Region : ${regionB}`,
-          `Ref : ${andReference}`,
+          `Ref : ${numeroDossier}`,
           `© OMDA ${omdaRegion} - Tel : ${omdaPhone}`
         );
         break;
 
       case 'nightclub':
+        // ✅ Sans nom de personne MAIS avec la dénomination
         typePrefix = 'NIGHT CLUB';
-        nomPrincipal = usager.denomination || usager.nom || 'Non specifie';
+        const denominationNC = usager.denomination || usager.nom || 'Non specifie';
         const adresseNC = usager.adresse_siege || usager.ville || usager.adresse || '';
         const jauge = usager.jauge_max || 0;
         const horaires = usager.horaires || '';
-        const demandeurN = usager.demandeur || '';
         const regionN = usager.region || 'Non specifiee';
         
         lines = [
           `OMDA affirme un etablissement ${typePrefix}`,
-          `Nom : ${nomPrincipal}`,
+          `Denomination : ${denominationNC}`,
         ];
         if (adresseNC) {
           lines.push(`Adresse : ${adresseNC}`);
@@ -440,28 +475,25 @@ const ConfirmationDossier = () => {
         if (horaires) {
           lines.push(`Horaires : ${horaires}`);
         }
-        if (demandeurN) {
-          lines.push(`Demandeur : ${demandeurN}`);
-        }
         lines.push(
           `Region : ${regionN}`,
-          `Ref : ${andReference}`,
+          `Ref : ${numeroDossier}`,
           `© OMDA ${omdaRegion} - Tel : ${omdaPhone}`
         );
         break;
 
       case 'media':
+        // ✅ Sans nom de personne MAIS avec la dénomination
         typePrefix = 'MEDIA';
-        nomPrincipal = usager.denomination || usager.nom || 'Non specifie';
+        const denominationMedia = usager.denomination || usager.nom || 'Non specifie';
         const adresseMedia = usager.siege || usager.adresse_siege || usager.ville || usager.adresse || '';
         const frequence = usager.frequence || '';
         const canal = usager.canal || '';
-        const demandeurM = usager.demandeur || usager.proprietaire_nom || '';
         const regionM = usager.region || 'Non specifiee';
         
         lines = [
           `OMDA affirme une station ${typePrefix}`,
-          `Nom : ${nomPrincipal}`,
+          `Denomination : ${denominationMedia}`,
         ];
         if (adresseMedia) {
           lines.push(`Siege : ${adresseMedia}`);
@@ -472,25 +504,23 @@ const ConfirmationDossier = () => {
         if (canal) {
           lines.push(`Canal : ${canal}`);
         }
-        if (demandeurM) {
-          lines.push(`Proprietaire : ${demandeurM}`);
-        }
         lines.push(
           `Region : ${regionM}`,
-          `Ref : ${andReference}`,
+          `Ref : ${numeroDossier}`,
           `© OMDA ${omdaRegion} - Tel : ${omdaPhone}`
         );
         break;
 
       default:
+        // ✅ Sans nom de personne MAIS avec la dénomination
         typePrefix = type || 'Inconnu';
-        nomPrincipal = usager.denomination || usager.demandeur || 'Non specifie';
+        const denominationD = usager.denomination || usager.nom || 'Non specifie';
         const regionD = usager.region || 'Non specifiee';
         lines = [
           `OMDA affirme un document ${typePrefix}`,
-          `Nom : ${nomPrincipal}`,
+          `Denomination : ${denominationD}`,
           `Region : ${regionD}`,
-          `Ref : ${andReference}`,
+          `Ref : ${numeroDossier}`,
           `© OMDA ${omdaRegion} - Tel : ${omdaPhone}`
         ];
     }
@@ -501,6 +531,23 @@ const ConfirmationDossier = () => {
   // ✅ Génération du QR Code avec récupération des artistes depuis la base
   const handleGenerateQR = async () => {
     if (!usager) return;
+    
+    // ✅ Si déjà généré, ne pas régénérer (mais ouvrir la modale quand même)
+    if (qrGenere) {
+      // Reconstruire le contenu pour la modale
+      let usagerComplet = { ...usager };
+      if (usagerType === 'occ' && usager.id) {
+        const artistesData = await fetchArtistesForEvent(usager.id);
+        if (artistesData.artistes && artistesData.artistes.length > 0) {
+          usagerComplet.artistes_detail = artistesData.artistes;
+          usagerComplet.artistesList = artistesData.artistes;
+        }
+      }
+      const qrText = generateQRTextContent(usagerComplet, usagerType);
+      setQrCodeData({ usager: usagerComplet, type: usagerType, qrText });
+      setShowQrModal(true);
+      return;
+    }
     
     setIsGenerating(true);
     setNotification({ type: 'info', message: '🔄 Génération du QR Code...' });
@@ -525,6 +572,13 @@ const ConfirmationDossier = () => {
       const qrText = generateQRTextContent(usagerComplet, usagerType);
       setQrCodeData({ usager: usagerComplet, type: usagerType, qrText });
       setShowQrModal(true);
+      
+      // ✅ Persistance du QR Code généré
+      const keyQr = `qr_genere_${usagerType}_${usager.id}`;
+      localStorage.setItem(keyQr, 'true');
+      setQrGenere(true);
+      setValidatedDossiers(prev => ({ ...prev, 'QR Code': true }));
+      
       setNotification({ type: 'success', message: '✅ QR Code généré avec succès' });
       setTimeout(() => setNotification(null), 3000);
     } catch (error) {
@@ -539,6 +593,13 @@ const ConfirmationDossier = () => {
   // Génération du contrat
   const handleGenerateContrat = async () => {
     if (!usager) return;
+    
+    // ✅ Si déjà généré, ne pas régénérer
+    if (contratGenere) {
+      showToast('✅ Le contrat a déjà été généré pour ce dossier', 'success');
+      return;
+    }
+    
     setIsGenerating(true);
     
     const pdfData = {
@@ -562,7 +623,12 @@ const ConfirmationDossier = () => {
         default: generateHotelPDF(usager, pdfData);
       }
 
+      // ✅ Persistance du contrat généré
+      const keyContrat = `contrat_genere_${usagerType}_${usager.id}`;
+      localStorage.setItem(keyContrat, 'true');
+      setContratGenere(true);
       setValidatedDossiers(prev => ({ ...prev, 'Contrat': true }));
+      
       setNotification({ type: 'success', message: '✅ Contrat généré avec succès' });
       setTimeout(() => setNotification(null), 3000);
     } catch (error) {
@@ -603,149 +669,161 @@ const ConfirmationDossier = () => {
     }
   };
 
-// Dans ConfirmationDossier.jsx - remplacer handleGenerateFactureAvancee par ceci
-
-// CRÉER LA FACTURE AVANCÉE - VERSION CORRIGÉE
-const handleGenerateFactureAvancee = async () => {
-  if (!usager || !currentUser) {
-    showToast('Utilisateur non identifié', 'error');
-    return;
-  }
-  
-  setIsCreatingFacture(true);
-  
-  try {
-    setNotification({ type: 'info', message: '🔄 Création de la facture avancée...' });
-    
-    let montantMensuel = 0;
-    let fraisDossier = 5000;
-    let montantRetard = 0;
-    let isRetard = false;
-    let uniter = 1;
-    let soitTotal = 0;
-
-    // ✅ RÉCUPÉRER LES MONTANTS SELON LE TYPE
-    switch(usagerType) {
-      case 'hotel':
-      case 'grand-surface':
-      case 'nightclub':
-        montantMensuel = parseFloat(usager.montant_mensuel) || 0;
-        fraisDossier = parseFloat(usager.frais_dossier) || 5000;
-        uniter = parseInt(usager.uniter) || 1;
-        soitTotal = (montantMensuel * uniter) + fraisDossier;
-        break;
-
-      case 'media':
-        montantMensuel = parseFloat(usager.taux) || 0;
-        fraisDossier = parseFloat(usager.frais_dossier) || 5000;
-        uniter = parseInt(usager.uniter) || 1;
-        soitTotal = (montantMensuel * uniter) + fraisDossier;
-        break;
-
-      case 'bus':
-        montantMensuel = parseFloat(usager.montant_mensuel) || 0;
-        fraisDossier = parseFloat(usager.frais_dossier) || 5000;
-        uniter = parseInt(usager.uniter) || 1;
-        soitTotal = (montantMensuel * uniter) + fraisDossier;
-        break;
-
-      case 'occ':
-        montantMensuel = parseFloat(usager.montant) || parseFloat(usager.montant_total) || 0;
-        fraisDossier = parseFloat(usager.frais_dossier) || 5000;
-        montantRetard = parseFloat(usager.montant_retard) || 0;
-        isRetard = usager.is_retard || false;
-        uniter = parseInt(usager.uniter) || 1;
-        const baseTotal = (montantMensuel * uniter) + fraisDossier;
-        soitTotal = isRetard ? baseTotal + montantRetard : baseTotal;
-        break;
-
-      default:
-        montantMensuel = parseFloat(usager.montant_mensuel) || 0;
-        fraisDossier = parseFloat(usager.frais_dossier) || 5000;
-        uniter = parseInt(usager.uniter) || 1;
-        soitTotal = (montantMensuel * uniter) + fraisDossier;
+  // ✅ CRÉER LA FACTURE AVANCÉE - UNE SEULE FOIS PAR DOSSIER (persistant via localStorage)
+  const handleGenerateFactureAvancee = async () => {
+    // ✅ Vérifier si la facture a déjà été créée (état + sécurité localStorage)
+    const key = usager?.id ? `facture_avancee_${usagerType}_${usager.id}` : null;
+    if (factureAvanceeCreee || (key && localStorage.getItem(key) === 'true')) {
+      showToast('⚠️ La facture avancée a déjà été créée pour ce dossier', 'warning');
+      setFactureAvanceeCreee(true);
+      setValidatedDossiers(prev => ({ ...prev, 'FactureAvancee': true }));
+      return;
     }
 
-    console.log('📊 MONTANTS POUR FACTURE:', {
-      usagerType,
-      montantMensuel,
-      fraisDossier,
-      montantRetard,
-      isRetard,
-      uniter,
-      soitTotal
-    });
-
-    const response = await fetch('http://localhost:3001/api/factures/creer', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'adminToken': localStorage.getItem('adminToken') || ''
-      },
-      body: JSON.stringify({
-        usagerId: usager.id,
-        usagerType: usagerType,
-        userId: currentUser.id,
-        typeFacture: 'Redevances',
-        regionUsager: usager.region || '',
-        personneRecu: currentUser.nom || 'DAF',
-        montantMensuel: montantMensuel,
-        fraisDossier: fraisDossier,
-        montantRetard: montantRetard,
-        isRetard: isRetard,
-        uniter: uniter,
-        soitTotal: soitTotal
-      })
-    });
-    
-    // ✅ Vérifier si la réponse est OK
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Réponse serveur non OK:', errorText);
-      throw new Error(`Erreur ${response.status}: ${response.statusText}`);
+    if (!usager || !currentUser) {
+      showToast('Utilisateur non identifié', 'error');
+      return;
     }
     
-    const data = await response.json();
+    setIsCreatingFacture(true);
     
-    if (data.success) {
-      setNotification({ type: 'success', message: '✅ Facture avancée créée avec succès' });
-      setValidatedDossiers(prev => ({ ...prev, 'Facture': true }));
-      showToast('✅ Facture avancée créée avec succès', 'success');
+    try {
+      setNotification({ type: 'info', message: '🔄 Création de la facture avancée...' });
       
-      setTimeout(() => {
-        navigate('/generation-facture', {
-          state: { factureId: data.factureId }
-        });
-      }, 500);
-    } else {
-      setNotification({ type: 'error', message: '❌ ' + data.message });
-      showToast('❌ ' + data.message, 'error');
-    }
-  } catch (error) {
-    console.error('❌ Erreur création facture avancée:', error);
-    
-    let errorMessage = 'Erreur de création de la facture';
-    if (error.message.includes('404')) {
-      errorMessage = 'Route API non trouvée. Vérifiez que le serveur est démarré.';
-    } else if (error.message.includes('500')) {
-      errorMessage = 'Erreur interne du serveur. Vérifiez les logs.';
-    } else if (error.message.includes('ECONNREFUSED')) {
-      errorMessage = 'Impossible de se connecter au serveur. Vérifiez que le serveur est démarré sur le port 3001.';
-    } else if (error.message.includes('colonne')) {
-      errorMessage = 'Erreur de base de données. Vérifiez la structure de la table facture_usager.';
-    }
-    
-    setNotification({ type: 'error', message: '❌ ' + errorMessage });
-    showToast('❌ ' + errorMessage, 'error');
-  } finally {
-    setIsCreatingFacture(false);
-  }
-};
+      let montantMensuel = 0;
+      let fraisDossier = 5000;
+      let montantRetard = 0;
+      let isRetard = false;
+      let uniter = 1;
+      let soitTotal = 0;
 
-  // Tout générer
-  const handleGenerateAll = async () => {
-    await handleGenerateContrat();
-    setTimeout(() => handleGenerateQR(), 500);
+      switch(usagerType) {
+        case 'hotel':
+        case 'grand-surface':
+        case 'nightclub':
+          montantMensuel = parseFloat(usager.montant_mensuel) || 0;
+          fraisDossier = parseFloat(usager.frais_dossier) || 5000;
+          uniter = parseInt(usager.uniter) || 1;
+          soitTotal = (montantMensuel * uniter) + fraisDossier;
+          break;
+
+        case 'media':
+          montantMensuel = parseFloat(usager.taux) || 0;
+          fraisDossier = parseFloat(usager.frais_dossier) || 5000;
+          uniter = parseInt(usager.uniter) || 1;
+          soitTotal = (montantMensuel * uniter) + fraisDossier;
+          break;
+
+        case 'bus':
+          montantMensuel = parseFloat(usager.montant_mensuel) || 0;
+          fraisDossier = parseFloat(usager.frais_dossier) || 5000;
+          uniter = parseInt(usager.uniter) || 1;
+          soitTotal = (montantMensuel * uniter) + fraisDossier;
+          break;
+
+        case 'occ':
+          montantMensuel = parseFloat(usager.montant) || parseFloat(usager.montant_total) || 0;
+          fraisDossier = parseFloat(usager.frais_dossier) || 5000;
+          montantRetard = parseFloat(usager.montant_retard) || 0;
+          isRetard = usager.is_retard || false;
+          uniter = parseInt(usager.uniter) || 1;
+          const baseTotal = (montantMensuel * uniter) + fraisDossier;
+          soitTotal = isRetard ? baseTotal + montantRetard : baseTotal;
+          break;
+
+        default:
+          montantMensuel = parseFloat(usager.montant_mensuel) || 0;
+          fraisDossier = parseFloat(usager.frais_dossier) || 5000;
+          uniter = parseInt(usager.uniter) || 1;
+          soitTotal = (montantMensuel * uniter) + fraisDossier;
+      }
+
+      console.log('📊 MONTANTS POUR FACTURE:', {
+        usagerType,
+        montantMensuel,
+        fraisDossier,
+        montantRetard,
+        isRetard,
+        uniter,
+        soitTotal
+      });
+
+      const response = await fetch('http://localhost:3001/api/factures/creer', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'adminToken': localStorage.getItem('adminToken') || ''
+        },
+        body: JSON.stringify({
+          usagerId: usager.id,
+          usagerType: usagerType,
+          userId: currentUser.id,
+          typeFacture: 'Redevances',
+          regionUsager: usager.region || '',
+          personneRecu: currentUser.nom || 'DAF',
+          montantMensuel: montantMensuel,
+          fraisDossier: fraisDossier,
+          montantRetard: montantRetard,
+          isRetard: isRetard,
+          uniter: uniter,
+          soitTotal: soitTotal
+        })
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Réponse serveur non OK:', errorText);
+        throw new Error(`Erreur ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        // ✅ Marquer comme créée pour désactiver le bouton, de façon persistante
+        if (key) {
+          localStorage.setItem(key, 'true');
+        }
+        setFactureAvanceeCreee(true);
+        setValidatedDossiers(prev => ({ ...prev, 'FactureAvancee': true }));
+        setNotification({ type: 'success', message: '✅ Facture avancée créée avec succès' });
+        showToast('✅ Facture avancée créée avec succès', 'success');
+        
+        setTimeout(() => {
+          navigate('/generation-facture', {
+            state: { factureId: data.factureId }
+          });
+        }, 500);
+      } else {
+        setNotification({ type: 'error', message: '❌ ' + data.message });
+        showToast('❌ ' + data.message, 'error');
+      }
+    } catch (error) {
+      console.error('❌ Erreur création facture avancée:', error);
+      
+      let errorMessage = 'Erreur de création de la facture';
+      if (error.message.includes('404')) {
+        errorMessage = 'Route API non trouvée. Vérifiez que le serveur est démarré.';
+      } else if (error.message.includes('500')) {
+        errorMessage = 'Erreur interne du serveur. Vérifiez les logs.';
+      } else if (error.message.includes('ECONNREFUSED')) {
+        errorMessage = 'Impossible de se connecter au serveur. Vérifiez que le serveur est démarré sur le port 3001.';
+      } else if (error.message.includes('colonne')) {
+        errorMessage = 'Erreur de base de données. Vérifiez la structure de la table facture_usager.';
+      }
+      
+      setNotification({ type: 'error', message: '❌ ' + errorMessage });
+      showToast('❌ ' + errorMessage, 'error');
+    } finally {
+      setIsCreatingFacture(false);
+    }
+  };
+
+  // ✅ Vérifier si les 3 documents obligatoires sont générés
+  // Documents obligatoires : Contrat + Facture Avancée + QR Code
+  const allDocumentsGenerated = () => {
+    return validatedDossiers['Contrat'] === true 
+      && validatedDossiers['FactureAvancee'] === true 
+      && validatedDossiers['QR Code'] === true;
   };
 
   const handleDownloadQR = async () => {
@@ -778,7 +856,13 @@ const handleGenerateFactureAvancee = async () => {
 
   const handlePrintQR = () => window.print();
 
-  const handleGoDashboard = () => navigate('/dashboard');
+  const handleGoDashboard = () => {
+    if (!allDocumentsGenerated()) {
+      showToast('⚠️ Veuillez générer le Contrat, la Facture et le QR Code avant de retourner à l\'accueil', 'warning');
+      return;
+    }
+    navigate('/dashboard');
+  };
 
   const formatDate = (dateString) => {
     if (!dateString) return '';
@@ -808,7 +892,7 @@ const handleGenerateFactureAvancee = async () => {
         <div className="confirmation-error">
           <AlertCircle size={48} strokeWidth={1.5} />
           <p>Aucun usager trouvé</p>
-          <button onClick={handleGoDashboard} className="btn-retour">Retour au tableau de bord</button>
+          <button onClick={() => navigate('/dashboard')} className="btn-retour">Retour au tableau de bord</button>
         </div>
       </>
     );
@@ -822,6 +906,63 @@ const handleGenerateFactureAvancee = async () => {
     <>
       <MiniSidebar />
       <main className="confirmation-dossier-container">
+        {/* ✅ CSS ajouté directement dans le JSX pour le bouton Retour à l'accueil */}
+        <style>{`
+          .btn-retour-accueil {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 14px 28px;
+            background: linear-gradient(135deg, #27ae60 0%, #1e8449 100%);
+            color: #ffffff;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(39, 174, 96, 0.35);
+            font-family: inherit;
+          }
+
+          .btn-retour-accueil.visible {
+            display: inline-flex;
+            animation: fadeInUp 0.4s ease-out;
+          }
+
+          .btn-retour-accueil:hover {
+            background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(39, 174, 96, 0.45);
+          }
+
+          .btn-retour-accueil:active {
+            transform: translateY(0);
+            box-shadow: 0 3px 8px rgba(39, 174, 96, 0.35);
+          }
+
+          .btn-retour-accueil svg {
+            transition: transform 0.3s ease;
+          }
+
+          .btn-retour-accueil:hover svg {
+            transform: translateX(-4px);
+          }
+
+          @keyframes fadeInUp {
+            from {
+              opacity: 0;
+              transform: translateY(12px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+        `}</style>
+
         {notification && (
           <div className={`notif ${notification.type}`}>
             <span>
@@ -880,6 +1021,13 @@ const handleGenerateFactureAvancee = async () => {
                 <span className="info-label"><Calendar size={16} strokeWidth={1.5} /> Date création</span>
                 <span className="info-value">{formatDate(usager.created_at) || formatDate(new Date())}</span>
               </div>
+              {/* ✅ Affichage du numéro de dossier */}
+              <div className="info-item" style={{ gridColumn: '1 / -1' }}>
+                <span className="info-label"><FileText size={16} strokeWidth={1.5} /> Numéro de dossier</span>
+                <span className="info-value" style={{ fontWeight: 'bold', color: color }}>
+                  {usager.numero_dossier_utilisateur || 'Non défini'}
+                </span>
+              </div>
               {usagerType === 'occ' && (
                 <>
                   <div className="info-item">
@@ -894,7 +1042,6 @@ const handleGenerateFactureAvancee = async () => {
                     <span className="info-label"><MapPin size={16} strokeWidth={1.5} /> Lieu</span>
                     <span className="info-value">{usager.lieu_evenement || '-'}</span>
                   </div>
-                  {/* ✅ Affichage des artistes dans la carte info */}
                   {usager.artistes_detail && usager.artistes_detail.length > 0 && (
                     <div className="info-item" style={{ gridColumn: '1 / -1' }}>
                       <span className="info-label"><User size={16} strokeWidth={1.5} /> Artistes</span>
@@ -933,8 +1080,19 @@ const handleGenerateFactureAvancee = async () => {
                   <span className="doc-size">PDF • Cliquer pour générer</span>
                 </div>
                 <div className="doc-status">
-                  {validatedDossiers['Contrat'] ? (
-                    <span className="badge-success"><CheckCircle size={18} color="#27ae60" /></span>
+                  {contratGenere ? (
+                    <span className="badge-success" style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '6px',
+                      padding: '8px 12px',
+                      background: '#e8f5e9',
+                      borderRadius: '6px',
+                      color: '#2e7d32'
+                    }}>
+                      <CheckCircle size={18} color="#27ae60" />
+                      <span style={{ fontSize: '13px', fontWeight: 'bold' }}>Contrat généré</span>
+                    </span>
                   ) : (
                     <button className="btn-generate">
                       <FileSignature size={16} strokeWidth={2} /> Générer contrat
@@ -943,7 +1101,7 @@ const handleGenerateFactureAvancee = async () => {
                 </div>
               </div>
 
-              {/* Facture */}
+              {/* ✅ Facture Avancée - désactivée définitivement après une création (localStorage) */}
               <div className="doc-item">
                 <div className="doc-icon"><Receipt size={24} strokeWidth={1.5} color={color} /></div>
                 <div className="doc-info">
@@ -951,17 +1109,32 @@ const handleGenerateFactureAvancee = async () => {
                   <span className="doc-size">PDF • Cliquer pour générer</span>
                 </div>
                 <div className="doc-status">
-                  <button
-                    className="btn-facture-avancee"
-                    onClick={handleGenerateFactureAvancee}
-                    disabled={isCreatingFacture}
-                  >
-                    {isCreatingFacture ? (
-                      <><Loader2 size={18} className="spinner" strokeWidth={2} /> Création...</>
-                    ) : (
-                      <><Receipt size={18} strokeWidth={2} /> Facture Avancée</>
-                    )}
-                  </button>
+                  {factureAvanceeCreee ? (
+                    <span className="badge-success" style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '6px',
+                      padding: '8px 12px',
+                      background: '#e8f5e9',
+                      borderRadius: '6px',
+                      color: '#2e7d32'
+                    }}>
+                      <CheckCircle size={18} color="#27ae60" />
+                      <span style={{ fontSize: '13px', fontWeight: 'bold' }}>Facture créée</span>
+                    </span>
+                  ) : (
+                    <button
+                      className="btn-facture-avancee"
+                      onClick={handleGenerateFactureAvancee}
+                      disabled={isCreatingFacture}
+                    >
+                      {isCreatingFacture ? (
+                        <><Loader2 size={18} className="spinner" strokeWidth={2} /> Création...</>
+                      ) : (
+                        <><Receipt size={18} strokeWidth={2} /> Facture Avancée</>
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -973,8 +1146,19 @@ const handleGenerateFactureAvancee = async () => {
                   <span className="doc-size">PNG • Cliquer pour générer</span>
                 </div>
                 <div className="doc-status">
-                  {validatedDossiers['QR Code'] ? (
-                    <span className="badge-success"><CheckCircle size={18} color="#27ae60" /></span>
+                  {qrGenere ? (
+                    <span className="badge-success" style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '6px',
+                      padding: '8px 12px',
+                      background: '#e8f5e9',
+                      borderRadius: '6px',
+                      color: '#2e7d32'
+                    }}>
+                      <CheckCircle size={18} color="#27ae60" />
+                      <span style={{ fontSize: '13px', fontWeight: 'bold' }}>QR généré</span>
+                    </span>
                   ) : (
                     <button className="btn-generate">
                       <QrCode size={16} strokeWidth={2} /> Générer code qr
@@ -986,22 +1170,40 @@ const handleGenerateFactureAvancee = async () => {
 
             {/* Boutons en bas */}
             <div className="documents-actions">
-              <button
-                className="btn-generate-all"
-                onClick={handleGenerateAll}
-                disabled={isGenerating}
+              {/* ✅ Bouton Retour à l'accueil - caché au départ, s'affiche seulement si les 3 documents sont générés */}
+              <button 
+                className={`btn-retour-accueil ${allDocumentsGenerated() ? 'visible' : ''}`}
+                onClick={handleGoDashboard}
               >
-                {isGenerating ? (
-                  <><Loader2 size={18} className="spinner" strokeWidth={2} /> Génération...</>
-                ) : (
-                  <><FileCheck size={18} strokeWidth={2} /> Tout générer</>
-                )}
-              </button>
-
-              <button className="btn-dashboard" onClick={handleGoDashboard}>
-                <ArrowLeft size={18} strokeWidth={2} /> Retour Dashboard
+                <ArrowLeft size={18} strokeWidth={2} /> Retour à l'accueil
               </button>
             </div>
+
+            {/* ✅ Indication sur les documents restants */}
+            {!allDocumentsGenerated() && (
+              <div style={{
+                marginTop: '12px',
+                padding: '10px 14px',
+                background: '#fff8e1',
+                border: '1px solid #f39c12',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '13px',
+                color: '#7a5c00'
+              }}>
+                <AlertCircle size={16} color="#f39c12" />
+                <span>
+                  Veuillez générer tous les documents obligatoires avant de retourner à l'accueil.
+                  Restant : 
+                  {!validatedDossiers['Contrat'] && ' Contrat,'}
+                  {!validatedDossiers['FactureAvancee'] && ' Facture,'}
+                  {!validatedDossiers['QR Code'] && ' QR Code,'}
+                  {' '}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1055,9 +1257,6 @@ const handleGenerateFactureAvancee = async () => {
 
                 <div className="qr-actions-only">
                   <button className="btn-cancel" onClick={() => setShowQrModal(false)}>Fermer</button>
-                  {/* <button className="btn-print-qr-only" onClick={handlePrintQR}>
-                    <Printer size={18} strokeWidth={2} /> Imprimer
-                  </button> */}
                   <button
                     className="btn-download-qr-only"
                     onClick={handleDownloadQR}
@@ -1066,7 +1265,7 @@ const handleGenerateFactureAvancee = async () => {
                     {isDownloading ? (
                       <><Loader2 size={18} className="spinner" strokeWidth={2} /> Téléchargement...</>
                     ) : (
-                      <><Download size={18} strokeWidth={2} /> Téléchargers</>
+                      <><Download size={18} strokeWidth={2} /> Télécharger</>
                     )}
                   </button>
                 </div>
