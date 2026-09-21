@@ -1,14 +1,21 @@
 // src/pages/pdf/magasin_pdf.jsx
 import jsPDF from 'jspdf';
+import {
+  createPdfT,
+  getPdfLocale,
+} from './pdfI18n';
 
-// Fonctions utilitaires exportées
-export const formatDate = (dateString) => {
+// ============================================================
+// FONCTIONS UTILITAIRES EXPORTÉES
+// ============================================================
+export const formatDate = (dateString, langue = 'fr') => {
   if (!dateString) return '';
   try {
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return '';
+    const locale = getPdfLocale(langue);
     const jour = date.getDate();
-    const mois = date.toLocaleString('fr-FR', { month: 'long' });
+    const mois = date.toLocaleString(locale, { month: 'long' });
     const annee = date.getFullYear();
     return `${jour} ${mois} ${annee}`;
   } catch (error) {
@@ -21,19 +28,22 @@ export const formatNumber = (num) => {
   return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 };
 
-export const getCurrentDate = () => {
+export const getCurrentDate = (langue = 'fr') => {
   const date = new Date();
-  const mois = date.toLocaleString('fr-FR', { month: 'long' });
+  const locale = getPdfLocale(langue);
+  const mois = date.toLocaleString(locale, { month: 'long' });
   const jour = date.getDate();
   const annee = date.getFullYear();
   return `${jour} ${mois} ${annee}`;
 };
 
-// Fonction pour convertir un nombre en lettres (Ariary)
-const nombreEnLettres = (num) => {
+// ============================================================
+// CONVERSION NOMBRE EN LETTRES (FR uniquement, extensible)
+// ============================================================
+const nombreEnLettres = (num, langue = 'fr') => {
   if (num === 0) return 'zéro';
-  if (num < 0) return 'moins ' + nombreEnLettres(-num);
-  
+  if (num < 0) return 'moins ' + nombreEnLettres(-num, langue);
+
   const uniteMapping = {
     0: 'zéro', 1: 'un', 2: 'deux', 3: 'trois', 4: 'quatre',
     5: 'cinq', 6: 'six', 7: 'sept', 8: 'huit', 9: 'neuf',
@@ -51,9 +61,7 @@ const nombreEnLettres = (num) => {
       if (n < 70) {
         const tens = Math.floor(n / 10) * 10;
         const units = n % 10;
-        if (units === 1 && tens !== 80) {
-          return uniteMapping[tens] + ' et un';
-        }
+        if (units === 1 && tens !== 80) return uniteMapping[tens] + ' et un';
         return uniteMapping[tens] + (units > 0 ? '-' + uniteMapping[units] : '');
       }
       if (n < 80) {
@@ -76,39 +84,22 @@ const nombreEnLettres = (num) => {
     const hundreds = Math.floor(n / 100);
     const remainder = n % 100;
     let result = '';
-    if (hundreds === 1) {
-      result = 'cent';
-    } else {
-      result = convertHundreds(hundreds) + ' cents';
-    }
-    if (remainder > 0) {
-      if (hundreds === 1) {
-        result += ' ';
-      } else {
-        result += ' ';
-      }
-      result += convertHundreds(remainder);
-    }
+    if (hundreds === 1) result = 'cent';
+    else result = convertHundreds(hundreds) + ' cents';
+    if (remainder > 0) result += ' ' + convertHundreds(remainder);
     return result;
   };
 
   const convertMilliers = (n) => {
     if (n === 0) return '';
     if (n === 1) return 'mille';
-    if (n < 1000) {
-      return convertHundreds(n);
-    }
+    if (n < 1000) return convertHundreds(n);
     const thousands = Math.floor(n / 1000);
     const remainder = n % 1000;
     let result = '';
-    if (thousands === 1) {
-      result = 'mille';
-    } else {
-      result = convertHundreds(thousands) + ' mille';
-    }
-    if (remainder > 0) {
-      result += ' ' + convertHundreds(remainder);
-    }
+    if (thousands === 1) result = 'mille';
+    else result = convertHundreds(thousands) + ' mille';
+    if (remainder > 0) result += ' ' + convertHundreds(remainder);
     return result;
   };
 
@@ -118,14 +109,9 @@ const nombreEnLettres = (num) => {
     const millions = Math.floor(n / 1000000);
     const remainder = n % 1000000;
     let result = '';
-    if (millions === 1) {
-      result = 'un million';
-    } else {
-      result = convertHundreds(millions) + ' millions';
-    }
-    if (remainder > 0) {
-      result += ' ' + convertMilliers(remainder);
-    }
+    if (millions === 1) result = 'un million';
+    else result = convertHundreds(millions) + ' millions';
+    if (remainder > 0) result += ' ' + convertMilliers(remainder);
     return result;
   };
 
@@ -134,35 +120,40 @@ const nombreEnLettres = (num) => {
   return convertMillions(roundedNum);
 };
 
-// Fonction pour dessiner une case à cocher avec une vraie croix (X)
 const drawCheckbox = (doc, x, y, checked) => {
   const size = 4.5;
   doc.setLineWidth(0.5);
-  doc.rect(x, y - size/2, size, size);
+  doc.rect(x, y - size / 2, size, size);
   if (checked) {
     doc.setLineWidth(0.8);
-    doc.line(x + 0.5, y - size/2 + 0.5, x + size - 0.5, y + size/2 - 0.5);
-    doc.line(x + size - 0.5, y - size/2 + 0.5, x + 0.5, y + size/2 - 0.5);
+    doc.line(x + 0.5, y - size / 2 + 0.5, x + size - 0.5, y + size / 2 - 0.5);
+    doc.line(x + size - 0.5, y - size / 2 + 0.5, x + 0.5, y + size / 2 - 0.5);
   }
 };
 
-export const generateMagasinPDF = (usager, paymentDetails) => {
+// ✅ Signature étendue : (usager, paymentDetails, options)
+export const generateMagasinPDF = (usager, paymentDetails = {}, options = {}) => {
   try {
+    // ✅ Langue depuis les options
+    const langue = options.langue || 'fr';
+    const t = createPdfT(langue);
+
     console.log('========== GÉNÉRATION PDF MAGASIN ==========');
+    console.log('🌍 Langue :', langue);
     console.log('Données usager reçues:', usager);
-    
+
     const doc = new jsPDF({
       unit: 'mm',
       format: 'a4',
       putOnlyUsedFonts: true
     });
-    
+
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     const marginX = 15;
     let yPos = 25;
     const lineSpacing = 7.5;
-    
+
     // Récupération des données
     const demandeur = usager?.demandeur || '';
     const denomination = usager?.denomination || '';
@@ -170,35 +161,33 @@ export const generateMagasinPDF = (usager, paymentDetails) => {
     const nifStat = usager?.nif_stat || '';
     const telephone = usager?.telephone || '';
     const nombreMagasins = usager?.nombre_magasins || 0;
-    
+
     const representantNom = usager?.representant_nom || '';
     const representantAdresse = usager?.representant_adresse || '';
     const representantTel = usager?.representant_tel || '';
     const representantCin = usager?.representant_cin || '';
     const representantCinLieu = usager?.representant_cin_lieu || '';
     const representantFonction = usager?.representant_fonction || '';
-    
+
     let cinDelivree = '';
     if (usager?.representant_cin_delivree) {
       try {
         const d = new Date(usager.representant_cin_delivree);
         if (!isNaN(d.getTime())) {
-          cinDelivree = `${d.getDate().toString().padStart(2, '0')}-${(d.getMonth()+1).toString().padStart(2, '0')}-${d.getFullYear()}`;
+          cinDelivree = `${d.getDate().toString().padStart(2, '0')}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getFullYear()}`;
         }
-      } catch(e) {}
+      } catch (e) {}
     }
-    
+
     const activite = usager?.activite || '';
-    
+
     // MOYENS DE COMMUNICATION
     let radioTaux = 0, lecteurTaux = 0, tvTaux = 0, autresTaux = 0;
-    
+
     try {
       let moyensComm = usager?.moyens_communication;
       if (moyensComm) {
-        if (typeof moyensComm === 'string') {
-          moyensComm = JSON.parse(moyensComm);
-        }
+        if (typeof moyensComm === 'string') moyensComm = JSON.parse(moyensComm);
         if (moyensComm && typeof moyensComm === 'object') {
           if (moyensComm.radio) {
             radioTaux = typeof moyensComm.radio === 'object' ? (Number(moyensComm.radio.taux) || 0) : Number(moyensComm.radio) || 0;
@@ -214,203 +203,270 @@ export const generateMagasinPDF = (usager, paymentDetails) => {
           }
         }
       }
-    } catch(e) {
+    } catch (e) {
       console.error('Erreur parsing moyens:', e);
     }
-    
+
     const radioActif = radioTaux > 0;
     const lecteurActif = lecteurTaux > 0;
     const tvActif = tvTaux > 0;
     const autresActif = autresTaux > 0;
     const sommeTaux = radioTaux + lecteurTaux + tvTaux + autresTaux;
-    
+
     const montantMensuel = parseFloat(usager?.montant_mensuel) || 0;
     const fraisDossier = parseFloat(usager?.frais_dossier) || 0;
     const uniter = parseInt(usager?.uniter) || 1;
-    
-    // ✅ BONNE RÈGLE DE CALCUL : (Montant + Somme des taux) × Uniter + Frais de dossier
-    // Le frais de dossier est FIXE et N'EST PAS multiplié par Uniter
+
     const baseTotal = (montantMensuel + sommeTaux) * uniter;
     const soitTotal = baseTotal + fraisDossier;
-    const totalEnLettres = nombreEnLettres(Math.round(soitTotal));
-    
-    const aCompterDu = usager?.a_compter_du ? formatDate(usager.a_compter_du) : '';
-    const echeance = usager?.echeance ? formatDate(usager.echeance) : '';
+    const totalEnLettres = nombreEnLettres(Math.round(soitTotal), langue);
+
+    const aCompterDu = usager?.a_compter_du ? formatDate(usager.a_compter_du, langue) : '';
+    const echeance = usager?.echeance ? formatDate(usager.echeance, langue) : '';
     const confirmationNom = usager?.confirmation_nom || usager?.demandeur || '';
     const lieuSignature = usager?.lieu_signature || 'Antananarivo';
-    const dateSignature = usager?.date_signature ? formatDate(usager.date_signature) : getCurrentDate();
+    const dateSignature = usager?.date_signature ? formatDate(usager.date_signature, langue) : getCurrentDate(langue);
 
     // ========== PAGE 1 ==========
-    // Titre principal
+
     doc.setFont('times', 'bold');
     doc.setFontSize(16);
     doc.text('OFFICE MALAGASY DU DROIT D\'AUTEUR', pageWidth / 2, yPos, { align: 'center' });
     yPos += 8;
-    
-    // Sous-titre
+
+    // ✅ Sous-titre traduit
     doc.setFont('times', 'bold');
     doc.setFontSize(14);
-    doc.text('FICHE DE RENSEIGNEMENTS – MAGASIN ET AUTRES', pageWidth / 2, yPos, { align: 'center' });
+    doc.text(
+      t(
+        'FICHE DE RENSEIGNEMENTS – MAGASIN ET AUTRES',
+        'TAKELAKA FAMPAHALALANA – FIVAROTANA SY HAFA',
+        'INFORMATION SHEET – STORE AND OTHERS'
+      ),
+      pageWidth / 2,
+      yPos,
+      { align: 'center' }
+    );
     yPos += 10;
-    
+
     // SECTION 1
     doc.setFont('times', 'bold');
     doc.setFontSize(13);
-    const section1Text = '1) RENSEIGNEMENTS GENERAUX :';
+    const section1Text = t(
+      '1) RENSEIGNEMENTS GENERAUX :',
+      '1) FAMPAHALALANA ANKAPOBENY :',
+      '1) GENERAL INFORMATION :'
+    );
     const section1Width = doc.getTextWidth(section1Text);
     doc.text(section1Text, marginX, yPos);
     doc.line(marginX, yPos + 1.5, marginX + section1Width, yPos + 1.5);
     yPos += 8;
-    
+
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
-    
-    doc.text(`Demandeur : ${demandeur || '……………………………………'}`, marginX + 5, yPos);
+
+    doc.text(`${t('Demandeur', 'Mpangataka', 'Applicant')} : ${demandeur || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
-    
-    doc.text(`Dénomination : ${denomination || '……………………………………'}`, marginX + 5, yPos);
+
+    doc.text(`${t('Dénomination', 'Anarana', 'Name')} : ${denomination || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
-    
-    doc.text(`Adresse du Siège / lieu d'exploitation : ${adresseSiege || '……………………………………'}`, marginX + 5, yPos);
+
+    doc.text(
+      `${t("Adresse du Siège / lieu d'exploitation", 'Adiresin\'ny foibe / toeram-piasana', 'Head office address / operating location')} : ${adresseSiege || '……………………………………'}`,
+      marginX + 5,
+      yPos
+    );
     yPos += lineSpacing;
-    
+
     doc.text(`NIF / N° STAT : ${nifStat || '……………………………………'}`, marginX + 5, yPos);
-    doc.text(`Tél. : ${telephone || '……………………………………'}`, marginX + 100, yPos);
+    doc.text(`${t('Tél.', 'Finday', 'Phone')} : ${telephone || '……………………………………'}`, marginX + 100, yPos);
     yPos += lineSpacing;
-    
-    doc.text(`Nombre de magasin : ${nombreMagasins > 0 ? nombreMagasins : '………………'}`, marginX + 5, yPos);
+
+    doc.text(
+      `${t('Nombre de magasin', 'Isan\'ny fivarotana', 'Number of stores')} : ${nombreMagasins > 0 ? nombreMagasins : '………………'}`,
+      marginX + 5,
+      yPos
+    );
     yPos += lineSpacing + 3;
-    
+
     // SECTION 2
     doc.setFont('times', 'bold');
     doc.setFontSize(13);
-    const section2Text = '2) REPRESENTANT LEGAL :';
+    const section2Text = t(
+      '2) REPRESENTANT LEGAL :',
+      '2) MPISOLO TENA ARA-DALÀNA :',
+      '2) LEGAL REPRESENTATIVE :'
+    );
     const section2Width = doc.getTextWidth(section2Text);
     doc.text(section2Text, marginX, yPos);
     doc.line(marginX, yPos + 1.5, marginX + section2Width, yPos + 1.5);
     yPos += 8;
-    
+
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
-    
-    doc.text(`Nom et prénoms : ${representantNom || '……………………………………'}`, marginX + 5, yPos);
+
+    doc.text(
+      `${t('Nom et prénoms', 'Anarana sy fanampin\'anarana', 'Full name')} : ${representantNom || '……………………………………'}`,
+      marginX + 5,
+      yPos
+    );
     yPos += lineSpacing;
-    
-    doc.text(`Adresse personnelle : ${representantAdresse || '……………………………………'}`, marginX + 5, yPos);
+
+    doc.text(
+      `${t('Adresse personnelle', 'Adiresy manokana', 'Personal address')} : ${representantAdresse || '……………………………………'}`,
+      marginX + 5,
+      yPos
+    );
     yPos += lineSpacing;
-    
-    doc.text(`Téléphone : ${representantTel || '……………………………………'}`, marginX + 5, yPos);
+
+    doc.text(`${t('Téléphone', 'Finday', 'Phone')} : ${representantTel || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
-    
-    doc.text(`N° Carte d'identité nationale : ${representantCin || '……………………………………'}`, marginX + 5, yPos);
+
+    doc.text(
+      `${t("N° Carte d'identité nationale", 'Laharana kara-panondro', 'National ID number')} : ${representantCin || '……………………………………'}`,
+      marginX + 5,
+      yPos
+    );
     yPos += lineSpacing;
-    
-    let cinText = `Délivrée le : ${cinDelivree || '……………………………………'}`;
-    if (representantCinLieu) cinText += ` à ${representantCinLieu}`;
+
+    let cinText = `${t('Délivrée le', 'Nomena ny', 'Issued on')} : ${cinDelivree || '……………………………………'}`;
+    if (representantCinLieu) cinText += ` ${t('à', 'tao', 'at')} ${representantCinLieu}`;
     doc.text(cinText, marginX + 5, yPos);
     yPos += lineSpacing;
-    
-    doc.text(`Fonction : ${representantFonction || '……………………………………'}`, marginX + 5, yPos);
+
+    doc.text(`${t('Fonction', 'Asa', 'Position')} : ${representantFonction || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing + 3;
-    
+
     // SECTION 3
     doc.setFont('times', 'bold');
     doc.setFontSize(13);
-    const section3Text = '3) RENSEIGNEMENTS SUR L\'ACTIVITE :';
+    const section3Text = t(
+      "3) RENSEIGNEMENTS SUR L'ACTIVITE :",
+      "3) FAMPAHALALANA MOMBA NY ASA :",
+      '3) ACTIVITY INFORMATION :'
+    );
     const section3Width = doc.getTextWidth(section3Text);
     doc.text(section3Text, marginX, yPos);
     doc.line(marginX, yPos + 1.5, marginX + section3Width, yPos + 1.5);
     yPos += 8;
-    
+
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
-    
-    doc.text(`Activité : ${activite || '……………………………………'}`, marginX + 5, yPos);
+
+    doc.text(`${t('Activité', 'Asa', 'Activity')} : ${activite || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
-    
-    doc.text(`Nombre de magasin : ${nombreMagasins > 0 ? nombreMagasins : '……………………………………'}`, marginX + 5, yPos);
+
+    doc.text(
+      `${t('Nombre de magasin', 'Isan\'ny fivarotana', 'Number of stores')} : ${nombreMagasins > 0 ? nombreMagasins : '……………………………………'}`,
+      marginX + 5,
+      yPos
+    );
     yPos += lineSpacing + 2;
-    
+
     // Moyen de communication
-    doc.text('Moyen de communication :', marginX + 5, yPos);
-    
+    doc.text(`${t('Moyen de communication', 'Fitaovam-pifandraisana', 'Communication means')} :`, marginX + 5, yPos);
+
     const moyenStartX = marginX + 58;
     const checkX = marginX + 120;
     const tauxX = checkX + 10;
-    
-    doc.text('Radio - Poste TSF', moyenStartX, yPos);
+
+    doc.text(t('Radio - Poste TSF', 'Radio - Poste TSF', 'Radio - TSF station'), moyenStartX, yPos);
     drawCheckbox(doc, checkX, yPos, radioActif);
-    doc.text(`: Taux : ${formatNumber(radioTaux)} Ar/an`, tauxX, yPos);
+    doc.text(`: ${t('Taux', 'Taha', 'Rate')} : ${formatNumber(radioTaux)} Ar/${t('an', 'taona', 'year')}`, tauxX, yPos);
     yPos += lineSpacing;
-    
-    doc.text('Lecteur', moyenStartX, yPos);
+
+    doc.text(t('Lecteur', 'Mpamaky', 'Reader'), moyenStartX, yPos);
     drawCheckbox(doc, checkX, yPos, lecteurActif);
-    doc.text(`: Taux : ${formatNumber(lecteurTaux)} Ar/an`, tauxX, yPos);
+    doc.text(`: ${t('Taux', 'Taha', 'Rate')} : ${formatNumber(lecteurTaux)} Ar/${t('an', 'taona', 'year')}`, tauxX, yPos);
     yPos += lineSpacing;
-    
+
     doc.text('TV', moyenStartX, yPos);
     drawCheckbox(doc, checkX, yPos, tvActif);
-    doc.text(`: Taux : ${formatNumber(tvTaux)} Ar/an`, tauxX, yPos);
+    doc.text(`: ${t('Taux', 'Taha', 'Rate')} : ${formatNumber(tvTaux)} Ar/${t('an', 'taona', 'year')}`, tauxX, yPos);
     yPos += lineSpacing;
-    
-    doc.text('Autres', moyenStartX, yPos);
+
+    doc.text(t('Autres', 'Hafa', 'Others'), moyenStartX, yPos);
     drawCheckbox(doc, checkX, yPos, autresActif);
-    doc.text(`: Taux : ${formatNumber(autresTaux)} Ar/an`, tauxX, yPos);
+    doc.text(`: ${t('Taux', 'Taha', 'Rate')} : ${formatNumber(autresTaux)} Ar/${t('an', 'taona', 'year')}`, tauxX, yPos);
     yPos += lineSpacing + 2;
-    
-    // ✅ Soit au Total corrigé
+
+    // Soit au Total
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text(`Soit au Total : ${formatNumber(soitTotal)} Ariary (${totalEnLettres})`, marginX + 5, yPos);
-    // doc.text(`( ${formatNumber(montantMensuel)} + ${formatNumber(sommeTaux)} ) × ${uniter} + ${formatNumber(fraisDossier)}`, marginX + 5, yPos + 5);
+    doc.text(
+      `${t('Soit au Total', 'Vola total', 'Total amount')} : ${formatNumber(soitTotal)} Ariary (${totalEnLettres})`,
+      marginX + 5,
+      yPos
+    );
     yPos += lineSpacing + 5;
-    
+
     doc.setFont('times', 'normal');
-    doc.text(`A compter du : ${aCompterDu || '……………………………………'}`, marginX + 5, yPos);
+    doc.text(`${t('A compter du', 'Manomboka ny', 'Starting from')} : ${aCompterDu || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing;
-    
-    doc.text(`Echéance : ${echeance || '……………………………………'}`, marginX + 5, yPos);
+
+    doc.text(`${t('Echéance', 'Faran\'ny fe-potoana', 'Due date')} : ${echeance || '……………………………………'}`, marginX + 5, yPos);
     yPos += lineSpacing + 2;
-    
-    // Je soussigné
-    doc.text(`Je soussigné(e) Mr/Mme ${confirmationNom || '……………………………………'}`, marginX + 5, yPos);
+
+    doc.text(
+      `${t('Je soussigné(e) Mr/Mme', 'Izaho manao sonia Andriamatoa/Andriamanitrao', 'I, the undersigned Mr/Mrs')} ${confirmationNom || '……………………………………'}`,
+      marginX + 5,
+      yPos
+    );
     yPos += lineSpacing;
-    
+
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text('confirme sous ma responsabilité la sincérité et l\'exactitude des renseignements ci-dessus et', marginX + 5, yPos);
+    doc.text(
+      t(
+        "confirme sous ma responsabilité la sincérité et l'exactitude des renseignements ci-dessus et",
+        "manamarina amin'ny andraikitro ny fahamarinana sy ny fahitsian'ny fampahalalana etsy ambony ary",
+        'confirm on my responsibility the truthfulness and accuracy of the information above and'
+      ),
+      marginX + 5,
+      yPos
+    );
     yPos += lineSpacing;
-    doc.text('m\'engage à respecter les obligations prévues par le contrat général de représentation.', marginX + 5, yPos);
+    doc.text(
+      t(
+        "m'engage à respecter les obligations prévues par le contrat général de représentation.",
+        "manolo-tena hanaja ny adidy voafaritry ny fifanarahana ankapobeny momba ny fisolo tena.",
+        'undertake to respect the obligations provided for in the general representation contract.'
+      ),
+      marginX + 5,
+      yPos
+    );
     yPos += lineSpacing + 2;
-    
-    // Fait à et Signature
+
     doc.setFont('times', 'normal');
     doc.setFontSize(13);
-    doc.text(`Fait à ${lieuSignature}, le ${dateSignature}`, pageWidth - marginX - 5, yPos, { align: 'right' });
+    doc.text(
+      `${t('Fait à', 'Natao tao', 'Done at')} ${lieuSignature}, ${t('le', 'ny', 'on')} ${dateSignature}`,
+      pageWidth - marginX - 5,
+      yPos,
+      { align: 'right' }
+    );
     yPos += lineSpacing + 2;
-    
+
     doc.setFont('times', 'italic');
     doc.setFontSize(13);
-    doc.text('(Signature)', pageWidth - marginX - 5, yPos, { align: 'right' });
+    doc.text(
+      `(${t('Signature', 'Sonia', 'Signature')})`,
+      pageWidth - marginX - 5,
+      yPos,
+      { align: 'right' }
+    );
     yPos += 20;
-    
-    // Vérifier l'espace en bas de page
-    const bottomMargin = 25;
-    if (yPos < pageHeight - bottomMargin) {
-      const extraSpace = (pageHeight - bottomMargin) - yPos;
-      if (extraSpace > 0) {
-        // Rien à faire, l'espace est déjà suffisant
-      }
-    }
-    
+
     const fileName = `magasin_${(denomination || 'document').replace(/\s/g, '_')}_${Date.now()}.pdf`;
     doc.save(fileName);
-    
-    console.log('✅ PDF Magasin généré avec succès');
+
+    console.log(`✅ PDF Magasin généré avec succès (langue: ${langue})`);
     return true;
-    
+
   } catch (error) {
     console.error('❌ Erreur PDF Magasin:', error);
     throw error;
   }
 };
+
+export default generateMagasinPDF;

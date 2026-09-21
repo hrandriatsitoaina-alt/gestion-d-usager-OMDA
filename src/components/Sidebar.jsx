@@ -1,93 +1,77 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, FolderOpen, UserPlus, Search, CreditCard,
-  FileText, BarChart, CalendarPlus, Download, Share2, Upload,
+  FileText, BarChart, CalendarPlus, Download, Upload,
   Users, DollarSign, Settings, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import '../styles/Sidebar.css';
+// ✅ Hook unique de traduction
+import { useT } from '../hooks/useT';
 
 const Sidebar = ({ isOpen, toggleSidebar, isCollapsed, toggleCollapse }) => {
   const navigate = useNavigate();
+
+  // ✅ LANGUE UNIQUE — vient du Context
+  const { t } = useT();
+
   const [hoveredItem, setHoveredItem] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
 
-  // ===== ÉTATS POUR LA LANGUE =====
-  const [appLangue, setAppLangue] = useState('fr');
+  // ✅ Titres de sections traduits (mémoïsés)
+  const sectionTitles = useMemo(() => ({
+    usagers:   t('Usagers',          'Mpampiasa',            'Users'),
+    paiements: t('Paiements',        'Fandoavana',          'Payments'),
+    outils:    t('Outils',           'Fitaovana',           'Tools'),
+    bd:        t('Gestion de bd',    'Fitantanana angona',  'Database'),
+  }), [t]);
 
-  // ===== CHARGER LA LANGUE =====
-  useEffect(() => {
-    const langue = localStorage.getItem('app-langue') || 'fr';
-    setAppLangue(langue);
+  // ✅ Items de navigation (mémoïsés)
+  const navItems = useMemo(() => [
+    { icon: LayoutDashboard, label: t('Accueil',    'Fandraisana',  'Home'),       path: '/dashboard' },
+    { icon: FolderOpen,      label: t('Catégories', 'Sokajy',       'Categories'), path: '/autre-usager' },
+  ], [t]);
 
-    const handleLangueChange = (event) => {
-      const { langue } = event.detail;
-      setAppLangue(langue);
-    };
+  const usagerItems = useMemo(() => [
+    { icon: UserPlus, label: t('Ajouter un usager',   'Manampy mpampiasa',  'Add user'),     path: '/ajout-usager' },
+    { icon: Search,   label: t('Vérifier le statut',  'Hanamarina ny sata', 'Check status'), path: '/verification-usager' },
+  ], [t]);
 
-    window.addEventListener('langue-change', handleLangueChange);
-
-    return () => {
-      window.removeEventListener('langue-change', handleLangueChange);
-    };
-  }, []);
-
-  // ===== FONCTION DE TRADUCTION =====
-  const t = (fr, mg, en) => {
-    switch (appLangue) {
-      case 'mg': return mg || fr;
-      case 'en': return en || fr;
-      default: return fr;
-    }
-  };
-
-  // ===== TRADUCTIONS DES TITRES DE SECTION =====
-  const sectionTitles = {
-    usagers: t('Usagers', 'Mpampiasa', 'Users'),
-    paiements: t('Paiements', 'Fandoavana', 'Payments'),
-    outils: t('Outils', 'Fitaovana', 'Tools'),
-    bd: t('Gestion de bd', 'Fitantanana angona', 'Database')
-  };
-
-  const navItems = [
-    { icon: LayoutDashboard, label: t('Accueil', 'Fandraisana', 'Home'), path: '/dashboard' },
-    { icon: FolderOpen, label: t('Catégories', 'Sokajy', 'Categories'), path: '/autre-usager' },
-  ];
-
-  const usagerItems = [
-    { icon: UserPlus, label: t('Ajouter un usager', 'Manampy mpampiasa', 'Add user'), path: '/ajout-usager' },
-    { icon: Search, label: t('Vérifier le statut', 'Hanamarina ny sata', 'Check status'), path: '/verification-usager' },
-  ];
-
-  const paiementItems = [
+  const paiementItems = useMemo(() => [
     { icon: CreditCard, label: t('Gestion des paiements', 'Fitantanana fandoavana', 'Payment management'), path: '/billan' },
-    { icon: FileText, label: t('Factures', 'Faktiora', 'Invoices'), path: '/facture-usager' },
-  ];
+    { icon: FileText,   label: t('Factures',              'Faktiora',               'Invoices'),           path: '/facture-usager' },
+  ], [t]);
 
-  const outilsItems = [
-    { icon: BarChart, label: t('Statistiques', 'Statistika', 'Statistics'), path: '/tableau-db' },
-    { icon: CalendarPlus, label: t('Assistant IA', 'Mpanampy IA', 'AI Assistant'), path: '/diagnostique' },
-  ];
+  const outilsItems = useMemo(() => [
+    { icon: BarChart,     label: t('Statistiques', 'Statistika',    'Statistics'),   path: '/tableau-db' },
+    { icon: CalendarPlus, label: t('Assistant IA', 'Mpanampy IA',   'AI Assistant'), path: '/diagnostique' },
+  ], [t]);
 
-  const bdItems = [
+  const bdItems = useMemo(() => [
     { icon: Download, label: t('Collecter', 'Manangona', 'Collect'), path: '/base-de-donnees' },
-    { icon: Upload, label: t('Recevoir', 'Mandefa', 'Receive'), path: '/base-de-donnees' },
-  ];
+    { icon: Upload,   label: t('Recevoir',  'Mandefa',   'Receive'), path: '/base-de-donnees' },
+  ], [t]);
 
-  const handleMouseEnter = (e, index) => {
+  // ✅ Tous les items pour le tooltip (mémoïsé)
+  const allItems = useMemo(
+    () => [...usagerItems, ...paiementItems, ...outilsItems, ...bdItems],
+    [usagerItems, paiementItems, outilsItems, bdItems]
+  );
+
+  const handleMouseEnter = useCallback((e, index) => {
     const rect = e.currentTarget.getBoundingClientRect();
     setTooltipPosition({
       top: rect.top + rect.height / 2,
-      left: rect.right + 12
+      left: rect.right + 12,
     });
     setHoveredItem(index);
-  };
+  }, []);
 
-  const handleMouseLeave = () => {
+  const handleMouseLeave = useCallback(() => {
     setHoveredItem(null);
-  };
+  }, []);
 
-  const renderNavItem = (item, index) => (
+  const renderNavItem = useCallback((item, index) => (
     <li key={index}>
       <a
         href="#"
@@ -102,9 +86,9 @@ const Sidebar = ({ isOpen, toggleSidebar, isCollapsed, toggleCollapse }) => {
         {!isCollapsed && <span className="nav-label">{item.label}</span>}
       </a>
     </li>
-  );
+  ), [isCollapsed, navigate, handleMouseEnter, handleMouseLeave]);
 
-  const renderSection = (title, icon, items) => (
+  const renderSection = useCallback((title, icon, items) => (
     <div className="nav-section">
       <div className="section-title">
         <span className="section-icon-wrapper">{icon}</span>
@@ -114,7 +98,7 @@ const Sidebar = ({ isOpen, toggleSidebar, isCollapsed, toggleCollapse }) => {
         {items.map((item, idx) => renderNavItem(item, idx + 100))}
       </ul>
     </div>
-  );
+  ), [isCollapsed, renderNavItem]);
 
   return (
     <>
@@ -138,7 +122,11 @@ const Sidebar = ({ isOpen, toggleSidebar, isCollapsed, toggleCollapse }) => {
           <button
             className="collapse-btn"
             onClick={toggleCollapse}
-            title={isCollapsed ? t('Agrandir', 'Halehibe', 'Expand') : t('Réduire', 'Hakelezina', 'Collapse')}
+            title={
+              isCollapsed
+                ? t('Agrandir', 'Halehibe', 'Expand')
+                : t('Réduire', 'Hakelezina', 'Collapse')
+            }
           >
             {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
@@ -183,13 +171,12 @@ const Sidebar = ({ isOpen, toggleSidebar, isCollapsed, toggleCollapse }) => {
           style={{
             top: tooltipPosition.top,
             left: tooltipPosition.left,
-            transform: 'translateY(-50%)'
+            transform: 'translateY(-50%)',
           }}
         >
           {hoveredItem < 100
             ? navItems[hoveredItem]?.label
-            : [...usagerItems, ...paiementItems, ...outilsItems, ...bdItems][hoveredItem - 100]?.label
-          }
+            : allItems[hoveredItem - 100]?.label}
         </div>
       )}
     </>

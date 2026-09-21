@@ -1,5 +1,5 @@
 // src/pages/date_grandSurface.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import {
@@ -13,23 +13,40 @@ import {
   Eye,
   X,
   DollarSign,
-  Phone,
-  Mail,
-  Home,
-  Store,
-  TrendingUp,
   AlertCircle,
-  CheckCircle,
 } from 'lucide-react';
 import Header from '../components/Header';
-import Sidebar from '../components/Sidebar';
 import MiniSidebar from '../components/MiniSidebar';
+// ✅ Hook unique de traduction
+import { useT } from '../hooks/useT';
 import '../styles/date_grandSurface.css';
 
 const API_URL = 'http://localhost:3001/api';
 
 const DateGrandSurface = () => {
   const navigate = useNavigate();
+
+  // ✅ LANGUE UNIQUE — vient du Context
+  const { t, langue } = useT();
+
+  // ✅ Locale pour les dates (mg → fr-MG, pas mg-MG)
+  const locale = useMemo(() => {
+    if (langue === 'en') return 'en-US';
+    if (langue === 'mg') return 'fr-MG';
+    return 'fr-FR';
+  }, [langue]);
+
+  // ✅ Mois abrégés traduits (utilisés dans le modal)
+  const moisLabelsShort = useMemo(() => {
+    if (langue === 'en') {
+      return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    }
+    if (langue === 'mg') {
+      return ['Jan', 'Feb', 'Mar', 'Apr', 'Mey', 'Jon', 'Jol', 'Aog', 'Sep', 'Okt', 'Nov', 'Des'];
+    }
+    return ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+  }, [langue]);
+
   const [usagers, setUsagers] = useState([]);
   const [filteredUsagers, setFilteredUsagers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -38,75 +55,46 @@ const DateGrandSurface = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  // Filtres
   const [anneeRecherche, setAnneeRecherche] = useState(new Date().getFullYear());
   const [regionFiltre, setRegionFiltre] = useState('');
   const [anneesDisponibles, setAnneesDisponibles] = useState([]);
   const [regionsDisponibles, setRegionsDisponibles] = useState([]);
 
-  // Statistiques
   const [statsGraph, setStatsGraph] = useState({
-    bonPayeur: 0,
-    payeurMoyen: 0,
-    mauvaisPayeur: 0,
-    nonPayeur: 0,
-    total: 0,
+    bonPayeur: 0, payeurMoyen: 0, mauvaisPayeur: 0, nonPayeur: 0, total: 0,
   });
 
   const [notification, setNotification] = useState(null);
   const [apiError, setApiError] = useState(null);
   const [montantTotalRecu, setMontantTotalRecu] = useState(0);
 
-  const moisLabelsShort = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
-
   // ============================================================
-  // ✅ FONCTION CLÉ : Calcul du montant payé
-  // Règle métier :
-  //   Total = Montant du PREMIER paiement
-  //         + Somme des paiements dont le montant est DIFFÉRENT
-  //           du montant du PREMIER paiement
-  //
-  // Exemple usager 2 grand-surface :
-  //   [15000, 15000, ..., 15000 (9 fois), 3000, 3000, 3000]
-  //   = 15000 + (3000 + 3000 + 3000) = 24000 ✅
+  // Calcul du montant payé (règle métier personnalisée)
   // ============================================================
   const calculerMontantPaye = (paiementsTries) => {
     if (!paiementsTries || paiementsTries.length === 0) return 0;
-
-    // Le montant du premier paiement
     const premierMontant = parseFloat(paiementsTries[0].montant || 0);
-
-    // On démarre avec le premier montant
     let total = premierMontant;
-
-    // On parcourt les paiements suivants
     for (let i = 1; i < paiementsTries.length; i++) {
       const montantCourant = parseFloat(paiementsTries[i].montant || 0);
-      // Si le montant est différent du PREMIER montant, on l'ajoute
       if (montantCourant !== premierMontant) {
         total += montantCourant;
       }
     }
-
     return total;
   };
 
-  // Chargement des régions
   const loadRegions = useCallback(async () => {
     try {
       const response = await axios.get(`${API_URL}/regions`);
-      if (response.data.success) {
-        setRegionsDisponibles(response.data.regions || []);
-      } else {
-        setRegionsDisponibles([]);
-      }
+      if (response.data.success) setRegionsDisponibles(response.data.regions || []);
+      else setRegionsDisponibles([]);
     } catch (error) {
       console.error('❌ Erreur chargement régions:', error);
       setRegionsDisponibles([]);
     }
   }, []);
 
-  // Chargement des années disponibles
   const loadAnnees = useCallback(async () => {
     try {
       const response = await axios.get(`${API_URL}/paiements/annees-disponibles/grand-surface`);
@@ -117,18 +105,18 @@ const DateGrandSurface = () => {
         }
       } else {
         const currentYear = new Date().getFullYear();
-        const years = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
-        setAnneesDisponibles(years);
+        setAnneesDisponibles([currentYear - 2, currentYear - 1, currentYear, currentYear + 1]);
       }
     } catch (error) {
       console.error('❌ Erreur chargement années:', error);
       const currentYear = new Date().getFullYear();
-      const years = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
-      setAnneesDisponibles(years);
+      setAnneesDisponibles([currentYear - 2, currentYear - 1, currentYear, currentYear + 1]);
     }
   }, []);
 
-  // Chargement des données
+  // ============================================================
+  // ✅ loadData — PAS de dépendance à la langue
+  // ============================================================
   const loadData = useCallback(async () => {
     setLoading(true);
     setApiError(null);
@@ -139,9 +127,7 @@ const DateGrandSurface = () => {
       let paiements = [];
       let usagersData = [];
 
-      if (paiementsResponse.data.success) {
-        paiements = paiementsResponse.data.paiements || [];
-      }
+      if (paiementsResponse.data.success) paiements = paiementsResponse.data.paiements || [];
 
       if (usagersResponse.data.success && usagersResponse.data.usagers) {
         usagersData = usagersResponse.data.usagers;
@@ -149,26 +135,21 @@ const DateGrandSurface = () => {
         setUsagers([]);
         setFilteredUsagers([]);
         setLoading(false);
-        setApiError('Aucun usager trouvé');
+        setApiError(t('Aucun usager trouvé', 'Tsy misy mpampiasa', 'No user found'));
         return;
       }
 
       const usagersWithYearData = usagersData.map((usager) => {
-        // Récupérer tous les paiements de l'année
         const paiementsPourAnnee = paiements
-          .filter(
-            (p) =>
-              p.usager_id === usager.id &&
-              p.usager_type === 'grand-surface' &&
-              p.annee === anneeRecherche &&
-              p.statut === 'paye'
+          .filter((p) =>
+            p.usager_id === usager.id &&
+            p.usager_type === 'grand-surface' &&
+            p.annee === anneeRecherche &&
+            p.statut === 'paye'
           )
-          // ✅ Trier par mois croissant pour avoir un ordre stable
           .sort((a, b) => (a.mois || 0) - (b.mois || 0));
 
         const moisPayes = paiementsPourAnnee.map((p) => p.mois);
-
-        // ✅ Calcul du montant total avec la règle personnalisée
         const montantTotalPaye = calculerMontantPaye(paiementsPourAnnee);
 
         return {
@@ -184,9 +165,7 @@ const DateGrandSurface = () => {
       setUsagers(usagersWithYearData);
 
       let filtered = [...usagersWithYearData];
-      if (regionFiltre) {
-        filtered = filtered.filter((u) => u.region === regionFiltre);
-      }
+      if (regionFiltre) filtered = filtered.filter((u) => u.region === regionFiltre);
 
       setFilteredUsagers(filtered);
       updateStats(filtered);
@@ -195,56 +174,49 @@ const DateGrandSurface = () => {
       setMontantTotalRecu(totalRecu);
     } catch (error) {
       console.error('❌ Erreur chargement données:', error);
-      setApiError(error.message || 'Erreur de chargement');
+      setApiError(error.message || t('Erreur', 'Olana', 'Error'));
       setNotification({
         type: 'error',
-        message: '❌ Erreur de chargement des données',
+        message: t('❌ Erreur', '❌ Olana', '❌ Error'),
       });
     } finally {
       setLoading(false);
     }
+  // ✅ Pas de dépendance à la langue — les données ne doivent PAS être rechargées
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anneeRecherche, regionFiltre]);
 
   const updateStats = (data) => {
-    const stats = {
+    setStatsGraph({
       bonPayeur: data.filter((u) => (u.totalMoisPayesAnnee || 0) >= 9).length,
       payeurMoyen: data.filter((u) => (u.totalMoisPayesAnnee || 0) >= 5 && (u.totalMoisPayesAnnee || 0) <= 8).length,
       mauvaisPayeur: data.filter((u) => (u.totalMoisPayesAnnee || 0) > 0 && (u.totalMoisPayesAnnee || 0) < 5).length,
       nonPayeur: data.filter((u) => (u.totalMoisPayesAnnee || 0) === 0).length,
       total: data.length,
-    };
-    setStatsGraph(stats);
+    });
   };
 
   const filterByRegion = useCallback(() => {
     let filtered = [...usagers];
-    if (regionFiltre) {
-      filtered = filtered.filter((u) => u.region === regionFiltre);
-    }
+    if (regionFiltre) filtered = filtered.filter((u) => u.region === regionFiltre);
     setFilteredUsagers(filtered);
     updateStats(filtered);
     setCurrentPage(1);
   }, [usagers, regionFiltre]);
 
-  // Effets
   useEffect(() => {
     loadRegions();
     loadAnnees();
   }, [loadRegions, loadAnnees]);
 
   useEffect(() => {
-    if (anneeRecherche) {
-      loadData();
-    }
+    if (anneeRecherche) loadData();
   }, [anneeRecherche, loadData]);
 
   useEffect(() => {
-    if (usagers.length > 0) {
-      filterByRegion();
-    }
+    if (usagers.length > 0) filterByRegion();
   }, [regionFiltre, usagers, filterByRegion]);
 
-  // Pagination
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentUsagers = filteredUsagers.slice(indexOfFirstItem, indexOfLastItem);
@@ -252,11 +224,7 @@ const DateGrandSurface = () => {
 
   const goToPage = (page) => setCurrentPage(page);
 
-  // Gestionnaires
-  const handleRegionChange = (value) => {
-    setRegionFiltre(value);
-  };
-
+  const handleRegionChange = (value) => setRegionFiltre(value);
   const handleAnneeChange = (value) => {
     setAnneeRecherche(parseInt(value));
     setCurrentPage(1);
@@ -291,31 +259,23 @@ const DateGrandSurface = () => {
 
   const getStatusText = (usager) => {
     const total = usager.totalMoisPayesAnnee || 0;
-    if (total === 0) return 'Aucun paiement';
-    if (total >= 9) return 'Bon état';
-    if (total >= 5) return 'Attention';
-    return 'Critique';
+    if (total === 0) return t('Aucun', 'Tsy misy', 'None');
+    if (total >= 9) return t('Bon', 'Tsara', 'Good');
+    if (total >= 5) return t('Moyen', 'Antonony', 'Medium');
+    return t('Critique', 'Kritika', 'Critical');
   };
 
-  // Statistiques rapides
   const totalUsagers = filteredUsagers.length;
   const nonPayes = filteredUsagers.filter((u) => (u.totalMoisPayesAnnee || 0) === 0).length;
   const partiels = filteredUsagers.filter((u) => (u.totalMoisPayesAnnee || 0) > 0 && (u.totalMoisPayesAnnee || 0) < 12).length;
   const aJour = filteredUsagers.filter((u) => (u.totalMoisPayesAnnee || 0) === 12).length;
   const tauxPaiement = totalUsagers > 0 ? Math.round(((totalUsagers - nonPayes) / totalUsagers) * 100) : 0;
 
-  // Pourcentage graphique
-  const bonPayeurPercent = statsGraph.total > 0 ? (statsGraph.bonPayeur / statsGraph.total) * 100 : 0;
-  const payeurMoyenPercent = statsGraph.total > 0 ? (statsGraph.payeurMoyen / statsGraph.total) * 100 : 0;
-  const mauvaisPayeurPercent = statsGraph.total > 0 ? (statsGraph.mauvaisPayeur / statsGraph.total) * 100 : 0;
-  const nonPayeurPercent = statsGraph.total > 0 ? (statsGraph.nonPayeur / statsGraph.total) * 100 : 0;
-
   const handleRetour = () => navigate('/autre-usager');
 
   return (
     <>
       <Header />
-      {/* <Sidebar /> */}
       <MiniSidebar />
       <main className="contenu-grandsurface">
         {notification && (
@@ -332,38 +292,38 @@ const DateGrandSurface = () => {
             <div className="header-left">
               <h1>
                 <Building2 className="header-icon" size={28} />
-                Grandes Surfaces : <span>Suivi des paiements</span>
+                {t('Grandes Surfaces', 'Fivarotana lehibe', 'Large Stores')} : {' '}
+                <span>{t('Paiements', 'Fandoavana', 'Payments')}</span>
               </h1>
               <div className="header-stats">
                 <span className="stat-badge">
-                  <strong>{totalUsagers}</strong> Usagers
+                  <strong>{totalUsagers}</strong> {t('Usagers', 'Mpampiasa', 'Users')}
                 </span>
                 <span className="stat-badge">
-                  <strong>{aJour}</strong> À jour
+                  <strong>{aJour}</strong> {t('À jour', 'Voaloa', 'Up to date')}
                 </span>
                 <span className="stat-badge">
-                  <strong>{partiels}</strong> En retard
+                  <strong>{partiels}</strong> {t('Retard', 'Tara', 'Late')}
                 </span>
                 <span className="stat-badge">
-                  <strong>{nonPayes}</strong> Non payés
+                  <strong>{nonPayes}</strong> {t('Non payés', 'Tsy nandoa', 'Unpaid')}
                 </span>
                 <span className="stat-badge">
-                  <strong>{tauxPaiement}%</strong> Taux
+                  <strong>{tauxPaiement}%</strong> {t('Taux', 'Taha', 'Rate')}
                 </span>
               </div>
             </div>
             <button className="btn-back" onClick={handleRetour}>
-              <ArrowLeft size={18} /> Retour
+              <ArrowLeft size={18} /> {t('Retour', 'Hiverina', 'Back')}
             </button>
           </div>
 
           {/* ===== FILTRES ===== */}
           <div className="filters-container">
             <div className="filters-row">
-              {/* Année */}
               <div className="filter-item">
                 <label htmlFor="anneeSelect">
-                  <Calendar size={14} className="filter-icon" /> Année
+                  <Calendar size={14} className="filter-icon" /> {t('Année', 'Taona', 'Year')}
                 </label>
                 <select
                   id="anneeSelect"
@@ -372,21 +332,16 @@ const DateGrandSurface = () => {
                   className="form-select"
                 >
                   {anneesDisponibles.length > 0 ? (
-                    anneesDisponibles.map((an) => (
-                      <option key={an} value={an}>
-                        {an}
-                      </option>
-                    ))
+                    anneesDisponibles.map((an) => (<option key={an} value={an}>{an}</option>))
                   ) : (
                     <option value={new Date().getFullYear()}>{new Date().getFullYear()}</option>
                   )}
                 </select>
               </div>
 
-              {/* Région */}
               <div className="filter-item">
                 <label htmlFor="regionSelect">
-                  <MapPin size={14} className="filter-icon" /> Région
+                  <MapPin size={14} className="filter-icon" /> {t('Région', 'Faritra', 'Region')}
                 </label>
                 <select
                   id="regionSelect"
@@ -394,28 +349,25 @@ const DateGrandSurface = () => {
                   onChange={(e) => handleRegionChange(e.target.value)}
                   className="form-select"
                 >
-                  <option value="">Toutes les régions</option>
+                  <option value="">{t('Toutes', 'Rehetra', 'All')}</option>
                   {regionsDisponibles && regionsDisponibles.length > 0 ? (
                     regionsDisponibles.map((region, index) => (
-                      <option key={index} value={region.nom || region}>
-                        {region.nom || region}
-                      </option>
+                      <option key={index} value={region.nom || region}>{region.nom || region}</option>
                     ))
                   ) : (
-                    <option value="" disabled>Aucune région</option>
+                    <option value="" disabled>{t('Aucune', 'Tsy misy', 'None')}</option>
                   )}
                 </select>
               </div>
 
-              {/* Boutons d'action */}
               <div className="filter-item filter-actions">
                 <label>&nbsp;</label>
                 <div className="filter-buttons">
                   <button className="btn-reset" onClick={resetFilters}>
-                    <RotateCcw size={16} /> Réinitialiser
+                    <RotateCcw size={16} /> {t('Réinit.', 'Averina', 'Reset')}
                   </button>
                   <button className="btn-refresh" onClick={refreshData}>
-                    <RefreshCw size={16} /> Rafraîchir
+                    <RefreshCw size={16} /> {t('Rafraîchir', 'Havaozy', 'Refresh')}
                   </button>
                 </div>
               </div>
@@ -425,18 +377,18 @@ const DateGrandSurface = () => {
           {/* ===== INDICATEUR ===== */}
           <div className="indicator-bar">
             <span className="indicator-item">
-              <Calendar size={14} className="indicator-icon" /> Année : <strong>{anneeRecherche}</strong>
+              <Calendar size={14} className="indicator-icon" /> {t('Année', 'Taona', 'Year')} : <strong>{anneeRecherche}</strong>
             </span>
             {regionFiltre && (
               <span className="indicator-item">
-                <MapPin size={14} className="indicator-icon" /> Région : <strong>{regionFiltre}</strong>
+                <MapPin size={14} className="indicator-icon" /> {t('Région', 'Faritra', 'Region')} : <strong>{regionFiltre}</strong>
               </span>
             )}
             <span className="indicator-item">
-              <DollarSign size={14} className="indicator-icon" /> Total reçu : <strong>{montantTotalRecu.toLocaleString()} Ar</strong>
+              <DollarSign size={14} className="indicator-icon" /> {t('Reçu', 'Voaray', 'Received')} : <strong>{montantTotalRecu.toLocaleString(locale)} Ar</strong>
             </span>
             <span className="indicator-item indicator-total">
-              <Users size={14} className="indicator-icon" /> Total usagers : <strong>{totalUsagers}</strong>
+              <Users size={14} className="indicator-icon" /> {t('Total', 'Totaly', 'Total')} : <strong>{totalUsagers}</strong>
             </span>
           </div>
 
@@ -445,44 +397,83 @@ const DateGrandSurface = () => {
             {loading ? (
               <div className="loading-state">
                 <div className="spinner" />
-                <p>Chargement des données…</p>
+                <p>{t('Chargement…', 'Maka…', 'Loading…')}</p>
               </div>
             ) : apiError ? (
               <div className="error-state">
                 <AlertCircle size={32} />
                 <p>{apiError}</p>
                 <button className="btn-retry" onClick={refreshData}>
-                  <RefreshCw size={16} /> Réessayer
+                  <RefreshCw size={16} /> {t('Réessayer', 'Andramo', 'Retry')}
                 </button>
               </div>
             ) : currentUsagers.length === 0 ? (
               <div className="empty-state">
                 <AlertCircle size={32} />
-                <p>Aucun usager trouvé pour la période sélectionnée</p>
+                <p>{t('Aucun usager trouvé', 'Tsy misy mpampiasa', 'No user found')}</p>
                 <button className="btn-retry" onClick={refreshData}>
-                  <RefreshCw size={16} /> Réessayer
+                  <RefreshCw size={16} /> {t('Réessayer', 'Andramo', 'Retry')}
                 </button>
               </div>
             ) : (
-              <div className="table-scroll-container">
-                <table className="data-table">
+              <div
+                className="table-scroll-container"
+                style={{
+                  overflowX: 'auto',
+                  overflowY: 'auto',
+                  maxHeight: '70vh',
+                  WebkitOverflowScrolling: 'touch',
+                }}
+              >
+                <table
+                  className="data-table"
+                  style={{
+                    minWidth: '1400px',
+                    width: 'max-content',
+                    borderCollapse: 'separate',
+                    borderSpacing: 0,
+                    tableLayout: 'auto',
+                  }}
+                >
                   <thead>
-                    <tr>
-                      <th className="sticky-id">ID</th>
-                      <th className="sticky-nom">Dénomination</th>
-                      <th>Demandeur</th>
-                      <th>Téléphone</th>
-                      <th>Région</th>
-                      <th>Nb mag</th>
+                    <tr style={{ position: 'sticky', top: 0, zIndex: 2, background: '#fff' }}>
+                      <th className="sticky-id" style={{ minWidth: '60px' }}>ID</th>
+                      <th className="sticky-nom" style={{ minWidth: '160px', whiteSpace: 'nowrap' }}>
+                        {t('Dénomination', 'Anarana', 'Name')}
+                      </th>
+                      <th style={{ minWidth: '130px', whiteSpace: 'nowrap' }}>
+                        {t('Demandeur', 'Mpangataka', 'Applicant')}
+                      </th>
+                      <th style={{ minWidth: '110px', whiteSpace: 'nowrap' }}>
+                        {t('Téléphone', 'Finday', 'Phone')}
+                      </th>
+                      <th style={{ minWidth: '110px', whiteSpace: 'nowrap' }}>
+                        {t('Région', 'Faritra', 'Region')}
+                      </th>
+                      <th style={{ minWidth: '70px', whiteSpace: 'nowrap' }}>
+                        {t('Nb mag', 'Isan', 'Stores')}
+                      </th>
                       {[...Array(12)].map((_, i) => (
-                        <th key={i} className="month-col">
-                          {i + 1}
+                        <th
+                          key={i}
+                          className="month-col"
+                          style={{ minWidth: '42px', textAlign: 'center', whiteSpace: 'nowrap' }}
+                        >
+                          {String(i + 1).padStart(2, '0')}
                         </th>
                       ))}
-                      <th>Total mois</th>
-                      <th>Payé (Ar)</th>
-                      <th>Statut</th>
-                      <th>Action</th>
+                      <th style={{ minWidth: '90px', whiteSpace: 'nowrap' }}>
+                        {t('Total mois', 'Totaly volana', 'Total months')}
+                      </th>
+                      <th style={{ minWidth: '120px', whiteSpace: 'nowrap' }}>
+                        {t('Payé (Ar)', 'Voaloa (Ar)', 'Paid (Ar)')}
+                      </th>
+                      <th style={{ minWidth: '100px', whiteSpace: 'nowrap' }}>
+                        {t('Statut', 'Toe-javatra', 'Status')}
+                      </th>
+                      <th style={{ minWidth: '70px', whiteSpace: 'nowrap' }}>
+                        {t('Action', 'Hetsika', 'Action')}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -494,35 +485,39 @@ const DateGrandSurface = () => {
 
                       return (
                         <tr key={usager.id} style={{ borderLeft: `4px solid ${statusColor}` }}>
-                          <td className="sticky-id">#{String(usager.id).padStart(3, '0')}</td>
-                          <td className="sticky-nom">
+                          <td className="sticky-id" style={{ whiteSpace: 'nowrap' }}>
+                            #{String(usager.id).padStart(3, '0')}
+                          </td>
+                          <td className="sticky-nom" style={{ whiteSpace: 'nowrap' }}>
                             <strong>{usager.denomination || '-'}</strong>
                           </td>
-                          <td>{usager.demandeur || '-'}</td>
-                          <td>{usager.telephone || '-'}</td>
-                          <td>{usager.region || '-'}</td>
-                          <td>{usager.nombre_magasins || '-'}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>{usager.demandeur || '-'}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>{usager.telephone || '-'}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>{usager.region || '-'}</td>
+                          <td style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>{usager.nombre_magasins || '-'}</td>
                           {[...Array(12)].map((_, i) => {
                             const mois = i + 1;
                             const isPaye = usager.moisPayes?.includes(mois);
                             return (
-                              <td key={i} className="month-cell">
+                              <td key={i} className="month-cell" style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                                 <span className={`mois-badge ${isPaye ? 'paye' : 'non-paye'}`}>
                                   {isPaye ? '✓' : '○'}
                                 </span>
                               </td>
                             );
                           })}
-                          <td className="total-cell">
+                          <td className="total-cell" style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>
                             <strong>{totalPayes}/12</strong>
                           </td>
-                          <td className="paye-cell">{totalPayeAr.toLocaleString()} Ar</td>
-                          <td className="status-cell">
+                          <td className="paye-cell" style={{ whiteSpace: 'nowrap' }}>
+                            {totalPayeAr.toLocaleString(locale)} Ar
+                          </td>
+                          <td className="status-cell" style={{ whiteSpace: 'nowrap' }}>
                             <span className="status-badge" style={{ background: `${statusColor}20`, color: statusColor }}>
                               {statusText}
                             </span>
                           </td>
-                          <td className="action-cell">
+                          <td className="action-cell" style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>
                             <button className="btn-view" onClick={() => openModal(usager)}>
                               <Eye size={18} />
                             </button>
@@ -565,7 +560,7 @@ const DateGrandSurface = () => {
                 </button>
               </div>
               <div className="pagination-info">
-                {indexOfFirstItem + 1} - {Math.min(indexOfLastItem, filteredUsagers.length)} sur {filteredUsagers.length}
+                {indexOfFirstItem + 1} - {Math.min(indexOfLastItem, filteredUsagers.length)} / {filteredUsagers.length}
               </div>
             </div>
           )}
@@ -587,65 +582,65 @@ const DateGrandSurface = () => {
             <div className="modal-body">
               <div className="modal-section">
                 <h4>
-                  <Building2 size={16} /> Informations
+                  <Building2 size={16} /> {t('Infos', 'Fampahalalana', 'Info')}
                 </h4>
                 <div className="modal-row">
                   <span>ID</span>
                   <strong>#{String(selectedUsager.id).padStart(3, '0')}</strong>
                 </div>
                 <div className="modal-row">
-                  <span>Dénomination</span>
+                  <span>{t('Nom', 'Anarana', 'Name')}</span>
                   <strong>{selectedUsager.denomination || '-'}</strong>
                 </div>
                 <div className="modal-row">
-                  <span>Demandeur</span>
+                  <span>{t('Demandeur', 'Mpangataka', 'Applicant')}</span>
                   <strong>{selectedUsager.demandeur || '-'}</strong>
                 </div>
                 <div className="modal-row">
-                  <span>Adresse</span>
+                  <span>{t('Adresse', 'Adiresy', 'Address')}</span>
                   <strong>{selectedUsager.adresse_siege || '-'}</strong>
                 </div>
                 <div className="modal-row">
-                  <span>Téléphone</span>
+                  <span>{t('Téléphone', 'Finday', 'Phone')}</span>
                   <strong>{selectedUsager.telephone || '-'}</strong>
                 </div>
                 <div className="modal-row">
-                  <span>Région</span>
+                  <span>{t('Région', 'Faritra', 'Region')}</span>
                   <strong>{selectedUsager.region || '-'}</strong>
                 </div>
                 <div className="modal-row">
-                  <span>Nb magasins</span>
+                  <span>{t('Magasins', 'Fivarotana', 'Stores')}</span>
                   <strong>{selectedUsager.nombre_magasins || '-'}</strong>
                 </div>
                 <div className="modal-row">
-                  <span>Montant mensuel</span>
-                  <strong>{(selectedUsager.montant_mensuel || 0).toLocaleString()} Ar</strong>
+                  <span>{t('Montant mois', 'Vola volana', 'Monthly amount')}</span>
+                  <strong>{(selectedUsager.montant_mensuel || 0).toLocaleString(locale)} Ar</strong>
                 </div>
               </div>
               <div className="modal-section">
                 <h4>
-                  <DollarSign size={16} /> Paiements - {selectedUsager.anneeCourante || anneeRecherche}
+                  <DollarSign size={16} /> {t('Paiements', 'Fandoavana', 'Payments')} - {selectedUsager.anneeCourante || anneeRecherche}
                 </h4>
                 <div className="modal-row">
-                  <span>Mois payés</span>
+                  <span>{t('Mois payés', 'Volana voaloa', 'Months paid')}</span>
                   <strong>{selectedUsager.totalMoisPayesAnnee || 0}/12</strong>
                 </div>
                 <div className="modal-row">
-                  <span>Détails</span>
+                  <span>{t('Détails', 'Antsipiriany', 'Details')}</span>
                   <strong>
                     {selectedUsager.moisPayes && selectedUsager.moisPayes.length > 0
                       ? selectedUsager.moisPayes.map((m) => moisLabelsShort[m - 1]).join(', ')
-                      : 'Aucun paiement'}
+                      : t('Aucun', 'Tsy misy', 'None')}
                   </strong>
                 </div>
                 <div className="modal-row">
-                  <span>Total payé</span>
+                  <span>{t('Total payé', 'Vola voaloa', 'Total paid')}</span>
                   <strong style={{ color: '#28a745' }}>
-                    {(selectedUsager.montant_total_paye || 0).toLocaleString()} Ar
+                    {(selectedUsager.montant_total_paye || 0).toLocaleString(locale)} Ar
                   </strong>
                 </div>
                 <div className="modal-row">
-                  <span>Statut</span>
+                  <span>{t('Statut', 'Toe-javatra', 'Status')}</span>
                   <strong>
                     <span
                       className="status-badge"
@@ -662,7 +657,7 @@ const DateGrandSurface = () => {
             </div>
             <div className="modal-footer">
               <button className="btn-modal-close" onClick={closeModal}>
-                Fermer
+                {t('Fermer', 'Hidio', 'Close')}
               </button>
             </div>
           </div>

@@ -1,31 +1,35 @@
 // src/pages/pdf/bilanGlobal_pdf.jsx
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import {
+  createPdfT,
+  getPdfMoisLabels,
+  formatPdfMontant,
+  formatPdfDate,
+} from './pdfI18n';
 
-const formatMontant = (valeur) => {
-  const n = Math.round(Number(valeur) || 0);
-  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-};
+// ✅ Wrapper pour jsPDF : formatMontant (utilise helper partagé)
+const formatMontant = formatPdfMontant;
 
-const formatDate = (dateString) => {
-  if (!dateString) return '';
-  try {
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return '';
-    return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  } catch { return ''; }
-};
+// ✅ Wrapper pour jsPDF : formatDate
+const formatDate = formatPdfDate;
 
 export const generateBilanGlobalPDF = async (statsData, options = {}) => {
   try {
+    // ✅ Langue depuis les options
+    const langue = options.langue || 'fr';
+    const t = createPdfT(langue);
+    const moisLabels = getPdfMoisLabels(langue);
+
     console.log('📄 Début génération Bilan Global PDF...');
+    console.log('🌍 Langue :', langue);
 
     const {
       annee = new Date().getFullYear(),
       responsable = 'DAF',
       dateGeneration = new Date().toLocaleDateString('fr-FR'),
       actionType = 'bilan_global',
-      title = 'Bilan Global OMDA'
+      title = t('Bilan Global OMDA', 'Bilan Global OMDA', 'OMDA Global Report')
     } = options;
 
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -45,34 +49,42 @@ export const generateBilanGlobalPDF = async (statsData, options = {}) => {
     doc.setFontSize(17);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(255, 255, 255);
-    doc.text('OMDA — ' + title, margin, 13);
+    doc.text(`OMDA — ${title}`, margin, 13);
 
     doc.setFontSize(9.5);
     doc.setFont('helvetica', 'normal');
-    doc.text('Office Malagasy du Droit d\'Auteur', margin, 20);
+    doc.text(
+      t(
+        "Office Malagasy du Droit d'Auteur",
+        "Birao Malagasy misahana ny Zon'ny Mpanoratra",
+        'Malagasy Copyright Office'
+      ),
+      margin,
+      20
+    );
 
     doc.setFontSize(9.5);
-    doc.text(`Année ${annee}`, pageWidth - margin, 13, { align: 'right' });
-    doc.text(`Généré le ${dateGeneration}`, pageWidth - margin, 20, { align: 'right' });
+    doc.text(`${t('Année', 'Taona', 'Year')} ${annee}`, pageWidth - margin, 13, { align: 'right' });
+    doc.text(`${t('Généré le', 'Noforonina ny', 'Generated on')} ${dateGeneration}`, pageWidth - margin, 20, { align: 'right' });
 
     y = 36;
 
     doc.setFontSize(9.5);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(0, 0, 0);
-    doc.text(`Responsable : ${responsable}`, margin, y);
-    doc.text(`Type : ${title}`, pageWidth - margin, y, { align: 'right' });
+    doc.text(`${t('Responsable', 'Tompon\'andraikitra', 'Manager')} : ${responsable}`, margin, y);
+    doc.text(`${t('Type', 'Karazana', 'Type')} : ${title}`, pageWidth - margin, y, { align: 'right' });
     y += 8;
 
-    // ===== RÉSUMÉ GÉNÉRAL (cartes) =====
+    // ===== RÉSUMÉ GÉNÉRAL =====
     const totalDossiers = statsData?.totalDossiers || 0;
     const totalPaiements = statsData?.totalPaiements || 0;
     const totalMontant = statsData?.totalMontant || 0;
 
     const cardData = [
-      { label: 'TOTAL DOSSIERS', value: totalDossiers.toLocaleString('fr-FR') },
-      { label: 'TOTAL FACTURES', value: totalPaiements.toLocaleString('fr-FR') },
-      { label: 'MONTANT TOTAL', value: `${formatMontant(totalMontant)} Ar` }
+      { label: t('TOTAL DOSSIERS', 'TOTALY RAKITRA', 'TOTAL FILES'), value: totalDossiers.toLocaleString('fr-FR') },
+      { label: t('TOTAL FACTURES', 'TOTALY FAKTIORA', 'TOTAL INVOICES'), value: totalPaiements.toLocaleString('fr-FR') },
+      { label: t('MONTANT TOTAL', 'VOLA TOTAL', 'TOTAL AMOUNT'), value: `${formatMontant(totalMontant)} Ar` }
     ];
 
     const cardWidth = (pageWidth - margin * 2 - 8 * 2) / 3;
@@ -98,31 +110,31 @@ export const generateBilanGlobalPDF = async (statsData, options = {}) => {
 
     y += cardHeight + 12;
 
-    // ===== SECTION SPÉCIFIQUE SELON LE TYPE D'ACTION =====
+    // ===== SECTION SPÉCIFIQUE =====
     switch (actionType) {
       case 'bilan_global':
-        await renderBilanGlobal(doc, statsData, y, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY);
+        await renderBilanGlobal(doc, statsData, y, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY, t);
         break;
       case 'bilan_region':
-        await renderBilanRegion(doc, statsData, y, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY);
+        await renderBilanRegion(doc, statsData, y, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY, t);
         break;
       case 'bilan_paiements':
-        await renderBilanPaiements(doc, statsData, y, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY);
+        await renderBilanPaiements(doc, statsData, y, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY, t);
         break;
       case 'bilan_recettes':
-        await renderBilanRecettes(doc, statsData, y, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY);
+        await renderBilanRecettes(doc, statsData, y, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY, t);
         break;
       case 'bilan_mensuel':
-        await renderBilanMensuel(doc, statsData, y, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY);
+        await renderBilanMensuel(doc, statsData, y, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY, t, moisLabels);
         break;
       case 'bilan_stats':
-        await renderBilanStats(doc, statsData, y, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY);
+        await renderBilanStats(doc, statsData, y, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY, t);
         break;
       default:
-        await renderBilanGlobal(doc, statsData, y, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY);
+        await renderBilanGlobal(doc, statsData, y, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY, t);
     }
 
-    // ===== PIED DE PAGE SUR TOUTES LES PAGES =====
+    // ===== PIED DE PAGE =====
     const pageCount = doc.internal.getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {
       doc.setPage(i);
@@ -134,17 +146,30 @@ export const generateBilanGlobalPDF = async (statsData, options = {}) => {
       doc.setFontSize(8);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(...NAVY);
-      doc.text('OMDA - Office Malagasy du Droit d\'Auteur', margin, footerY + 5);
+      doc.text(
+        t(
+          "OMDA - Office Malagasy du Droit d'Auteur",
+          "OMDA - Birao Malagasy misahana ny Zon'ny Mpanoratra",
+          'OMDA - Malagasy Copyright Office'
+        ),
+        margin,
+        footerY + 5
+      );
 
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(...GREY);
-      doc.text(`Page ${i} / ${pageCount}`, pageWidth - margin, footerY + 5, { align: 'right' });
+      doc.text(
+        `${t('Page', 'Pejy', 'Page')} ${i} / ${pageCount}`,
+        pageWidth - margin,
+        footerY + 5,
+        { align: 'right' }
+      );
     }
 
     const filename = `${actionType}_omda_${annee}_${new Date().toISOString().split('T')[0]}.pdf`;
     doc.save(filename);
 
-    console.log(`✅ ${title} PDF généré avec succès`);
+    console.log(`✅ ${title} PDF généré avec succès (langue: ${langue})`);
     return true;
 
   } catch (error) {
@@ -154,16 +179,15 @@ export const generateBilanGlobalPDF = async (statsData, options = {}) => {
 };
 
 // ============================================================
-// RENDER - Bilan Global (complet)
+// RENDER - Bilan Global
 // ============================================================
-async function renderBilanGlobal(doc, statsData, startY, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY) {
+async function renderBilanGlobal(doc, statsData, startY, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY, t) {
   let y = startY;
 
-  // ===== TABLEAU PAR CATÉGORIE =====
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...NAVY);
-  doc.text('RÉPARTITION PAR CATÉGORIE', margin, y);
+  doc.text(t('RÉPARTITION PAR CATÉGORIE', 'FIZARANA ISAKY NY SOKAJY', 'DISTRIBUTION BY CATEGORY'), margin, y);
   y += 3;
   doc.setDrawColor(...NAVY);
   doc.setLineWidth(0.4);
@@ -171,12 +195,12 @@ async function renderBilanGlobal(doc, statsData, startY, margin, pageWidth, page
   y += 6;
 
   const categories = [
-    { id: 'hotel', label: 'Hôtel' },
-    { id: 'grand-surface', label: 'Grande Surface' },
-    { id: 'bus', label: 'Transport' },
-    { id: 'nightclub', label: 'Night Club' },
-    { id: 'media', label: 'Radio / Télé' },
-    { id: 'occ', label: 'Occasionnel' }
+    { id: 'hotel', label: t('Hôtel', 'Hotely', 'Hotel') },
+    { id: 'grand-surface', label: t('Grande Surface', 'Fivarotana lehibe', 'Grand Surface') },
+    { id: 'bus', label: t('Transport', 'Fitaterana', 'Transport') },
+    { id: 'nightclub', label: t('Night Club', 'Club alina', 'Night Club') },
+    { id: 'media', label: t('Radio / Télé', 'Radio / Tele', 'Radio / TV') },
+    { id: 'occ', label: t('Occasionnel', 'Fotoana manokana', 'Occasional') }
   ];
 
   const categoryStats = categories.map(cat => {
@@ -198,7 +222,7 @@ async function renderBilanGlobal(doc, statsData, startY, margin, pageWidth, page
   });
 
   tableData.push([
-    'TOTAL GÉNÉRAL',
+    t('TOTAL GÉNÉRAL', 'TOTALY ANKAPOBENY', 'GRAND TOTAL'),
     String(categoryStats.reduce((acc, c) => acc + (c.total || 0), 0)),
     String(categoryStats.reduce((acc, c) => acc + (c.nouveaux || 0), 0)),
     `${formatMontant(totalGeneral)} Ar`,
@@ -207,7 +231,13 @@ async function renderBilanGlobal(doc, statsData, startY, margin, pageWidth, page
 
   autoTable(doc, {
     startY: y,
-    head: [['Catégorie', 'Dossiers', 'Ce mois', 'Montant', 'Part']],
+    head: [[
+      t('Catégorie', 'Sokajy', 'Category'),
+      t('Dossiers', 'Rakitra', 'Files'),
+      t('Ce mois', 'Ity volana ity', 'This month'),
+      t('Montant', 'Vola', 'Amount'),
+      t('Part', 'Anjara', 'Share')
+    ]],
     body: tableData,
     theme: 'grid',
     styles: {
@@ -221,9 +251,10 @@ async function renderBilanGlobal(doc, statsData, startY, margin, pageWidth, page
     headStyles: {
       fillColor: NAVY,
       textColor: [255, 255, 255],
-      fontSize: 9.5,
+      fontSize: 9,
       fontStyle: 'bold',
-      halign: 'center'
+      halign: 'center',
+      cellPadding: 3
     },
     columnStyles: {
       0: { cellWidth: 48, halign: 'left' },
@@ -243,7 +274,6 @@ async function renderBilanGlobal(doc, statsData, startY, margin, pageWidth, page
 
   y = doc.lastAutoTable.finalY + 12;
 
-  // ===== DÉTAIL PAR CATÉGORIE =====
   if (y > pageHeight - 60) {
     doc.addPage();
     y = margin;
@@ -252,7 +282,7 @@ async function renderBilanGlobal(doc, statsData, startY, margin, pageWidth, page
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...NAVY);
-  doc.text('DÉTAIL DES DOSSIERS ACTIFS', margin, y);
+  doc.text(t('DÉTAIL DES DOSSIERS ACTIFS', 'ANTSIPIRIHANY NY RAKITRA MAVITRIKA', 'ACTIVE FILES DETAILS'), margin, y);
   y += 3;
   doc.setDrawColor(...NAVY);
   doc.line(margin, y, margin + 68, y);
@@ -277,7 +307,11 @@ async function renderBilanGlobal(doc, statsData, startY, margin, pageWidth, page
     doc.setFontSize(8.5);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(...GREY);
-    doc.text(`${cat.total || 0} dossier(s) au total  •  ${cat.nouveaux || 0} nouveau(x) ce mois`, margin + 4, y + 14.5);
+    doc.text(
+      `${cat.total || 0} ${t('dossier(s) au total', 'rakitra amin\'ny fitambarany', 'file(s) total')}  •  ${cat.nouveaux || 0} ${t('nouveau(x) ce mois', 'vaovao ity volana ity', 'new this month')}`,
+      margin + 4,
+      y + 14.5
+    );
 
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...NAVY);
@@ -291,13 +325,13 @@ async function renderBilanGlobal(doc, statsData, startY, margin, pageWidth, page
 // ============================================================
 // RENDER - Bilan par Région
 // ============================================================
-async function renderBilanRegion(doc, statsData, startY, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY) {
+async function renderBilanRegion(doc, statsData, startY, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY, t) {
   let y = startY;
 
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...NAVY);
-  doc.text('RÉPARTITION PAR RÉGION', margin, y);
+  doc.text(t('RÉPARTITION PAR RÉGION', 'FIZARANA ISAKY NY FARITRA', 'DISTRIBUTION BY REGION'), margin, y);
   y += 3;
   doc.setDrawColor(...NAVY);
   doc.line(margin, y, margin + 58, y);
@@ -307,7 +341,7 @@ async function renderBilanRegion(doc, statsData, startY, margin, pageWidth, page
 
   if (regions.length > 0) {
     const tableData = regions.map(region => [
-      region.region || 'Non spécifié',
+      region.region || t('Non spécifié', 'Tsy voafaritra', 'Not specified'),
       String(region.total || 0),
       String(region.usagers || 0),
       `${formatMontant(region.montant)} Ar`
@@ -315,7 +349,7 @@ async function renderBilanRegion(doc, statsData, startY, margin, pageWidth, page
 
     const totalRegionMontant = regions.reduce((acc, r) => acc + (r.montant || 0), 0);
     tableData.push([
-      'TOTAL GÉNÉRAL',
+      t('TOTAL GÉNÉRAL', 'TOTALY ANKAPOBENY', 'GRAND TOTAL'),
       String(regions.reduce((acc, r) => acc + (r.total || 0), 0)),
       String(regions.reduce((acc, r) => acc + (r.usagers || 0), 0)),
       `${formatMontant(totalRegionMontant)} Ar`
@@ -323,7 +357,12 @@ async function renderBilanRegion(doc, statsData, startY, margin, pageWidth, page
 
     autoTable(doc, {
       startY: y,
-      head: [['Région', 'Dossiers', 'Usagers uniques', 'Montant']],
+      head: [[
+        t('Région', 'Faritra', 'Region'),
+        t('Dossiers', 'Rakitra', 'Files'),
+        t('Usagers uniques', 'Mpampiasa tokana', 'Unique users'),
+        t('Montant', 'Vola', 'Amount')
+      ]],
       body: tableData,
       theme: 'grid',
       styles: {
@@ -337,9 +376,10 @@ async function renderBilanRegion(doc, statsData, startY, margin, pageWidth, page
       headStyles: {
         fillColor: NAVY,
         textColor: [255, 255, 255],
-        fontSize: 9.5,
+        fontSize: 9,
         fontStyle: 'bold',
-        halign: 'center'
+        halign: 'center',
+        cellPadding: 3
       },
       columnStyles: {
         0: { cellWidth: 60, halign: 'left' },
@@ -361,7 +401,7 @@ async function renderBilanRegion(doc, statsData, startY, margin, pageWidth, page
     doc.setFontSize(10);
     doc.setFont('helvetica', 'italic');
     doc.setTextColor(...GREY);
-    doc.text('Aucune donnée par région disponible', margin, y);
+    doc.text(t('Aucune donnée par région disponible', 'Tsy misy angona isaky ny faritra', 'No region data available'), margin, y);
     y += 10;
   }
 }
@@ -369,13 +409,13 @@ async function renderBilanRegion(doc, statsData, startY, margin, pageWidth, page
 // ============================================================
 // RENDER - Bilan Paiements
 // ============================================================
-async function renderBilanPaiements(doc, statsData, startY, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY) {
+async function renderBilanPaiements(doc, statsData, startY, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY, t) {
   let y = startY;
 
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...NAVY);
-  doc.text('HISTORIQUE DES PAIEMENTS', margin, y);
+  doc.text(t('HISTORIQUE DES PAIEMENTS', 'TAHIRIN\'NY FAMBORANA VOLA', 'PAYMENT HISTORY'), margin, y);
   y += 3;
   doc.setDrawColor(...NAVY);
   doc.line(margin, y, margin + 62, y);
@@ -394,7 +434,13 @@ async function renderBilanPaiements(doc, statsData, startY, margin, pageWidth, p
 
     autoTable(doc, {
       startY: y,
-      head: [['Référence', 'Type', 'Date', 'Montant', 'Statut']],
+      head: [[
+        t('Référence', 'Fanondroana', 'Reference'),
+        t('Type', 'Karazana', 'Type'),
+        t('Date', 'Daty', 'Date'),
+        t('Montant', 'Vola', 'Amount'),
+        t('Statut', 'Toe-javatra', 'Status')
+      ]],
       body: tableData,
       theme: 'grid',
       styles: {
@@ -410,7 +456,8 @@ async function renderBilanPaiements(doc, statsData, startY, margin, pageWidth, p
         textColor: [255, 255, 255],
         fontSize: 8.5,
         fontStyle: 'bold',
-        halign: 'center'
+        halign: 'center',
+        cellPadding: 2.5
       },
       columnStyles: {
         0: { cellWidth: 40, halign: 'left' },
@@ -423,19 +470,23 @@ async function renderBilanPaiements(doc, statsData, startY, margin, pageWidth, p
     });
 
     y = doc.lastAutoTable.finalY + 12;
-    
+
     if (paiements.length > 50) {
       doc.setFontSize(8);
       doc.setFont('helvetica', 'italic');
       doc.setTextColor(...GREY);
-      doc.text(`* Affichage des 50 premiers paiements sur ${paiements.length}`, margin, y);
+      doc.text(
+        `* ${t('Affichage des 50 premiers paiements sur', 'Fampisehoana ny fandoavana 50 voalohany amin\'ny', 'Showing first 50 payments out of')} ${paiements.length}`,
+        margin,
+        y
+      );
       y += 8;
     }
   } else {
     doc.setFontSize(10);
     doc.setFont('helvetica', 'italic');
     doc.setTextColor(...GREY);
-    doc.text('Aucun paiement enregistré', margin, y);
+    doc.text(t('Aucun paiement enregistré', 'Tsy misy fandoavana voatahiry', 'No payment recorded'), margin, y);
     y += 10;
   }
 }
@@ -443,25 +494,25 @@ async function renderBilanPaiements(doc, statsData, startY, margin, pageWidth, p
 // ============================================================
 // RENDER - Bilan Recettes
 // ============================================================
-async function renderBilanRecettes(doc, statsData, startY, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY) {
+async function renderBilanRecettes(doc, statsData, startY, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY, t) {
   let y = startY;
 
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...NAVY);
-  doc.text('RECETTES PAR CATÉGORIE', margin, y);
+  doc.text(t('RECETTES PAR CATÉGORIE', 'VOLA VOARAY ISAKY NY SOKAJY', 'REVENUE BY CATEGORY'), margin, y);
   y += 3;
   doc.setDrawColor(...NAVY);
   doc.line(margin, y, margin + 58, y);
   y += 6;
 
   const categories = [
-    { id: 'hotel', label: '🏨 Hôtel' },
-    { id: 'grand-surface', label: '🏬 Grande Surface' },
-    { id: 'bus', label: '🚌 Transport' },
-    { id: 'nightclub', label: '🎭 Night Club' },
-    { id: 'media', label: '📺 Média' },
-    { id: 'occ', label: '🎪 Occasionnel' }
+    { id: 'hotel', label: `🏨 ${t('Hôtel', 'Hotely', 'Hotel')}` },
+    { id: 'grand-surface', label: `🏬 ${t('Grande Surface', 'Fivarotana lehibe', 'Grand Surface')}` },
+    { id: 'bus', label: `🚌 ${t('Transport', 'Fitaterana', 'Transport')}` },
+    { id: 'nightclub', label: `🎭 ${t('Night Club', 'Club alina', 'Night Club')}` },
+    { id: 'media', label: `📺 ${t('Média', 'Haino aman-jery', 'Media')}` },
+    { id: 'occ', label: `🎪 ${t('Occasionnel', 'Fotoana manokana', 'Occasional')}` }
   ];
 
   const categoryStats = categories.map(cat => {
@@ -481,14 +532,18 @@ async function renderBilanRecettes(doc, statsData, startY, margin, pageWidth, pa
   });
 
   tableData.push([
-    'TOTAL GÉNÉRAL',
+    `📌 ${t('TOTAL GÉNÉRAL', 'TOTALY ANKAPOBENY', 'GRAND TOTAL')}`,
     `${formatMontant(totalGeneral)} Ar`,
     '100 %'
   ]);
 
   autoTable(doc, {
     startY: y,
-    head: [['Catégorie', 'Montant', 'Part']],
+    head: [[
+      t('Catégorie', 'Sokajy', 'Category'),
+      t('Montant', 'Vola', 'Amount'),
+      t('Part', 'Anjara', 'Share')
+    ]],
     body: tableData,
     theme: 'grid',
     styles: {
@@ -504,7 +559,8 @@ async function renderBilanRecettes(doc, statsData, startY, margin, pageWidth, pa
       textColor: [255, 255, 255],
       fontSize: 10,
       fontStyle: 'bold',
-      halign: 'center'
+      halign: 'center',
+      cellPadding: 4
     },
     columnStyles: {
       0: { cellWidth: 80, halign: 'left' },
@@ -526,7 +582,7 @@ async function renderBilanRecettes(doc, statsData, startY, margin, pageWidth, pa
 // ============================================================
 // RENDER - Bilan Mensuel
 // ============================================================
-async function renderBilanMensuel(doc, statsData, startY, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY) {
+async function renderBilanMensuel(doc, statsData, startY, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY, t, moisLabels) {
   let y = startY;
 
   const moisActuel = new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
@@ -534,17 +590,20 @@ async function renderBilanMensuel(doc, statsData, startY, margin, pageWidth, pag
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...NAVY);
-  doc.text(`RAPPORT MENSUEL - ${moisActuel.toUpperCase()}`, margin, y);
+  doc.text(
+    `${t('RAPPORT MENSUEL', 'TATITRA ISAM-BOLANA', 'MONTHLY REPORT')} - ${moisActuel.toUpperCase()}`,
+    margin,
+    y
+  );
   y += 3;
   doc.setDrawColor(...NAVY);
   doc.line(margin, y, margin + 70, y);
   y += 6;
 
-  // Résumé du mois
   const factures = statsData?.factures || [];
   const maintenant = new Date();
   const debutMois = new Date(maintenant.getFullYear(), maintenant.getMonth(), 1);
-  
+
   const facturesMois = factures.filter(f => {
     const date = f.created_at ? new Date(f.created_at) : null;
     return date && date >= debutMois;
@@ -554,9 +613,9 @@ async function renderBilanMensuel(doc, statsData, startY, margin, pageWidth, pag
   const montantMois = facturesMois.reduce((acc, f) => acc + (parseFloat(f.soit_total) || 0), 0);
 
   const cardData = [
-    { label: 'DOSSIERS DU MOIS', value: totalMois.toLocaleString('fr-FR') },
-    { label: 'MONTANT DU MOIS', value: `${formatMontant(montantMois)} Ar` },
-    { label: 'MOYENNE PAR DOSSIER', value: totalMois > 0 ? `${formatMontant(montantMois / totalMois)} Ar` : '0 Ar' }
+    { label: t('DOSSIERS DU MOIS', 'RAKITRA ITY VOLANA ITY', 'FILES THIS MONTH'), value: totalMois.toLocaleString('fr-FR') },
+    { label: t('MONTANT DU MOIS', 'VOLA ITY VOLANA ITY', 'AMOUNT THIS MONTH'), value: `${formatMontant(montantMois)} Ar` },
+    { label: t('MOYENNE PAR DOSSIER', 'SALANISA ISAKY NY RAKITRA', 'AVERAGE PER FILE'), value: totalMois > 0 ? `${formatMontant(montantMois / totalMois)} Ar` : '0 Ar' }
   ];
 
   const cardWidth = (pageWidth - margin * 2 - 8 * 2) / 3;
@@ -582,12 +641,11 @@ async function renderBilanMensuel(doc, statsData, startY, margin, pageWidth, pag
 
   y += cardHeight + 12;
 
-  // Détail des dossiers du mois
   if (facturesMois.length > 0) {
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...NAVY);
-    doc.text('DÉTAIL DES DOSSIERS DU MOIS', margin, y);
+    doc.text(t('DÉTAIL DES DOSSIERS DU MOIS', 'ANTSIPIRIHANY NY RAKITRA ITY VOLANA ITY', 'FILES DETAILS THIS MONTH'), margin, y);
     y += 3;
     doc.setDrawColor(...NAVY);
     doc.line(margin, y, margin + 58, y);
@@ -602,7 +660,12 @@ async function renderBilanMensuel(doc, statsData, startY, margin, pageWidth, pag
 
     autoTable(doc, {
       startY: y,
-      head: [['Bénéficiaire', 'Type', 'Date', 'Montant']],
+      head: [[
+        t('Bénéficiaire', 'Mpandray soa', 'Beneficiary'),
+        t('Type', 'Karazana', 'Type'),
+        t('Date', 'Daty', 'Date'),
+        t('Montant', 'Vola', 'Amount')
+      ]],
       body: tableData,
       theme: 'grid',
       styles: {
@@ -618,7 +681,8 @@ async function renderBilanMensuel(doc, statsData, startY, margin, pageWidth, pag
         textColor: [255, 255, 255],
         fontSize: 8.5,
         fontStyle: 'bold',
-        halign: 'center'
+        halign: 'center',
+        cellPadding: 2.5
       },
       columnStyles: {
         0: { cellWidth: 60, halign: 'left' },
@@ -630,19 +694,23 @@ async function renderBilanMensuel(doc, statsData, startY, margin, pageWidth, pag
     });
 
     y = doc.lastAutoTable.finalY + 12;
-    
+
     if (facturesMois.length > 30) {
       doc.setFontSize(8);
       doc.setFont('helvetica', 'italic');
       doc.setTextColor(...GREY);
-      doc.text(`* Affichage des 30 premiers dossiers sur ${facturesMois.length}`, margin, y);
+      doc.text(
+        `* ${t('Affichage des 30 premiers dossiers sur', 'Fampisehoana ny rakitra 30 voalohany amin\'ny', 'Showing first 30 files out of')} ${facturesMois.length}`,
+        margin,
+        y
+      );
       y += 8;
     }
   } else {
     doc.setFontSize(10);
     doc.setFont('helvetica', 'italic');
     doc.setTextColor(...GREY);
-    doc.text('Aucun dossier pour le mois en cours', margin, y);
+    doc.text(t('Aucun dossier pour le mois en cours', 'Tsy misy rakitra amin\'ity volana ity', 'No file for the current month'), margin, y);
     y += 10;
   }
 }
@@ -650,19 +718,18 @@ async function renderBilanMensuel(doc, statsData, startY, margin, pageWidth, pag
 // ============================================================
 // RENDER - Statistiques Globales
 // ============================================================
-async function renderBilanStats(doc, statsData, startY, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY) {
+async function renderBilanStats(doc, statsData, startY, margin, pageWidth, pageHeight, NAVY, GREY, LIGHT_GREY, t) {
   let y = startY;
 
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...NAVY);
-  doc.text('STATISTIQUES GLOBALES', margin, y);
+  doc.text(t('STATISTIQUES GLOBALES', 'STATISTIKA ANKAPOBENY', 'GLOBAL STATISTICS'), margin, y);
   y += 3;
   doc.setDrawColor(...NAVY);
   doc.line(margin, y, margin + 55, y);
   y += 6;
 
-  // Statistiques clés
   const totalDossiers = statsData?.totalDossiers || 0;
   const totalUsagers = statsData?.totalUsagersUniques || 0;
   const totalPaiements = statsData?.totalPaiements || 0;
@@ -670,12 +737,12 @@ async function renderBilanStats(doc, statsData, startY, margin, pageWidth, pageH
   const totalRegions = statsData?.parRegion?.length || 0;
 
   const statsCards = [
-    { label: 'Total Dossiers', value: totalDossiers.toLocaleString('fr-FR'), icon: '📁' },
-    { label: 'Usagers Uniques', value: totalUsagers.toLocaleString('fr-FR'), icon: '👤' },
-    { label: 'Total Factures', value: totalPaiements.toLocaleString('fr-FR'), icon: '📄' },
-    { label: 'Montant Total', value: `${formatMontant(totalMontant)} Ar`, icon: '💰' },
-    { label: 'Régions', value: totalRegions.toLocaleString('fr-FR'), icon: '🌍' },
-    { label: 'Catégories', value: '6', icon: '📊' }
+    { label: t('Total Dossiers', 'Totaly rakitra', 'Total Files'), value: totalDossiers.toLocaleString('fr-FR'), icon: '📁' },
+    { label: t('Usagers Uniques', 'Mpampiasa tokana', 'Unique Users'), value: totalUsagers.toLocaleString('fr-FR'), icon: '👤' },
+    { label: t('Total Factures', 'Totaly faktiora', 'Total Invoices'), value: totalPaiements.toLocaleString('fr-FR'), icon: '📄' },
+    { label: t('Montant Total', 'Vola total', 'Total Amount'), value: `${formatMontant(totalMontant)} Ar`, icon: '💰' },
+    { label: t('Régions', 'Faritra', 'Regions'), value: totalRegions.toLocaleString('fr-FR'), icon: '🌍' },
+    { label: t('Catégories', 'Sokajy', 'Categories'), value: '6', icon: '📊' }
   ];
 
   const cardWidth = (pageWidth - margin * 2 - 8 * 2) / 3;
@@ -684,11 +751,7 @@ async function renderBilanStats(doc, statsData, startY, margin, pageWidth, pageH
   statsCards.forEach((card, i) => {
     const x = margin + (i % 3) * (cardWidth + 8);
     const rowY = y + Math.floor(i / 3) * (cardHeight + 6);
-    
-    if (i % 3 === 0 && i > 0) {
-      // Nouvelle ligne
-    }
-    
+
     doc.setDrawColor(...LIGHT_GREY);
     doc.setLineWidth(0.3);
     doc.setFillColor(248, 248, 250);
@@ -707,7 +770,6 @@ async function renderBilanStats(doc, statsData, startY, margin, pageWidth, pageH
 
   y += Math.ceil(statsCards.length / 3) * (cardHeight + 6) + 12;
 
-  // Détail par catégorie
   if (y > pageHeight - 80) {
     doc.addPage();
     y = margin;
@@ -716,19 +778,19 @@ async function renderBilanStats(doc, statsData, startY, margin, pageWidth, pageH
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...NAVY);
-  doc.text('DÉTAIL PAR CATÉGORIE', margin, y);
+  doc.text(t('DÉTAIL PAR CATÉGORIE', 'ANTSIPIRIHANY ISAKY NY SOKAJY', 'DETAIL BY CATEGORY'), margin, y);
   y += 3;
   doc.setDrawColor(...NAVY);
   doc.line(margin, y, margin + 58, y);
   y += 6;
 
   const categories = [
-    { id: 'hotel', label: 'Hôtel', emoji: '🏨' },
-    { id: 'grand-surface', label: 'Grande Surface', emoji: '🏬' },
-    { id: 'bus', label: 'Transport', emoji: '🚌' },
-    { id: 'nightclub', label: 'Night Club', emoji: '🎭' },
-    { id: 'media', label: 'Média', emoji: '📺' },
-    { id: 'occ', label: 'Occasionnel', emoji: '🎪' }
+    { id: 'hotel', label: t('Hôtel', 'Hotely', 'Hotel'), emoji: '🏨' },
+    { id: 'grand-surface', label: t('Grande Surface', 'Fivarotana lehibe', 'Grand Surface'), emoji: '🏬' },
+    { id: 'bus', label: t('Transport', 'Fitaterana', 'Transport'), emoji: '🚌' },
+    { id: 'nightclub', label: t('Night Club', 'Club alina', 'Night Club'), emoji: '🎭' },
+    { id: 'media', label: t('Média', 'Haino aman-jery', 'Media'), emoji: '📺' },
+    { id: 'occ', label: t('Occasionnel', 'Fotoana manokana', 'Occasional'), emoji: '🎪' }
   ];
 
   const categoryStats = categories.map(cat => {
@@ -750,7 +812,7 @@ async function renderBilanStats(doc, statsData, startY, margin, pageWidth, pageH
   });
 
   tableData.push([
-    '📌 TOTAL GÉNÉRAL',
+    `📌 ${t('TOTAL GÉNÉRAL', 'TOTALY ANKAPOBENY', 'GRAND TOTAL')}`,
     String(categoryStats.reduce((acc, c) => acc + (c.total || 0), 0)),
     String(categoryStats.reduce((acc, c) => acc + (c.nouveaux || 0), 0)),
     `${formatMontant(totalGeneral)} Ar`,
@@ -759,7 +821,13 @@ async function renderBilanStats(doc, statsData, startY, margin, pageWidth, pageH
 
   autoTable(doc, {
     startY: y,
-    head: [['Catégorie', 'Dossiers', 'Nouveaux', 'Montant', 'Part']],
+    head: [[
+      t('Catégorie', 'Sokajy', 'Category'),
+      t('Dossiers', 'Rakitra', 'Files'),
+      t('Nouveaux', 'Vaovao', 'New'),
+      t('Montant', 'Vola', 'Amount'),
+      t('Part', 'Anjara', 'Share')
+    ]],
     body: tableData,
     theme: 'grid',
     styles: {
@@ -773,9 +841,10 @@ async function renderBilanStats(doc, statsData, startY, margin, pageWidth, pageH
     headStyles: {
       fillColor: NAVY,
       textColor: [255, 255, 255],
-      fontSize: 9.5,
+      fontSize: 9,
       fontStyle: 'bold',
-      halign: 'center'
+      halign: 'center',
+      cellPadding: 3
     },
     columnStyles: {
       0: { cellWidth: 55, halign: 'left' },

@@ -1,17 +1,31 @@
 // src/pages/fact.jsx
-import React, { useState, useEffect } from 'react';
-import { 
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import {
   FileText, CheckSquare, Search, ChevronLeft, ChevronRight,
   ChevronsLeft, ChevronsRight, X, CheckCircle, Clock, User,
   Calendar, DollarSign, Hash, Tag, Info, List, AlertCircle,
   RefreshCw, Building, MapPin, Phone, Mail, CreditCard,
-  Briefcase, Key, Percent, FileCheck, ArrowLeft, Home
+  Briefcase, Key, Percent, FileCheck, ArrowLeft, Home,
 } from 'lucide-react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+// ✅ Hook unique de traduction
+import { useT } from '../hooks/useT';
 import '../styles/facture_conf.css';
 
 const Fact = () => {
+  const navigate = useNavigate();
+
+  // ✅ LANGUE UNIQUE
+  const { t, langue } = useT();
+
+  // ✅ Locale pour formatage
+  const locale = useMemo(() => {
+    if (langue === 'en') return 'en-US';
+    if (langue === 'mg') return 'fr-MG';
+    return 'fr-FR';
+  }, [langue]);
+
   const [factures, setFactures] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -28,7 +42,6 @@ const Fact = () => {
   const [regionsDisponibles, setRegionsDisponibles] = useState([]);
   const [anneesDisponibles, setAnneesDisponibles] = useState([]);
 
-  const navigate = useNavigate();
   const API_BASE = 'http://localhost:3001/api/recfacture';
 
   useEffect(() => {
@@ -43,10 +56,12 @@ const Fact = () => {
     fetchDafName();
   }, []);
 
-  useEffect(() => { fetchFactures(); }, []);
+  useEffect(() => { fetchFactures(); // eslint-disable-next-line
+  }, []);
 
   useEffect(() => {
     if (factures.length > 0) extraireFiltresDisponibles();
+    // eslint-disable-next-line
   }, [factures]);
 
   const extraireFiltresDisponibles = () => {
@@ -87,16 +102,20 @@ const Fact = () => {
         }
         if (response.data.dafName) setDafName(response.data.dafName);
       } else {
-        setError(response.data.message || 'Erreur lors du chargement des factures');
+        setError(response.data.message || t(
+          'Erreur lors du chargement des factures',
+          'Nisy olana tamin\'ny fakana ny faktiora',
+          'Error loading invoices'
+        ));
       }
     } catch (err) {
       console.error('❌ Erreur récupération factures:', err.message);
       if (err.response) {
-        if (err.response.status === 404) setError(`Route API non trouvée (404).`);
-        else if (err.response.status === 500) setError(`Erreur serveur (500): ${err.response.data?.message || 'Erreur interne'}`);
+        if (err.response.status === 404) setError(t('Route API non trouvée (404).', 'Tsy hita ny lalana API (404).', 'API route not found (404).'));
+        else if (err.response.status === 500) setError(`${t('Erreur serveur', 'Olana amin\'ny serveur', 'Server error')} (500): ${err.response.data?.message || t('Erreur interne', 'Olana anatiny', 'Internal error')}`);
         else setError(`Erreur ${err.response.status}: ${err.response.data?.message || err.message}`);
       } else if (err.request) {
-        setError('Impossible de contacter le serveur.');
+        setError(t('Impossible de contacter le serveur.', 'Tsy afaka mifandray amin\'ny serveur.', 'Cannot contact server.'));
       } else {
         setError(`Erreur: ${err.message}`);
       }
@@ -108,31 +127,40 @@ const Fact = () => {
   const handleBackToDashboard = () => navigate('/dashboard');
 
   const formatQuittance = (num) => (!num && num !== 0) ? '' : String(num).padStart(7, '0');
-  const formatMontant = (m) => (!m && m !== 0) ? '0' : new Intl.NumberFormat('fr-FR').format(m);
 
-  const formatDate = (dateStr) => {
+  const formatMontant = useCallback((m) => {
+    if (!m && m !== 0) return '0';
+    return new Intl.NumberFormat(locale).format(m);
+  }, [locale]);
+
+  const formatDate = useCallback((dateStr) => {
     if (!dateStr) return '';
     try {
       const date = new Date(dateStr);
       if (isNaN(date.getTime())) return '';
-      return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+      return date.toLocaleDateString(locale, { day: '2-digit', month: '2-digit', year: 'numeric' });
     } catch { return ''; }
-  };
+  }, [locale]);
 
-  const getMonthName = (month) => {
-    const months = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 
-                   'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-    return months[month - 1] || '';
-  };
+  // ✅ Mois traduits (mémoïsés)
+  const moisLabels = useMemo(() => {
+    if (langue === 'en') {
+      return ['January', 'February', 'March', 'April', 'May', 'June',
+              'July', 'August', 'September', 'October', 'November', 'December'];
+    }
+    if (langue === 'mg') {
+      return ['Janoary', 'Febroary', 'Martsa', 'Aprily', 'Mey', 'Jona',
+              'Jolay', 'Aogositra', 'Septambra', 'Oktobra', 'Novambra', 'Desambra'];
+    }
+    return ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+            'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+  }, [langue]);
+
+  const getMonthName = (month) => moisLabels[month - 1] || '';
 
   const getMoisOptions = () => [
-    { value: '', label: 'Tous les mois' },
-    { value: '1', label: 'Janvier' }, { value: '2', label: 'Février' },
-    { value: '3', label: 'Mars' }, { value: '4', label: 'Avril' },
-    { value: '5', label: 'Mai' }, { value: '6', label: 'Juin' },
-    { value: '7', label: 'Juillet' }, { value: '8', label: 'Août' },
-    { value: '9', label: 'Septembre' }, { value: '10', label: 'Octobre' },
-    { value: '11', label: 'Novembre' }, { value: '12', label: 'Décembre' }
+    { value: '', label: t('Tous les mois', 'Ny volana rehetra', 'All months') },
+    ...moisLabels.map((label, idx) => ({ value: String(idx + 1), label })),
   ];
 
   const resetFilters = () => {
@@ -189,21 +217,27 @@ const Fact = () => {
           <FileText size={28} className="fact-logo-icon" />
           <div>
             <h1>OMDA</h1>
-            <span>Office Malgasy du Droit d'Auteur</span>
+            <span>
+              {t(
+                "Office Malagasy du Droit d'Auteur",
+                "Birao Malagasy momba ny Zon'ny Mpanoratra",
+                'Malagasy Copyright Office'
+              )}
+            </span>
           </div>
         </div>
         <div className="fact-header-actions">
-          <button 
+          <button
             className={`fact-btn-action ${vue === 'historique' ? 'active' : ''}`}
             onClick={() => { setVue('historique'); setPageCourante(1); }}
           >
-            <List size={16} /> Historique de facture
+            <List size={16} /> {t('Historique de facture', 'Tantaran\'ny faktiora', 'Invoice history')}
           </button>
-          <button 
+          <button
             className={`fact-btn-action ${vue === 'checklist' ? 'active' : ''}`}
             onClick={() => { setVue('checklist'); setPageCourante(1); }}
           >
-            <CheckSquare size={16} /> Check list
+            <CheckSquare size={16} /> {t('Check list', 'Check list', 'Check list')}
           </button>
         </div>
       </div>
@@ -214,7 +248,11 @@ const Fact = () => {
           <input
             type="text"
             className="fact-search-input"
-            placeholder="Rechercher une facture (N°, client, quittance...)"
+            placeholder={t(
+              'Rechercher une facture (N°, client, quittance...)',
+              'Hikaroka faktiora (N°, mpanjifa, taratasy...)',
+              'Search invoice (N°, client, receipt...)'
+            )}
             value={searchTerm}
             onChange={(e) => { setSearchTerm(e.target.value); setPageCourante(1); }}
           />
@@ -223,7 +261,7 @@ const Fact = () => {
         <div className="fact-filter-wrapper">
           <select className="fact-filter-select" value={filtreRegion}
             onChange={(e) => { setFiltreRegion(e.target.value); setPageCourante(1); }}>
-            <option value="">Toutes les régions</option>
+            <option value="">{t('Toutes les régions', 'Ny faritra rehetra', 'All regions')}</option>
             {regionsDisponibles.map(region => (
               <option key={region} value={region}>{region}</option>
             ))}
@@ -231,7 +269,7 @@ const Fact = () => {
 
           <select className="fact-filter-select" value={filtreAnnee}
             onChange={(e) => { setFiltreAnnee(e.target.value); setPageCourante(1); }}>
-            <option value="">Toutes les années</option>
+            <option value="">{t('Toutes les années', 'Ny taona rehetra', 'All years')}</option>
             {anneesDisponibles.map(annee => (
               <option key={annee} value={annee}>{annee}</option>
             ))}
@@ -245,7 +283,7 @@ const Fact = () => {
           </select>
 
           {(filtreRegion || filtreAnnee || filtreMois || searchTerm) && (
-            <button className="fact-btn-filter-reset" onClick={resetFilters} title="Réinitialiser">
+            <button className="fact-btn-filter-reset" onClick={resetFilters} title={t('Réinitialiser', 'Averina', 'Reset')}>
               <X size={14} />
             </button>
           )}
@@ -253,9 +291,9 @@ const Fact = () => {
 
         <span className="fact-total-badge">
           <FileText size={14} />
-          {filteredFactures.length} facture(s)
+          {filteredFactures.length} {t('facture(s)', 'faktiora', 'invoice(s)')}
         </span>
-        <button className="fact-btn-refresh" onClick={fetchFactures} title="Rafraîchir">
+        <button className="fact-btn-refresh" onClick={fetchFactures} title={t('Rafraîchir', 'Havaozy', 'Refresh')}>
           <RefreshCw size={16} />
         </button>
       </div>
@@ -269,13 +307,13 @@ const Fact = () => {
           <thead>
             <tr>
               <th className="fact-col-num"><Hash size={14} /> #</th>
-              <th><FileText size={14} /> N° FACTURE</th>
-              <th className="fact-col-client"><User size={14} /> CLIENT</th>
-              <th className="fact-col-description"><FileText size={14} /> DÉNOMINATION</th>
-              <th className="fact-col-total"><DollarSign size={14} /> TOTAL</th>
-              <th className="fact-col-date"><Calendar size={14} /> DATE</th>
-              <th className="fact-col-paiement"><CheckCircle size={14} /> PAIEMENT</th>
-              <th className="fact-col-quittance"><Tag size={14} /> QUITTANCE</th>
+              <th><FileText size={14} /> {t('N° FACTURE', 'N° FAKTIORA', 'INVOICE N°')}</th>
+              <th className="fact-col-client"><User size={14} /> {t('CLIENT', 'MPANJIFA', 'CLIENT')}</th>
+              <th className="fact-col-description"><FileText size={14} /> {t('DÉNOMINATION', 'ANARANA', 'NAME')}</th>
+              <th className="fact-col-total"><DollarSign size={14} /> {t('TOTAL', 'TOTALY', 'TOTAL')}</th>
+              <th className="fact-col-date"><Calendar size={14} /> {t('DATE', 'DATY', 'DATE')}</th>
+              <th className="fact-col-paiement"><CheckCircle size={14} /> {t('PAIEMENT', 'FANDOAVANA', 'PAYMENT')}</th>
+              <th className="fact-col-quittance"><Tag size={14} /> {t('QUITTANCE', 'TARATASY', 'RECEIPT')}</th>
             </tr>
           </thead>
           <tbody>
@@ -283,16 +321,16 @@ const Fact = () => {
               <tr>
                 <td colSpan="8" className="fact-loading-cell">
                   <div className="fact-spinner"></div>
-                  Chargement des factures...
+                  {t('Chargement des factures...', 'Maka ny faktiora...', 'Loading invoices...')}
                 </td>
               </tr>
             ) : paginatedFactures.length === 0 ? (
               <tr>
                 <td colSpan="8" className="fact-empty-cell">
                   <FileText size={32} />
-                  <p>Aucune facture trouvée</p>
+                  <p>{t('Aucune facture trouvée', 'Tsy misy faktiora hita', 'No invoice found')}</p>
                   <button className="fact-btn-retry" onClick={fetchFactures}>
-                    <RefreshCw size={16} /> Réessayer
+                    <RefreshCw size={16} /> {t('Réessayer', 'Andramo indray', 'Retry')}
                   </button>
                 </td>
               </tr>
@@ -302,10 +340,10 @@ const Fact = () => {
                 const refClient = facture.ref_client_type || '';
                 const refUsager = facture.ref_usager || '';
                 const clientRef = refClient && refUsager ? `${refClient}/${String(refUsager).padStart(3, '0')}` : '-';
-                
+
                 return (
-                  <tr 
-                    key={facture.id} 
+                  <tr
+                    key={facture.id}
                     className={factureSelectionnee?.id === facture.id ? 'selected' : ''}
                     onClick={() => handleSelectFacture(facture)}
                   >
@@ -358,7 +396,7 @@ const Fact = () => {
         <button className="fact-btn-back" onClick={handleBackToDashboard}>
           <ArrowLeft size={18} />
           <Home size={18} />
-          <span>Retour au Dashboard</span>
+          <span>{t('Retour au Dashboard', 'Hiverina amin\'ny Tabilao', 'Back to Dashboard')}</span>
         </button>
       </div>
     </div>
@@ -367,62 +405,62 @@ const Fact = () => {
   const renderChecklist = () => (
     <div className="fact-checklist">
       <div className="fact-checklist-header">
-        <h2><CheckSquare size={20} /> CHECK LIST DES FACTURES</h2>
+        <h2><CheckSquare size={20} /> {t('CHECK LIST DES FACTURES', 'CHECK LIST NY FAKTIORA', 'INVOICE CHECKLIST')}</h2>
         <div className="fact-checklist-stats">
-          <span><FileText size={14} /> Total: {filteredFactures.length}</span>
-          <span><CheckCircle size={14} /> Validées: {filteredFactures.filter(f => f.statut === 'validee').length}</span>
-          <span><Clock size={14} /> En attente: {filteredFactures.filter(f => f.statut !== 'validee').length}</span>
+          <span><FileText size={14} /> {t('Total', 'Totaly', 'Total')}: {filteredFactures.length}</span>
+          <span><CheckCircle size={14} /> {t('Validées', 'Voamarina', 'Validated')}: {filteredFactures.filter(f => f.statut === 'validee').length}</span>
+          <span><Clock size={14} /> {t('En attente', 'Miandry', 'Pending')}: {filteredFactures.filter(f => f.statut !== 'validee').length}</span>
         </div>
       </div>
       <div className="fact-checklist-grid">
         {loading ? (
           <div className="fact-loading-text">
             <div className="fact-spinner"></div>
-            Chargement de la checklist...
+            {t('Chargement de la checklist...', 'Maka ny checklist...', 'Loading checklist...')}
           </div>
         ) : filteredFactures.length === 0 ? (
           <div className="fact-empty-text">
             <FileText size={32} />
-            <p>Aucune facture dans la checklist</p>
+            <p>{t('Aucune facture dans la checklist', 'Tsy misy faktiora ao amin\'ny checklist', 'No invoice in checklist')}</p>
             <button className="fact-btn-retry" onClick={fetchFactures}>
-              <RefreshCw size={16} /> Réessayer
+              <RefreshCw size={16} /> {t('Réessayer', 'Andramo indray', 'Retry')}
             </button>
           </div>
         ) : (
           filteredFactures.slice(0, 100).map((facture, index) => (
-            <div 
-              key={facture.id} 
+            <div
+              key={facture.id}
               className={`fact-checklist-item ${factureSelectionnee?.id === facture.id ? 'selected' : ''}`}
               onClick={() => handleSelectFacture(facture)}
             >
               <div className="fact-checklist-num">{String(index + 1).padStart(3, '0')}</div>
               <div className="fact-checklist-content">
                 <div>
-                  <span className="label"><FileText size={12} /> N° Facture:</span>
+                  <span className="label"><FileText size={12} /> {t('N° Facture', 'N° Faktiora', 'Invoice N°')}:</span>
                   <span className="value">{facture.num_facture || facture.ref_omda || '-'}</span>
                 </div>
                 <div>
-                  <span className="label"><User size={12} /> Client:</span>
+                  <span className="label"><User size={12} /> {t('Client', 'Mpanjifa', 'Client')}:</span>
                   <span className="value">{facture.denomination || facture.demandeur || '-'}</span>
                 </div>
                 <div>
-                  <span className="label"><DollarSign size={12} /> Montant:</span>
+                  <span className="label"><DollarSign size={12} /> {t('Montant', 'Vola', 'Amount')}:</span>
                   <span className="value">{formatMontant(facture.soit_total)} Ar</span>
                 </div>
                 <div>
-                  <span className="label"><Tag size={12} /> Quittance:</span>
+                  <span className="label"><Tag size={12} /> {t('Quittance', 'Taratasy', 'Receipt')}:</span>
                   <span className="value">{formatQuittance(facture.quittance)}</span>
                 </div>
                 <div>
-                  <span className="label"><Calendar size={12} /> Date:</span>
+                  <span className="label"><Calendar size={12} /> {t('Date', 'Daty', 'Date')}:</span>
                   <span className="value">{formatDate(facture.date_ajout)}</span>
                 </div>
                 <div className="fact-checklist-statut">
                   <span className={`fact-statut-badge ${facture.statut}`}>
                     {facture.statut === 'validee' ? (
-                      <><CheckCircle size={12} /> Validée</>
+                      <><CheckCircle size={12} /> {t('Validée', 'Voamarina', 'Validated')}</>
                     ) : (
-                      <><Clock size={12} /> En attente</>
+                      <><Clock size={12} /> {t('En attente', 'Miandry', 'Pending')}</>
                     )}
                   </span>
                 </div>
@@ -432,14 +470,16 @@ const Fact = () => {
         )}
       </div>
       {filteredFactures.length > 100 && (
-        <div className="fact-checklist-more">+ {filteredFactures.length - 100} autres factures...</div>
+        <div className="fact-checklist-more">
+          + {filteredFactures.length - 100} {t('autres factures...', 'faktiora hafa...', 'other invoices...')}
+        </div>
       )}
-      
+
       <div className="fact-checklist-footer">
         <button className="fact-btn-back" onClick={handleBackToDashboard}>
           <ArrowLeft size={18} />
           <Home size={18} />
-          <span>Retour au Dashboard</span>
+          <span>{t('Retour au Dashboard', 'Hiverina amin\'ny Tabilao', 'Back to Dashboard')}</span>
         </button>
       </div>
     </div>
@@ -448,40 +488,40 @@ const Fact = () => {
   const renderFactureDetail = () => {
     if (!factureSelectionnee) return null;
     const f = factureSelectionnee;
-    
+
     return (
       <div className="fact-detail">
         <div className="fact-detail-header">
-          <h3><FileText size={16} /> FACTURE N° {f.num_facture || f.ref_omda}</h3>
+          <h3><FileText size={16} /> {t('FACTURE N°', 'FAKTIORA N°', 'INVOICE N°')} {f.num_facture || f.ref_omda}</h3>
           <button className="fact-btn-close-detail" onClick={() => setFactureSelectionnee(null)}>
             <X size={18} />
           </button>
         </div>
-        
+
         <div className="fact-detail-body">
           <div className="fact-detail-section">
             <div className="fact-detail-section-title">
-              <User size={14} /> INFORMATIONS CLIENT
+              <User size={14} /> {t('INFORMATIONS CLIENT', 'FAMPAHALALANA MPANJIFA', 'CLIENT INFORMATION')}
             </div>
             <div className="fact-detail-row">
-              <span className="fact-detail-label"><User size={14} /> Dénomination:</span>
+              <span className="fact-detail-label"><User size={14} /> {t('Dénomination', 'Anarana', 'Name')}:</span>
               <span className="fact-detail-value">{f.denomination || f.demandeur || '-'}</span>
             </div>
             {f.siege && (
               <div className="fact-detail-row">
-                <span className="fact-detail-label"><Building size={14} /> Siège:</span>
+                <span className="fact-detail-label"><Building size={14} /> {t('Siège', 'Foibe', 'Head office')}:</span>
                 <span className="fact-detail-value">{f.siege}</span>
               </div>
             )}
             {f.adresse && (
               <div className="fact-detail-row">
-                <span className="fact-detail-label"><MapPin size={14} /> Adresse:</span>
+                <span className="fact-detail-label"><MapPin size={14} /> {t('Adresse', 'Adiresy', 'Address')}:</span>
                 <span className="fact-detail-value">{f.adresse}</span>
               </div>
             )}
             {f.telephone && (
               <div className="fact-detail-row">
-                <span className="fact-detail-label"><Phone size={14} /> Téléphone:</span>
+                <span className="fact-detail-label"><Phone size={14} /> {t('Téléphone', 'Finday', 'Phone')}:</span>
                 <span className="fact-detail-value">{f.telephone}</span>
               </div>
             )}
@@ -507,61 +547,61 @@ const Fact = () => {
 
           <div className="fact-detail-section">
             <div className="fact-detail-section-title">
-              <FileText size={14} /> INFORMATIONS FACTURE
+              <FileText size={14} /> {t('INFORMATIONS FACTURE', 'FAMPAHALALANA FAKTIORA', 'INVOICE INFORMATION')}
             </div>
             <div className="fact-detail-row">
-              <span className="fact-detail-label"><Tag size={14} /> Quittance:</span>
+              <span className="fact-detail-label"><Tag size={14} /> {t('Quittance', 'Taratasy', 'Receipt')}:</span>
               <span className="fact-detail-value">{formatQuittance(f.quittance)}</span>
             </div>
             <div className="fact-detail-row">
-              <span className="fact-detail-label"><DollarSign size={14} /> Montant total:</span>
+              <span className="fact-detail-label"><DollarSign size={14} /> {t('Montant total', 'Vola total', 'Total amount')}:</span>
               <span className="fact-detail-value montant">{formatMontant(f.soit_total)} Ar</span>
             </div>
             {f.montant_mensuel && (
               <div className="fact-detail-row">
-                <span className="fact-detail-label"><DollarSign size={14} /> Montant mensuel:</span>
+                <span className="fact-detail-label"><DollarSign size={14} /> {t('Montant mensuel', 'Vola isam-bolana', 'Monthly amount')}:</span>
                 <span className="fact-detail-value">{formatMontant(f.montant_mensuel)} Ar</span>
               </div>
             )}
             {f.frais_dossier && (
               <div className="fact-detail-row">
-                <span className="fact-detail-label"><DollarSign size={14} /> Frais dossier:</span>
+                <span className="fact-detail-label"><DollarSign size={14} /> {t('Frais dossier', 'Saram-pandraharahana', 'File fees')}:</span>
                 <span className="fact-detail-value">{formatMontant(f.frais_dossier)} Ar</span>
               </div>
             )}
             {f.montant_retard && f.is_retard && (
               <div className="fact-detail-row">
-                <span className="fact-detail-label"><Clock size={14} /> Montant retard:</span>
+                <span className="fact-detail-label"><Clock size={14} /> {t('Montant retard', 'Vola tara', 'Late amount')}:</span>
                 <span className="fact-detail-value">{formatMontant(f.montant_retard)} Ar</span>
               </div>
             )}
             {f.taux && (
               <div className="fact-detail-row">
-                <span className="fact-detail-label"><Percent size={14} /> Taux:</span>
+                <span className="fact-detail-label"><Percent size={14} /> {t('Taux', 'Taha', 'Rate')}:</span>
                 <span className="fact-detail-value">{f.taux}%</span>
               </div>
             )}
             <div className="fact-detail-row">
-              <span className="fact-detail-label"><Calendar size={14} /> Date création:</span>
+              <span className="fact-detail-label"><Calendar size={14} /> {t('Date création', 'Daty namoronana', 'Creation date')}:</span>
               <span className="fact-detail-value">{formatDate(f.date_ajout)}</span>
             </div>
             <div className="fact-detail-row">
-              <span className="fact-detail-label"><Info size={14} /> Statut:</span>
+              <span className="fact-detail-label"><Info size={14} /> {t('Statut', 'Toe-javatra', 'Status')}:</span>
               <span className={`fact-statut-badge ${f.statut}`}>
                 {f.statut === 'validee' ? (
-                  <><CheckCircle size={12} /> Validée</>
+                  <><CheckCircle size={12} /> {t('Validée', 'Voamarina', 'Validated')}</>
                 ) : (
-                  <><Clock size={12} /> En attente</>
+                  <><Clock size={12} /> {t('En attente', 'Miandry', 'Pending')}</>
                 )}
               </span>
             </div>
             <div className="fact-detail-row">
-              <span className="fact-detail-label"><FileText size={14} /> Type:</span>
+              <span className="fact-detail-label"><FileText size={14} /> {t('Type', 'Karazana', 'Type')}:</span>
               <span className="fact-detail-value">{f.type_facture || 'DAFC'}</span>
             </div>
             {f.num_facture_type && (
               <div className="fact-detail-row">
-                <span className="fact-detail-label"><Hash size={14} /> Type facture:</span>
+                <span className="fact-detail-label"><Hash size={14} /> {t('Type facture', 'Karazana faktiora', 'Invoice type')}:</span>
                 <span className="fact-detail-value">{f.num_facture_type}</span>
               </div>
             )}
@@ -570,17 +610,17 @@ const Fact = () => {
           {(f.mois_facture || f.annee_facture || f.mois_groupes) && (
             <div className="fact-detail-section">
               <div className="fact-detail-section-title">
-                <Calendar size={14} /> PÉRIODE
+                <Calendar size={14} /> {t('PÉRIODE', 'FE-POTOANA', 'PERIOD')}
               </div>
               {f.mois_facture && (
                 <div className="fact-detail-row">
-                  <span className="fact-detail-label"><Calendar size={14} /> Mois:</span>
+                  <span className="fact-detail-label"><Calendar size={14} /> {t('Mois', 'Volana', 'Month')}:</span>
                   <span className="fact-detail-value">{getMonthName(f.mois_facture)} {f.annee_facture || ''}</span>
                 </div>
               )}
               {f.mois_groupes && (
                 <div className="fact-detail-row">
-                  <span className="fact-detail-label"><Calendar size={14} /> Mois groupés:</span>
+                  <span className="fact-detail-label"><Calendar size={14} /> {t('Mois groupés', 'Volana mitambatra', 'Grouped months')}:</span>
                   <span className="fact-detail-value">
                     {f.mois_groupes.split(',').map(m => getMonthName(parseInt(m))).join(', ')}
                   </span>
@@ -588,7 +628,7 @@ const Fact = () => {
               )}
               {f.type_groupe && (
                 <div className="fact-detail-row">
-                  <span className="fact-detail-label"><Info size={14} /> Type groupe:</span>
+                  <span className="fact-detail-label"><Info size={14} /> {t('Type groupe', 'Karazana vondrona', 'Group type')}:</span>
                   <span className="fact-detail-value">{f.type_groupe}</span>
                 </div>
               )}
@@ -598,29 +638,29 @@ const Fact = () => {
           {(f.representant_nom || f.representant_adresse || f.representant_tel || f.representant_cin || f.representant_fonction) && (
             <div className="fact-detail-section">
               <div className="fact-detail-section-title">
-                <Briefcase size={14} /> REPRÉSENTANT
+                <Briefcase size={14} /> {t('REPRÉSENTANT', 'MPISOLO TENA', 'REPRESENTATIVE')}
               </div>
               {f.representant_nom && (
                 <div className="fact-detail-row">
-                  <span className="fact-detail-label"><User size={14} /> Nom:</span>
+                  <span className="fact-detail-label"><User size={14} /> {t('Nom', 'Anarana', 'Name')}:</span>
                   <span className="fact-detail-value">{f.representant_nom}</span>
                 </div>
               )}
               {f.representant_fonction && (
                 <div className="fact-detail-row">
-                  <span className="fact-detail-label"><Briefcase size={14} /> Fonction:</span>
+                  <span className="fact-detail-label"><Briefcase size={14} /> {t('Fonction', 'Asa', 'Position')}:</span>
                   <span className="fact-detail-value">{f.representant_fonction}</span>
                 </div>
               )}
               {f.representant_adresse && (
                 <div className="fact-detail-row">
-                  <span className="fact-detail-label"><MapPin size={14} /> Adresse:</span>
+                  <span className="fact-detail-label"><MapPin size={14} /> {t('Adresse', 'Adiresy', 'Address')}:</span>
                   <span className="fact-detail-value">{f.representant_adresse}</span>
                 </div>
               )}
               {f.representant_tel && (
                 <div className="fact-detail-row">
-                  <span className="fact-detail-label"><Phone size={14} /> Téléphone:</span>
+                  <span className="fact-detail-label"><Phone size={14} /> {t('Téléphone', 'Finday', 'Phone')}:</span>
                   <span className="fact-detail-value">{f.representant_tel}</span>
                 </div>
               )}
@@ -636,42 +676,44 @@ const Fact = () => {
           {(f.description_personnalisee || f.personne_recu || f.activite || f.uniter || f.suffixe) && (
             <div className="fact-detail-section">
               <div className="fact-detail-section-title">
-                <Info size={14} /> INFORMATIONS COMPLÉMENTAIRES
+                <Info size={14} /> {t('INFORMATIONS COMPLÉMENTAIRES', 'FAMPAHALALANA FANAMPINY', 'ADDITIONAL INFORMATION')}
               </div>
               {f.activite && (
                 <div className="fact-detail-row">
-                  <span className="fact-detail-label"><Briefcase size={14} /> Activité:</span>
+                  <span className="fact-detail-label"><Briefcase size={14} /> {t('Activité', 'Asa', 'Activity')}:</span>
                   <span className="fact-detail-value">{f.activite}</span>
                 </div>
               )}
               {f.description_personnalisee && (
                 <div className="fact-detail-row">
-                  <span className="fact-detail-label"><FileText size={14} /> Description:</span>
+                  <span className="fact-detail-label"><FileText size={14} /> {t('Description', 'Fanazavana', 'Description')}:</span>
                   <span className="fact-detail-value">{f.description_personnalisee}</span>
                 </div>
               )}
               {f.personne_recu && (
                 <div className="fact-detail-row">
-                  <span className="fact-detail-label"><User size={14} /> Reçu par:</span>
+                  <span className="fact-detail-label"><User size={14} /> {t('Reçu par', 'Noraisin\'i', 'Received by')}:</span>
                   <span className="fact-detail-value">{f.personne_recu}</span>
                 </div>
               )}
               {f.uniter && (
                 <div className="fact-detail-row">
-                  <span className="fact-detail-label"><FileText size={14} /> Unité:</span>
+                  <span className="fact-detail-label"><FileText size={14} /> {t('Unité', 'Isan\'ny', 'Unit')}:</span>
                   <span className="fact-detail-value">{f.uniter}</span>
                 </div>
               )}
               {f.suffixe && (
                 <div className="fact-detail-row">
-                  <span className="fact-detail-label"><Hash size={14} /> Suffixe:</span>
+                  <span className="fact-detail-label"><Hash size={14} /> {t('Suffixe', 'Suffixe', 'Suffix')}:</span>
                   <span className="fact-detail-value">{f.suffixe}</span>
                 </div>
               )}
               {f.quittance_validee !== undefined && (
                 <div className="fact-detail-row">
-                  <span className="fact-detail-label"><CheckCircle size={14} /> Quittance validée:</span>
-                  <span className="fact-detail-value">{f.quittance_validee ? 'Oui' : 'Non'}</span>
+                  <span className="fact-detail-label"><CheckCircle size={14} /> {t('Quittance validée', 'Taratasy voamarina', 'Receipt validated')}:</span>
+                  <span className="fact-detail-value">
+                    {f.quittance_validee ? t('Oui', 'Eny', 'Yes') : t('Non', 'Tsia', 'No')}
+                  </span>
                 </div>
               )}
             </div>
@@ -697,7 +739,7 @@ const Fact = () => {
         <div className={`fact-main ${factureSelectionnee ? 'with-detail' : ''}`}>
           {vue === 'historique' ? renderHistorique() : renderChecklist()}
         </div>
-        
+
         {factureSelectionnee && (
           <div className="fact-sidebar">
             {renderFactureDetail()}

@@ -1,5 +1,5 @@
 // src/pages/repartition_artister.jsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Users, Calendar, DollarSign, Search, ChevronLeft, ChevronRight,
   ChevronsLeft, ChevronsRight, X, Music, CalendarDays, TrendingUp,
@@ -11,8 +11,22 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import '../styles/repartition_artister.css';
 import { generateArtistePDF } from './pdf/artiste_pdf';
+// ✅ Hook unique de traduction
+import { useT } from '../hooks/useT';
 
 const RepartitionArtister = () => {
+  const navigate = useNavigate();
+
+  // ✅ LANGUE UNIQUE — vient du Context
+  const { t, langue } = useT();
+
+  // ✅ Locale pour formatage
+  const locale = useMemo(() => {
+    if (langue === 'en') return 'en-US';
+    if (langue === 'mg') return 'fr-MG';
+    return 'fr-FR';
+  }, [langue]);
+
   const [evenements, setEvenements] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -46,9 +60,41 @@ const RepartitionArtister = () => {
   const [generationMessage, setGenerationMessage] = useState('');
   const pdfOptionsRef = useRef(null);
 
-  const navigate = useNavigate();
   const API_BASE = 'http://localhost:3001/api';
   const API_REPARTITION = 'http://localhost:3001/api/repartition';
+
+  // ✅ Mois traduits (longs)
+  const moisLabels = useMemo(() => {
+    if (langue === 'en') {
+      return ['January', 'February', 'March', 'April', 'May', 'June',
+              'July', 'August', 'September', 'October', 'November', 'December'];
+    }
+    if (langue === 'mg') {
+      return ['Janoary', 'Febroary', 'Martsa', 'Aprily', 'Mey', 'Jona',
+              'Jolay', 'Aogositra', 'Septambra', 'Oktobra', 'Novambra', 'Desambra'];
+    }
+    return ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+            'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+  }, [langue]);
+
+  // ✅ Mois traduits (courts)
+  const moisLabelsShort = useMemo(() => {
+    if (langue === 'en') {
+      return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    }
+    if (langue === 'mg') {
+      return ['Jan', 'Feb', 'Mar', 'Apr', 'Mey', 'Jon', 'Jol', 'Aog', 'Sep', 'Okt', 'Nov', 'Des'];
+    }
+    return ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+  }, [langue]);
+
+  // ✅ Options de mois pour le filtre
+  const getMoisOptions = useCallback(() => {
+    return moisLabels.map((label, idx) => ({
+      value: String(idx + 1).padStart(2, '0'),
+      label: label
+    }));
+  }, [moisLabels]);
 
   // ============================================================
   // ✅ MONTANT TOTAL
@@ -70,18 +116,10 @@ const RepartitionArtister = () => {
     return { base, frais, penalite, total: getMontantTotal(event) };
   };
 
-  const getMoisOptions = () => [
-    { value: '01', label: 'Janvier' }, { value: '02', label: 'Février' },
-    { value: '03', label: 'Mars' }, { value: '04', label: 'Avril' },
-    { value: '05', label: 'Mai' }, { value: '06', label: 'Juin' },
-    { value: '07', label: 'Juillet' }, { value: '08', label: 'Août' },
-    { value: '09', label: 'Septembre' }, { value: '10', label: 'Octobre' },
-    { value: '11', label: 'Novembre' }, { value: '12', label: 'Décembre' }
-  ];
-
   useEffect(() => {
     fetchEvenements();
     fetchStats();
+    // eslint-disable-next-line
   }, []);
 
   useEffect(() => {
@@ -92,6 +130,7 @@ const RepartitionArtister = () => {
       const moisKey = `${anneeActuelle}-${String(moisActuel).padStart(2, '0')}`;
       setMoisSelectionne(moisKey);
     }
+    // eslint-disable-next-line
   }, [evenements]);
 
   useEffect(() => {
@@ -127,7 +166,7 @@ const RepartitionArtister = () => {
         return champ.trim();
       }
     }
-    return 'Non spécifié';
+    return t('Non spécifié', 'Tsy voafaritra', 'Not specified');
   };
 
   const getLieuDisplay = (event) => getLieu(event);
@@ -139,33 +178,25 @@ const RepartitionArtister = () => {
     setLoading(true);
     setError(null);
     try {
-      console.log('📡 Récupération des événements OCC...');
       const response = await axios.get(`${API_REPARTITION}/occ/events`);
-      console.log('✅ Événements reçus:', response.data);
 
       if (response.data.success) {
         let eventsData = response.data.evenements || [];
 
-        // ✅ CORRECTION : Utiliser la route /occ/artistes/details/:id
-        //    (au lieu de /repartition/occ/artistes/details/:id)
-        //    Cette route renvoie l'artiste principal EN PREMIER
         const eventsWithArtists = await Promise.all(
           eventsData.map(async (event) => {
             try {
               const artistResponse = await axios.get(
                 `${API_BASE}/occ/artistes/details/${event.id}`
               );
-              
-              // ✅ Utiliser `artistesNames` fourni par le backend (déjà ordonné)
+
               const artistesNames = artistResponse.data.artistesNames || [];
-              const artistesString = artistResponse.data.artistesString 
-                || artistesNames.join(', ') 
-                || event.artistes 
+              const artistesString = artistResponse.data.artistesString
+                || artistesNames.join(', ')
+                || event.artistes
                 || '';
               const artistesList = artistResponse.data.artistes || [];
               const artistesCount = artistResponse.data.count || artistesNames.length;
-
-              console.log(`🎵 Événement ${event.id} - Artistes (ordonnés):`, artistesNames);
 
               return {
                 ...event,
@@ -193,15 +224,14 @@ const RepartitionArtister = () => {
           return new Date(b.date_event) - new Date(a.date_event);
         });
 
-        console.log(`✅ ${sortedEvents.length} événements récupérés`);
         setEvenements(sortedEvents);
         if (sortedEvents.length > 0) setEvenementSelectionne(sortedEvents[0]);
       } else {
-        setError(response.data.message || 'Erreur');
+        setError(response.data.message || t('Erreur', 'Olana', 'Error'));
       }
     } catch (err) {
       console.error('❌ Erreur:', err);
-      setError('Impossible de contacter le serveur.');
+      setError(t('Impossible de contacter le serveur.', 'Tsy afaka mifandray amin\'ny serveur.', 'Cannot reach server.'));
     } finally {
       setLoading(false);
     }
@@ -261,7 +291,7 @@ const RepartitionArtister = () => {
 
   const formatMontant = (montant) => {
     if (!montant && montant !== 0) return '0';
-    return new Intl.NumberFormat('fr-FR').format(montant);
+    return new Intl.NumberFormat(locale).format(montant);
   };
 
   const formatDate = (dateStr) => {
@@ -273,8 +303,8 @@ const RepartitionArtister = () => {
     } catch { return ''; }
   };
 
-  const getMonthName = (m) => ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][m-1] || '';
-  const getMonthShortName = (m) => ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc'][m-1] || '';
+  const getMonthName = useCallback((m) => moisLabels[m - 1] || '', [moisLabels]);
+  const getMonthShortName = useCallback((m) => moisLabelsShort[m - 1] || '', [moisLabelsShort]);
 
   const filteredEvenements = evenements.filter(e => {
     const search = searchTerm.toLowerCase();
@@ -350,19 +380,19 @@ const RepartitionArtister = () => {
     }
 
     if (eventsToExport.length === 0) {
-      setGenerationMessage('⚠️ Aucun événement à générer');
+      setGenerationMessage(`⚠️ ${t('Aucun événement à générer', 'Tsy misy hetsika hamoronana', 'No event to generate')}`);
       setTimeout(() => setGenerationMessage(''), 3000);
       return;
     }
     if (!responsable || responsable.trim() === '') {
-      setGenerationMessage('⚠️ Veuillez saisir le nom du responsable');
+      setGenerationMessage(`⚠️ ${t('Veuillez saisir le nom du responsable', 'Ampidiro ny anaran\'ny tompon\'andraikitra', 'Please enter the manager name')}`);
       setTimeout(() => setGenerationMessage(''), 3000);
       return;
     }
 
     setIsGeneratingPDF(true);
     setShowPDFOptions(false);
-    setGenerationMessage('🔄 Génération du PDF en cours...');
+    setGenerationMessage(`🔄 ${t('Génération du PDF en cours...', 'Mamorona PDF...', 'Generating PDF...')}`);
 
     try {
       let periode = 'mensuelle';
@@ -381,9 +411,10 @@ const RepartitionArtister = () => {
         annee: anneeLabel,
         responsable: responsable.trim(),
         lieu: lieuAgence || 'Antananarivo',
-        dateDelivre: dateDelivre || new Date().toLocaleDateString('fr-FR'),
+        dateDelivre: dateDelivre || new Date().toLocaleDateString(locale),
         dateRetour: dateRetour || '',
-        periode
+        periode,
+        langue: langue,
       };
 
       const eventsForPDF = eventsToExport.map(ev => ({
@@ -392,10 +423,12 @@ const RepartitionArtister = () => {
       }));
 
       const result = generateArtistePDF(eventsForPDF, pdfOptions);
-      setGenerationMessage(result ? '✅ PDF généré !' : '❌ Erreur PDF');
+      setGenerationMessage(result
+        ? `✅ ${t('PDF généré !', 'Vita ny PDF !', 'PDF generated!')}`
+        : `❌ ${t('Erreur PDF', 'Olana PDF', 'PDF error')}`);
       setTimeout(() => setGenerationMessage(''), 4000);
     } catch (error) {
-      setGenerationMessage(`❌ Erreur: ${error.message}`);
+      setGenerationMessage(`❌ ${t('Erreur', 'Olana', 'Error')}: ${error.message}`);
       setTimeout(() => setGenerationMessage(''), 4000);
     } finally {
       setIsGeneratingPDF(false);
@@ -408,26 +441,28 @@ const RepartitionArtister = () => {
         <div className="header-logo">
           <Music size={28} className="logo-icon" />
           <div>
-            <h1>Répartition Artistes</h1>
-            <span>Gestion des événements OCC</span>
+            <h1>{t('Répartition Artistes', 'Fizarana ny Mpanakanto', 'Artists Distribution')}</h1>
+            <span>{t('Gestion des événements OCC', 'Fitantanana hetsika OCC', 'OCC event management')}</span>
           </div>
         </div>
         <div className="header-actions">
           <button className={`btn-header-action ${vue === 'repartition' ? 'active' : ''}`}
             onClick={() => { setVue('repartition'); setPageCourante(1); }}>
-            <List size={16} /> Répartition
+            <List size={16} /> {t('Répartition', 'Fizarana', 'Distribution')}
           </button>
           <button className={`btn-header-action ${vue === 'recap' ? 'active' : ''}`}
             onClick={() => { setVue('recap'); setPageCourante(1); }}>
-            <BarChart3 size={16} /> Récapitulatif
+            <BarChart3 size={16} /> {t('Récapitulatif', 'Famintinana', 'Summary')}
           </button>
           <button className="btn-generate-pdf-header"
             onClick={() => setShowPDFOptions(!showPDFOptions)}
             disabled={filteredEvenements.length === 0 || isGeneratingPDF}>
-            {isGeneratingPDF ? (<><Loader2 size={16} className="spinner-small" /> Génération...</>) : (<><Download size={16} /> PDF</>)}
+            {isGeneratingPDF
+              ? (<><Loader2 size={16} className="spinner-small" /> {t('Génération...', 'Mamorona...', 'Generating...')}</>)
+              : (<><Download size={16} /> PDF</>)}
           </button>
           <button className="btn-back-dashboard" onClick={handleBackToDashboard}>
-            <ArrowLeft size={16} /><Home size={16} /><span>Dashboard</span>
+            <ArrowLeft size={16} /><Home size={16} /><span>{t('Dashboard', 'Dashboard', 'Dashboard')}</span>
           </button>
         </div>
       </div>
@@ -435,30 +470,36 @@ const RepartitionArtister = () => {
       {showPDFOptions && (
         <div className="pdf-options-dropdown" ref={pdfOptionsRef}>
           <div className="pdf-options-content">
-            <h4><FileText size={16} /> Options PDF</h4>
+            <h4><FileText size={16} /> {t('Options PDF', 'Safidy PDF', 'PDF options')}</h4>
             <div className="pdf-options-grid">
               <div className="pdf-option-group">
-                <label>Responsable *</label>
-                <input type="text" value={responsable} onChange={(e) => setResponsable(e.target.value)} placeholder="Nom du responsable" className="pdf-input" />
+                <label>{t('Responsable', 'Tompon\'andraikitra', 'Manager')} *</label>
+                <input type="text" value={responsable} onChange={(e) => setResponsable(e.target.value)}
+                  placeholder={t('Nom du responsable', 'Anaran\'ny tompon\'andraikitra', 'Manager name')}
+                  className="pdf-input" />
               </div>
               <div className="pdf-option-group">
-                <label>Lieu de l'agence</label>
+                <label>{t("Lieu de l'agence", 'Toeran\'ny birao', 'Agency location')}</label>
                 <input type="text" value={lieuAgence} onChange={(e) => setLieuAgence(e.target.value)} className="pdf-input" />
               </div>
               <div className="pdf-option-group">
-                <label>Date de délivrance</label>
+                <label>{t('Date de délivrance', 'Daty nanomezana', 'Issue date')}</label>
                 <input type="text" value={dateDelivre} onChange={(e) => setDateDelivre(e.target.value)} className="pdf-input" />
               </div>
               <div className="pdf-option-group">
-                <label>Date de retour</label>
+                <label>{t('Date de retour', 'Daty famerenana', 'Return date')}</label>
                 <input type="text" value={dateRetour} onChange={(e) => setDateRetour(e.target.value)} className="pdf-input" />
               </div>
             </div>
             <div className="pdf-options-actions">
               <button className="btn-pdf-generate" onClick={handleGeneratePDF} disabled={isGeneratingPDF || !responsable.trim()}>
-                {isGeneratingPDF ? (<><Loader2 size={16} className="spinner-small" /> Génération...</>) : (<><Download size={16} /> Générer le PDF</>)}
+                {isGeneratingPDF
+                  ? (<><Loader2 size={16} className="spinner-small" /> {t('Génération...', 'Mamorona...', 'Generating...')}</>)
+                  : (<><Download size={16} /> {t('Générer le PDF', 'Hamorona PDF', 'Generate PDF')}</>)}
               </button>
-              <button className="btn-pdf-cancel" onClick={() => setShowPDFOptions(false)}>Annuler</button>
+              <button className="btn-pdf-cancel" onClick={() => setShowPDFOptions(false)}>
+                {t('Annuler', 'Foanana', 'Cancel')}
+              </button>
             </div>
             {generationMessage && (
               <div className={`pdf-generation-message ${generationMessage.includes('✅') ? 'success' : generationMessage.includes('⚠️') ? 'warning' : 'info'}`}>
@@ -472,26 +513,33 @@ const RepartitionArtister = () => {
       <div className="header-search">
         <div className="search-wrapper">
           <Search size={16} className="search-icon" />
-          <input type="text" placeholder="Rechercher..." value={searchTerm}
+          <input type="text"
+            placeholder={t('Rechercher...', 'Hikaroka...', 'Search...')}
+            value={searchTerm}
             onChange={(e) => { setSearchTerm(e.target.value); setPageCourante(1); }} />
         </div>
         <div className="filter-wrapper">
           <select className="filter-select" value={filtreAnnee}
             onChange={(e) => { setFiltreAnnee(e.target.value); setPageCourante(1); }}>
-            <option value="">Toutes les années</option>
+            <option value="">{t('Toutes les années', 'Ny taona rehetra', 'All years')}</option>
             {anneesDisponibles.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
           <select className="filter-select" value={filtreMois}
             onChange={(e) => { setFiltreMois(e.target.value); setPageCourante(1); }}>
-            <option value="">Tous les mois</option>
+            <option value="">{t('Tous les mois', 'Ny volana rehetra', 'All months')}</option>
             {getMoisOptions().map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
           {(filtreAnnee || filtreMois || searchTerm) && (
             <button className="btn-filter-reset" onClick={resetFilters}><X size={14} /></button>
           )}
         </div>
-        <span className="total-badge"><Users size={14} />{filteredEvenements.length} événement(s)</span>
-        <button className="btn-refresh" onClick={handleRefresh}><RefreshCw size={16} /></button>
+        <span className="total-badge">
+          <Users size={14} />
+          {filteredEvenements.length} {t('événement(s)', 'hetsika', 'event(s)')}
+        </span>
+        <button className="btn-refresh" onClick={handleRefresh} title={t('Rafraîchir', 'Havaozy', 'Refresh')}>
+          <RefreshCw size={16} />
+        </button>
       </div>
     </div>
   );
@@ -502,19 +550,19 @@ const RepartitionArtister = () => {
         <thead>
           <tr>
             <th className="col-num">#</th>
-            <th className="col-artistes"><Users size={14} /> Artistes</th>
-            <th className="col-evenement"><Music size={14} /> Événement</th>
-            <th className="col-lieu"><MapPin size={14} /> Lieu</th>
-            <th className="col-date"><Calendar size={14} /> Date</th>
-            <th className="col-montant"><DollarSign size={14} /> Montant Total</th>
-            <th className="col-demandeur"><User size={14} /> Demandeur</th>
+            <th className="col-artistes"><Users size={14} /> {t('Artistes', 'Mpanakanto', 'Artists')}</th>
+            <th className="col-evenement"><Music size={14} /> {t('Événement', 'Hetsika', 'Event')}</th>
+            <th className="col-lieu"><MapPin size={14} /> {t('Lieu', 'Toerana', 'Location')}</th>
+            <th className="col-date"><Calendar size={14} /> {t('Date', 'Daty', 'Date')}</th>
+            <th className="col-montant"><DollarSign size={14} /> {t('Montant Total', 'Vola total', 'Total amount')}</th>
+            <th className="col-demandeur"><User size={14} /> {t('Demandeur', 'Mpangataka', 'Applicant')}</th>
           </tr>
         </thead>
         <tbody>
           {loading ? (
-            <tr><td colSpan="7" className="loading-cell"><div className="spinner"></div>Chargement...</td></tr>
+            <tr><td colSpan="7" className="loading-cell"><div className="spinner"></div>{t('Chargement...', 'Maka...', 'Loading...')}</td></tr>
           ) : paginatedEvenements.length === 0 ? (
-            <tr><td colSpan="7" className="empty-cell"><Music size={32} /><p>Aucun événement</p></td></tr>
+            <tr><td colSpan="7" className="empty-cell"><Music size={32} /><p>{t('Aucun événement', 'Tsy misy hetsika', 'No event')}</p></td></tr>
           ) : (
             paginatedEvenements.map((event, index) => {
               const num = (pageCourante - 1) * itemsParPage + index + 1;
@@ -527,9 +575,8 @@ const RepartitionArtister = () => {
                   <td className="col-num">{String(num).padStart(3, '0')}</td>
                   <td className="col-artistes">
                     <div className="artistes-cell">
-                      {/* ✅ Utilise artistesString (déjà ordonné par le backend) */}
-                      <span className="artistes-names">{event.artistesString || 'Aucun artiste'}</span>
-                      {event.artistesCount > 0 && <span className="artistes-count">{event.artistesCount} artiste(s)</span>}
+                      <span className="artistes-names">{event.artistesString || t('Aucun artiste', 'Tsy misy mpanakanto', 'No artist')}</span>
+                      {event.artistesCount > 0 && <span className="artistes-count">{event.artistesCount} {t('artiste(s)', 'mpanakanto', 'artist(s)')}</span>}
                     </div>
                   </td>
                   <td className="col-evenement">{event.denomination || event.demandeur || '-'}</td>
@@ -541,9 +588,9 @@ const RepartitionArtister = () => {
                         {formatMontant(detail.total)} Ar
                       </strong>
                       <small style={{ fontSize: '11px', color: '#6c757d' }}>
-                        Base: {formatMontant(detail.base)} Ar
-                        {detail.frais > 0 && ` + Frais: ${formatMontant(detail.frais)} Ar`}
-                        {detail.penalite > 0 && ` + Pénalité: ${formatMontant(detail.penalite)} Ar`}
+                        {t('Base', 'Fototra', 'Base')}: {formatMontant(detail.base)} Ar
+                        {detail.frais > 0 && ` + ${t('Frais', 'Sara', 'Fees')}: ${formatMontant(detail.frais)} Ar`}
+                        {detail.penalite > 0 && ` + ${t('Pénalité', 'Sazy', 'Penalty')}: ${formatMontant(detail.penalite)} Ar`}
                       </small>
                     </div>
                   </td>
@@ -573,27 +620,29 @@ const RepartitionArtister = () => {
   const renderRecap = () => (
     <div className="recap-container">
       <div className="recap-section">
-        <div className="recap-section-header"><h3><TrendingUp size={20} /> Statistiques Globales</h3></div>
+        <div className="recap-section-header">
+          <h3><TrendingUp size={20} /> {t('Statistiques Globales', 'Statistika ankapobeny', 'Global Statistics')}</h3>
+        </div>
         <div className="stats-globales">
           <div className="stat-globale">
             <div className="stat-globale-icon"><Calendar size={24} /></div>
             <div className="stat-globale-content">
               <span className="stat-globale-nombre">{stats.totalEvenements}</span>
-              <span className="stat-globale-label">Événements</span>
+              <span className="stat-globale-label">{t('Événements', 'Hetsika', 'Events')}</span>
             </div>
           </div>
           <div className="stat-globale">
             <div className="stat-globale-icon"><Users size={24} /></div>
             <div className="stat-globale-content">
               <span className="stat-globale-nombre">{stats.totalArtistes}</span>
-              <span className="stat-globale-label">Artistes</span>
+              <span className="stat-globale-label">{t('Artistes', 'Mpanakanto', 'Artists')}</span>
             </div>
           </div>
           <div className="stat-globale">
             <div className="stat-globale-icon"><DollarSign size={24} /></div>
             <div className="stat-globale-content">
               <span className="stat-globale-nombre">{formatMontant(stats.totalMontant)} Ar</span>
-              <span className="stat-globale-label">Montant Total</span>
+              <span className="stat-globale-label">{t('Montant Total', 'Vola total', 'Total amount')}</span>
             </div>
           </div>
         </div>
@@ -601,7 +650,7 @@ const RepartitionArtister = () => {
 
       <div className="recap-section">
         <div className="recap-section-header">
-          <h3><CalendarDays size={20} /> Récapitulatif Annuel</h3>
+          <h3><CalendarDays size={20} /> {t('Récapitulatif Annuel', 'Famintinana isan-taona', 'Annual Summary')}</h3>
           <div className="recap-year-selector">
             {Object.keys(recapAnnuel).sort().reverse().map(annee => (
               <button key={annee}
@@ -620,11 +669,11 @@ const RepartitionArtister = () => {
               <div key={annee} className={`recap-card ${isActive ? 'active' : ''}`}>
                 <div className="recap-card-header">
                   <span className="recap-year">{annee}</span>
-                  {isActive && <span className="recap-badge">Actuel</span>}
+                  {isActive && <span className="recap-badge">{t('Actuel', 'Amin\'izao', 'Current')}</span>}
                 </div>
                 <div className="recap-card-stats">
-                  <div className="stat-item"><Calendar size={16} /><span>{data.totalEvenements} événements</span></div>
-                  <div className="stat-item"><Users size={16} /><span>{data.totalArtistes} artistes</span></div>
+                  <div className="stat-item"><Calendar size={16} /><span>{data.totalEvenements} {t('événements', 'hetsika', 'events')}</span></div>
+                  <div className="stat-item"><Users size={16} /><span>{data.totalArtistes} {t('artistes', 'mpanakanto', 'artists')}</span></div>
                   <div className="stat-item montant"><DollarSign size={16} /><span>{formatMontant(data.totalMontant)} Ar</span></div>
                 </div>
               </div>
@@ -635,8 +684,11 @@ const RepartitionArtister = () => {
 
       <div className="recap-section">
         <div className="recap-section-header">
-          <h3><Calendar size={20} /> Récapitulatif Mensuel {anneeSelectionnee}</h3>
-          <span className="recap-total"><Users size={14} />{recapMensuel.filter(m => m.annee === anneeSelectionnee).length} mois</span>
+          <h3><Calendar size={20} /> {t('Récapitulatif Mensuel', 'Famintinana isam-bolana', 'Monthly Summary')} {anneeSelectionnee}</h3>
+          <span className="recap-total">
+            <Users size={14} />
+            {recapMensuel.filter(m => m.annee === anneeSelectionnee).length} {t('mois', 'volana', 'month(s)')}
+          </span>
         </div>
 
         <div className="mois-12-grid">
@@ -652,18 +704,20 @@ const RepartitionArtister = () => {
                 onClick={() => setMoisSelectionne(isSelected ? null : key)}>
                 <div className="mois-card-header">
                   <span className="mois-card-nom">{getMonthShortName(mois)}</span>
-                  {isCurrentMonth && <span className="mois-card-badge">Actuel</span>}
+                  {isCurrentMonth && <span className="mois-card-badge">{t('Actuel', 'Amin\'izao', 'Current')}</span>}
                 </div>
                 {hasEvents ? (
                   <>
                     <div className="mois-card-stats">
-                      <span>{moisData.totalEvenements} évents</span>
+                      <span>{moisData.totalEvenements} {t('évents', 'hetsika', 'events')}</span>
                       <span className="mois-card-montant">{formatMontant(moisData.totalMontant)} Ar</span>
                     </div>
-                    <div className="mois-card-artistes"><Users size={12} /> {moisData.totalArtistes} artistes</div>
+                    <div className="mois-card-artistes">
+                      <Users size={12} /> {moisData.totalArtistes} {t('artistes', 'mpanakanto', 'artists')}
+                    </div>
                   </>
                 ) : (
-                  <div className="mois-card-empty">Aucun événement</div>
+                  <div className="mois-card-empty">{t('Aucun événement', 'Tsy misy hetsika', 'No event')}</div>
                 )}
               </div>
             );
@@ -673,10 +727,10 @@ const RepartitionArtister = () => {
         {moisSelectionne && (
           <div className="mois-details-container">
             <div className="mois-details-title">
-              Détails - {getMonthName(parseInt(moisSelectionne.split('-')[1]))} {moisSelectionne.split('-')[0]}
+              {t('Détails', 'Antsipiriany', 'Details')} - {getMonthName(parseInt(moisSelectionne.split('-')[1]))} {moisSelectionne.split('-')[0]}
             </div>
             {evenementsFiltres.length === 0 ? (
-              <div className="mois-details-empty">Aucun événement</div>
+              <div className="mois-details-empty">{t('Aucun événement', 'Tsy misy hetsika', 'No event')}</div>
             ) : (
               <div className="mois-details-grid">
                 {evenementsFiltres.map((event, idx) => {
@@ -684,7 +738,7 @@ const RepartitionArtister = () => {
                   const total = getMontantTotal(event);
                   return (
                     <div key={idx} className="mois-detail-item">
-                      <span className="detail-artistes">{event.artistesString || 'Aucun artiste'}</span>
+                      <span className="detail-artistes">{event.artistesString || t('Aucun artiste', 'Tsy misy mpanakanto', 'No artist')}</span>
                       <span className="detail-lieu">{lieuDisplay}</span>
                       <span className="detail-date">{formatDate(event.date_event)}</span>
                       <span className="detail-montant">{formatMontant(total)} Ar</span>
@@ -699,7 +753,7 @@ const RepartitionArtister = () => {
 
       <div className="recap-footer">
         <button className="btn-back-dashboard-bottom" onClick={handleBackToDashboard}>
-          <ArrowLeft size={18} /><Home size={18} /><span>Retour au Dashboard</span>
+          <ArrowLeft size={18} /><Home size={18} /><span>{t('Retour au Dashboard', 'Hiverina amin\'ny Dashboard', 'Back to Dashboard')}</span>
         </button>
       </div>
     </div>
@@ -711,7 +765,6 @@ const RepartitionArtister = () => {
     const lieuDisplay = getLieuDisplay(e);
     const detail = getMontantDetail(e);
 
-    // ✅ Utiliser artistesNames en priorité (déjà ordonné)
     const artistesAffiches = e.artistesNames && e.artistesNames.length > 0
       ? e.artistesNames
       : (e.artistes && e.artistes.length > 0
@@ -721,14 +774,14 @@ const RepartitionArtister = () => {
     return (
       <div className="evenement-detail-excel">
         <div className="detail-header">
-          <h3><Music size={16} /> ÉVÉNEMENT N° {e.numero_dossier_global || e.id}</h3>
+          <h3><Music size={16} /> {t('ÉVÉNEMENT N°', 'HETSIKA N°', 'EVENT N°')} {e.numero_dossier_global || e.id}</h3>
           <button className="btn-close-detail" onClick={() => setEvenementSelectionne(null)}>
             <X size={18} />
           </button>
         </div>
         <div className="detail-body">
           <div className="detail-section">
-            <div className="detail-section-title"><Users size={14} /> ARTISTES</div>
+            <div className="detail-section-title"><Users size={14} /> {t('ARTISTES', 'MPANAKANTO', 'ARTISTS')}</div>
             {artistesAffiches.length > 0 ? (
               <div className="artistes-list">
                 {artistesAffiches.map((nomArtiste, idx) => (
@@ -739,14 +792,14 @@ const RepartitionArtister = () => {
                     </span>
                     {e.artistes && e.artistes[idx] && (
                       <span className="artiste-role">
-                        {e.artistes[idx].role || 'Artiste'}
+                        {e.artistes[idx].role || t('Artiste', 'Mpanakanto', 'Artist')}
                       </span>
                     )}
                   </div>
                 ))}
                 <div className="artistes-count">
                   <Users size={14} />
-                  <span>{artistesAffiches.length} artiste(s)</span>
+                  <span>{artistesAffiches.length} {t('artiste(s)', 'mpanakanto', 'artist(s)')}</span>
                 </div>
               </div>
             ) : e.artistesString ? (
@@ -754,65 +807,83 @@ const RepartitionArtister = () => {
                 <div className="artiste-item"><span className="artiste-nom">{e.artistesString}</span></div>
               </div>
             ) : (
-              <div className="no-artistes">Aucun artiste associé</div>
+              <div className="no-artistes">{t('Aucun artiste associé', 'Tsy misy mpanakanto mifandraika', 'No artist associated')}</div>
             )}
           </div>
 
           <div className="detail-section">
-            <div className="detail-section-title"><Music size={14} /> INFORMATIONS ÉVÉNEMENT</div>
+            <div className="detail-section-title"><Music size={14} /> {t('INFORMATIONS ÉVÉNEMENT', 'FAMPAHALALANA HETSIKA', 'EVENT INFORMATION')}</div>
             <div className="detail-row">
-              <span className="detail-label"><Music size={14} /> Dénomination:</span>
+              <span className="detail-label"><Music size={14} /> {t('Dénomination', 'Anarana', 'Name')}:</span>
               <span className="detail-value">{e.denomination || e.demandeur || '-'}</span>
             </div>
             <div className="detail-row">
-              <span className="detail-label"><MapPin size={14} /> Lieu:</span>
+              <span className="detail-label"><MapPin size={14} /> {t('Lieu', 'Toerana', 'Location')}:</span>
               <span className="detail-value">{lieuDisplay}</span>
             </div>
             <div className="detail-row">
-              <span className="detail-label"><Calendar size={14} /> Date:</span>
+              <span className="detail-label"><Calendar size={14} /> {t('Date', 'Daty', 'Date')}:</span>
               <span className="detail-value">{formatDate(e.date_event)}</span>
             </div>
             <div className="detail-row">
-              <span className="detail-label"><DollarSign size={14} /> Montant base:</span>
+              <span className="detail-label"><DollarSign size={14} /> {t('Montant base', 'Vola fototra', 'Base amount')}:</span>
               <span className="detail-value">{formatMontant(detail.base)} Ar</span>
             </div>
             <div className="detail-row">
-              <span className="detail-label"><FileText size={14} /> Frais de dossier:</span>
+              <span className="detail-label"><FileText size={14} /> {t('Frais de dossier', 'Saram-pandraharahana', 'File fees')}:</span>
               <span className="detail-value">{formatMontant(detail.frais)} Ar</span>
             </div>
             {detail.penalite > 0 && (
               <div className="detail-row">
-                <span className="detail-label"><AlertCircle size={14} /> Pénalité:</span>
+                <span className="detail-label"><AlertCircle size={14} /> {t('Pénalité', 'Sazy', 'Penalty')}:</span>
                 <span className="detail-value" style={{ color: '#e74c3c' }}>{formatMontant(detail.penalite)} Ar</span>
               </div>
             )}
             <div className="detail-row" style={{ borderTop: '2px solid #27ae60', marginTop: '6px', paddingTop: '6px' }}>
-              <span className="detail-label"><DollarSign size={14} /> <strong>MONTANT TOTAL:</strong></span>
+              <span className="detail-label"><DollarSign size={14} /> <strong>{t('MONTANT TOTAL', 'VOLA TOTAL', 'TOTAL AMOUNT')}:</strong></span>
               <span className="detail-value montant" style={{ color: '#27ae60', fontWeight: 'bold' }}>
                 {formatMontant(detail.total)} Ar
               </span>
             </div>
             {e.demandeur && (
-              <div className="detail-row"><span className="detail-label"><User size={14} /> Demandeur:</span><span className="detail-value">{e.demandeur}</span></div>
+              <div className="detail-row">
+                <span className="detail-label"><User size={14} /> {t('Demandeur', 'Mpangataka', 'Applicant')}:</span>
+                <span className="detail-value">{e.demandeur}</span>
+              </div>
             )}
             {e.telephone && (
-              <div className="detail-row"><span className="detail-label"><Phone size={14} /> Téléphone:</span><span className="detail-value">{e.telephone}</span></div>
+              <div className="detail-row">
+                <span className="detail-label"><Phone size={14} /> {t('Téléphone', 'Finday', 'Phone')}:</span>
+                <span className="detail-value">{e.telephone}</span>
+              </div>
             )}
             {e.organisateurs && (
-              <div className="detail-row"><span className="detail-label"><Users size={14} /> Organisateurs:</span><span className="detail-value">{e.organisateurs}</span></div>
+              <div className="detail-row">
+                <span className="detail-label"><Users size={14} /> {t('Organisateurs', 'Mpikarakara', 'Organizers')}:</span>
+                <span className="detail-value">{e.organisateurs}</span>
+              </div>
             )}
           </div>
 
           <div className="detail-section">
-            <div className="detail-section-title"><FileText size={14} /> DOSSIER</div>
+            <div className="detail-section-title"><FileText size={14} /> {t('DOSSIER', 'RAKITRA', 'FILE')}</div>
             {e.numero_dossier_global && (
-              <div className="detail-row"><span className="detail-label"><Hash size={14} /> Dossier Global:</span><span className="detail-value">{e.numero_dossier_global}</span></div>
+              <div className="detail-row">
+                <span className="detail-label"><Hash size={14} /> {t('Dossier Global', 'Rakitra ankapobeny', 'Global file')}:</span>
+                <span className="detail-value">{e.numero_dossier_global}</span>
+              </div>
             )}
             {e.numero_dossier_utilisateur && (
-              <div className="detail-row"><span className="detail-label"><Hash size={14} /> Dossier Utilisateur:</span><span className="detail-value">{e.numero_dossier_utilisateur}</span></div>
+              <div className="detail-row">
+                <span className="detail-label"><Hash size={14} /> {t('Dossier Utilisateur', 'Rakitra mpampiasa', 'User file')}:</span>
+                <span className="detail-value">{e.numero_dossier_utilisateur}</span>
+              </div>
             )}
             {e.region && (
-              <div className="detail-row"><span className="detail-label"><MapPin size={14} /> Région:</span><span className="detail-value">{e.region}</span></div>
+              <div className="detail-row">
+                <span className="detail-label"><MapPin size={14} /> {t('Région', 'Faritra', 'Region')}:</span>
+                <span className="detail-value">{e.region}</span>
+              </div>
             )}
           </div>
         </div>
@@ -838,9 +909,12 @@ const RepartitionArtister = () => {
         )}
       </div>
       <div className="repartition-footer-excel">
-        <div className="footer-left"><Music size={14} /><span>Répartition Artistes OCC</span></div>
+        <div className="footer-left">
+          <Music size={14} />
+          <span>{t('Répartition Artistes OCC', 'Fizarana Mpanakanto OCC', 'OCC Artists Distribution')}</span>
+        </div>
         <div className="footer-center"><span>© {new Date().getFullYear()} - OMDA</span></div>
-        <div className="footer-right"><span>Version 1.0</span></div>
+        <div className="footer-right"><span>{t('Version', 'Dikan-teny', 'Version')} 1.0</span></div>
       </div>
     </div>
   );

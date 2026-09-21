@@ -2,6 +2,11 @@
 import jsPDF from 'jspdf';
 import { formatNumber as formatNumberBase } from './occ_pdf';
 import logoRepoblika from '../../assets/repoblika.jpg';
+import {
+  createPdfT,
+  getPdfLocale,
+  getPdfMoisLabels,
+} from './pdfI18n';
 
 // ============================================================
 // FORMATAGE À 2 DÉCIMALES MAX
@@ -20,7 +25,7 @@ const formatNumber = (value) => {
   return decPart ? `${intPart}.${decPart}` : intPart;
 };
 
-export const formatDate = (dateString) => {
+export const formatDate = (dateString, langue = 'fr') => {
   if (!dateString) return '';
   try {
     const date = new Date(dateString);
@@ -34,13 +39,14 @@ export const formatDate = (dateString) => {
   }
 };
 
-export const formatDateLong = (dateString) => {
+export const formatDateLong = (dateString, langue = 'fr') => {
   if (!dateString) return '';
   try {
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return '';
+    const locale = getPdfLocale(langue);
     const jour = date.getDate();
-    const mois = date.toLocaleString('fr-FR', { month: 'long' });
+    const mois = date.toLocaleString(locale, { month: 'long' });
     const annee = date.getFullYear();
     return `${jour} ${mois} ${annee}`;
   } catch (error) {
@@ -48,9 +54,9 @@ export const formatDateLong = (dateString) => {
   }
 };
 
-function numberToWords(num) {
+function numberToWords(num, langue = 'fr') {
   if (num === 0) return 'Zéro Ariary';
-  if (num < 0) return 'Moins ' + numberToWords(Math.abs(num));
+  if (num < 0) return 'Moins ' + numberToWords(Math.abs(num), langue);
 
   const units = ['', 'Un', 'Deux', 'Trois', 'Quatre', 'Cinq', 'Six', 'Sept', 'Huit', 'Neuf'];
   const teens = ['Dix', 'Onze', 'Douze', 'Treize', 'Quatorze', 'Quinze', 'Seize', 'Dix-sept', 'Dix-huit', 'Dix-neuf'];
@@ -96,19 +102,15 @@ function numberToWords(num) {
   return result + ' Ariary';
 }
 
-export const generateFacturePDF = async (factureData, returnBlob = false) => {
+// ✅ Signature étendue : (factureData, returnBlob, options)
+export const generateFacturePDF = async (factureData, returnBlob = false, options = {}) => {
   try {
-    console.log('========== GÉNÉRATION FACTURE PDF ==========');
-    console.log('🔑 uniter reçu:', factureData.uniter);
-    console.log('🔑 montant_mensuel reçu:', factureData.montant_mensuel);
-    console.log('🔑 soit_total reçu:', factureData.soit_total);
-    console.log('🔑 num_facture_type:', factureData.num_facture_type);
-    console.log('🔑 nb mois reçu:', factureData.mois_list?.length);
-    console.log('🔑 is_renouvellement:', factureData.is_renouvellement);
-    console.log('🔑 frais_renouvellement:', factureData.frais_renouvellement);
+    const langue = options.langue || 'fr';
+    const t = createPdfT(langue);
+    const locale = getPdfLocale(langue);
+    const moisLabels = getPdfMoisLabels(langue);
 
     let dafName = 'DAF';
-
     try {
       const response = await fetch('http://localhost:3001/api/daf/name');
       const data = await response.json();
@@ -141,8 +143,8 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     doc.addImage(logoRepoblika, 'JPEG', (pageWidth / 2) - (logoWidth / 2), yPos, logoWidth, logoHeight);
     yPos += logoHeight + 6;
 
-        // ============================================================
-    // EN-TÊTE ADMINISTRATIF (police diminuée, position inchangée)
+    // ============================================================
+    // EN-TÊTE ADMINISTRATIF
     // ============================================================
     doc.setFont('times', 'bold');
     doc.setFontSize(9);
@@ -167,7 +169,7 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     doc.text('OFFICE MALAGASY DU DROIT D\'AUTEUR', marginX, yPos);
 
     const currentDate = new Date();
-    const dateStr = currentDate.toLocaleDateString('fr-FR', {
+    const dateStr = currentDate.toLocaleDateString(locale, {
       day: 'numeric',
       month: 'long',
       year: 'numeric'
@@ -176,7 +178,12 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
 
     doc.setFont('times', 'bold');
     doc.setFontSize(10);
-    doc.text(`Antananarivo, le ${dateStr}`, pageWidth - marginX, yPos, { align: 'right' });
+    doc.text(
+      `Antananarivo, ${t('le', 'ny', 'on')} ${dateStr}`,
+      pageWidth - marginX,
+      yPos,
+      { align: 'right' }
+    );
 
     yPos += 5;
     doc.setFont('times', 'bold');
@@ -195,7 +202,7 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
 
     doc.setFont('times', 'normal');
     doc.setFontSize(11);
-    doc.text(`Réf : ${currentYear} / ${refOmda} / OMDA`, marginX, yPos);
+    doc.text(`${t('Réf', 'Fanondroana', 'Ref')} : ${currentYear} / ${refOmda} / OMDA`, marginX, yPos);
     yPos += 8;
 
     doc.setFont('times', 'bold');
@@ -219,19 +226,23 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
       factureNum = `${currentYear} / ${numFactureFormatted}-${factureData.suffixe} / ${typeFactureLabel}`;
     }
 
-    doc.text(`FACTURE n° ${factureNum}`, marginX + 50, yPos + 4);
+    doc.text(
+      `${t('FACTURE', 'FAKTIORA', 'INVOICE')} n° ${factureNum}`,
+      marginX + 50,
+      yPos + 4
+    );
     yPos += 6;
 
     doc.setFont('times', 'normal');
     doc.setFontSize(11);
     doc.setTextColor(80, 80, 80);
     const clientRef = `${refClientType} / ${String(refUsager).padStart(3, '0')}`;
-    doc.text(`Réf. Client : ${clientRef}`, marginX, yPos + 4);
+    doc.text(`${t('Réf. Client', 'Fanondroana Mpanjifa', 'Client Ref')} : ${clientRef}`, marginX, yPos + 4);
     doc.setTextColor(17, 17, 17);
     yPos += 10;
 
     // ============================================================
-    // BOX CLIENT (tailles augmentées)
+    // BOX CLIENT
     // ============================================================
     const boxWidth = pageWidth - (marginX * 2);
     const boxHeight = 40;
@@ -241,49 +252,81 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     doc.setLineWidth(0.25);
     doc.rect(marginX, yPos, boxWidth, boxHeight, 'FD');
 
-    // ✅ labelX et contentX : tous les labels alignés sur la même colonne
     const labelX = marginX + 5;
     const contentX = marginX + 50;
     let clientY = yPos + 7;
 
     doc.setFontSize(11);
 
-    const nomClient = factureData.denomination || factureData.demandeur || factureData.organisateurs || 'CLIENT';
+    const nomClient = factureData.denomination || factureData.demandeur || factureData.organisateurs || t('CLIENT', 'MPANJIFA', 'CLIENT');
     doc.setFont('times', 'bold');
-    doc.text('Doit :', labelX, clientY);
+    doc.text(`${t('Doit', 'Tokony handoa', 'Owes')} :`, labelX, clientY);
     doc.setFont('times', 'bold');
-    doc.text(nomClient, contentX, clientY);
-    clientY += 6.5;
+    // ✅ Gestion du retour à la ligne pour le nom du client
+    const nomClientLines = doc.splitTextToSize(nomClient, boxWidth - (contentX - marginX) - 5);
+    doc.text(nomClientLines, contentX, clientY);
+    clientY += (nomClientLines.length * 5.5) + 1;
 
-    const responsable = factureData.representant_par || factureData.demandeur || factureData.representant_nom || 'Non spécifié';
+    const responsable = factureData.representant_par || factureData.demandeur || factureData.representant_nom || t('Non spécifié', 'Tsy voafaritra', 'Not specified');
     doc.setFont('times', 'bold');
-    doc.text('Responsable :', labelX, clientY);
+    doc.text(`${t('Responsable', 'Tompon\'andraikitra', 'Manager')} :`, labelX, clientY);
     doc.setFont('times', 'normal');
-    doc.text(responsable, contentX, clientY);
-    clientY += 6.5;
+    const respLines = doc.splitTextToSize(responsable, boxWidth - (contentX - marginX) - 5);
+    doc.text(respLines, contentX, clientY);
+    clientY += (respLines.length * 5.5) + 1;
 
-    const adresse = factureData.adresse || factureData.siege || factureData.adresse_siege || 'Adresse non spécifiée';
+    const adresse = factureData.adresse || factureData.siege || factureData.adresse_siege || t('Adresse non spécifiée', 'Adiresy tsy voafaritra', 'Address not specified');
     doc.setFont('times', 'bold');
-    doc.text('Adresse :', labelX, clientY);
+    doc.text(`${t('Adresse', 'Adiresy', 'Address')} :`, labelX, clientY);
     doc.setFont('times', 'normal');
-    doc.text(adresse, contentX, clientY);
-    clientY += 6.5;
+    const adresseLines = doc.splitTextToSize(adresse, boxWidth - (contentX - marginX) - 5);
+    doc.text(adresseLines, contentX, clientY);
+    clientY += (adresseLines.length * 5.5) + 1;
 
-    const contact = factureData.telephone || 'Non spécifié';
+    const contact = factureData.telephone || t('Non spécifié', 'Tsy voafaritra', 'Not specified');
     doc.setFont('times', 'bold');
-    doc.text('Contact :', labelX, clientY);
+    doc.text(`${t('Contact', 'Fifandraisana', 'Contact')} :`, labelX, clientY);
     doc.setFont('times', 'normal');
     doc.text(contact, contentX, clientY);
-    clientY += 7;
+    clientY += 6;
 
-    // ✅ OBJET : toujours "Redevances d'auteur"
-    //    Label "OBJET :" aligné à gauche (même labelX) + valeur alignée à contentX
     doc.setFont('times', 'bold');
-    doc.text('OBJET :', labelX, clientY);
+    doc.text(`${t('OBJET', 'ANTONY', 'SUBJECT')} :`, labelX, clientY);
     doc.setFont('times', 'bold');
-    doc.text("Redevances d'auteur", contentX, clientY);
+    doc.text(t("Redevances d'auteur", "Taham-bolan'ny mpanoratra", 'Copyright royalties'), contentX, clientY);
 
-    yPos += boxHeight + 8;
+    // Ajuster la hauteur de la boîte si le contenu a débordé
+    const finalBoxHeight = Math.max(boxHeight, (clientY - yPos) + 5);
+    // Redessiner le rectangle avec la bonne hauteur (effacer l'ancien)
+    doc.setFillColor(252, 252, 252);
+    doc.setDrawColor(229, 229, 229);
+    doc.rect(marginX, yPos, boxWidth, finalBoxHeight, 'FD');
+    
+    // Réécrire le contenu par dessus
+    clientY = yPos + 7;
+    doc.setFont('times', 'bold');
+    doc.text(`${t('Doit', 'Tokony handoa', 'Owes')} :`, labelX, clientY);
+    doc.text(nomClientLines, contentX, clientY);
+    clientY += (nomClientLines.length * 5.5) + 1;
+    doc.text(`${t('Responsable', 'Tompon\'andraikitra', 'Manager')} :`, labelX, clientY);
+    doc.setFont('times', 'normal');
+    doc.text(respLines, contentX, clientY);
+    clientY += (respLines.length * 5.5) + 1;
+    doc.setFont('times', 'bold');
+    doc.text(`${t('Adresse', 'Adiresy', 'Address')} :`, labelX, clientY);
+    doc.setFont('times', 'normal');
+    doc.text(adresseLines, contentX, clientY);
+    clientY += (adresseLines.length * 5.5) + 1;
+    doc.setFont('times', 'bold');
+    doc.text(`${t('Contact', 'Fifandraisana', 'Contact')} :`, labelX, clientY);
+    doc.setFont('times', 'normal');
+    doc.text(contact, contentX, clientY);
+    clientY += 6;
+    doc.setFont('times', 'bold');
+    doc.text(`${t('OBJET', 'ANTONY', 'SUBJECT')} :`, labelX, clientY);
+    doc.text(t("Redevances d'auteur", "Taham-bolan'ny mpanoratra", 'Copyright royalties'), contentX, clientY);
+
+    yPos += finalBoxHeight + 8;
 
     // ========================================================================
     // RÉCUPÉRATION DES MONTANTS
@@ -354,11 +397,6 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
       moisList = [factureData.mois_facture];
     }
 
-    const moisLabels = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-
-    // ========================================================================
-    // ✅ CALCUL FINAL UNIFIÉ
-    // ========================================================================
     const nbMois = moisList.length || 1;
 
     const puAfficheFinal = montantMensuel;
@@ -379,27 +417,20 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
       totalGeneral = totalAttendu;
     }
 
-    console.log('📊 CALCULS FINAUX:');
-    console.log('  - Type:', numFactureTypeLocal);
-    console.log('  - montantMensuel (P.U.):', montantMensuel);
-    console.log('  - uniter (U.):', uniter);
-    console.log('  - MONTANT ligne (P.U. × U.):', montantLignePrincipale);
-    console.log('  - TOTAL final:', totalGeneral);
-
     // ========================================================================
-    // TABLEAU (tailles augmentées)
+    // TABLEAU
     // ========================================================================
     const xDesc = marginX;
-    const xU = 115;
-    const xPu = 130;
-    const xMnt = 155;
+    const xU = 125; // ✅ Réduit un peu pour laisser plus de place à la description
+    const xPu = 140;
+    const xMnt = 165;
     const xEnd = pageWidth - marginX;
 
     yPos += 2;
     doc.setFont('times', 'normal');
     doc.setFontSize(10);
     doc.setTextColor(90, 90, 90);
-    doc.text('( x 1 ariary )', xEnd - 3, yPos - 6, { align: 'right' });
+    doc.text(`( x 1 ${t('ariary', 'ariary', 'ariary')} )`, xEnd - 3, yPos - 6, { align: 'right' });
 
     doc.setDrawColor(26, 26, 26);
     doc.setLineWidth(0.3);
@@ -409,10 +440,15 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     doc.setFontSize(11);
     doc.setTextColor(17, 17, 17);
 
-    doc.text('DESCRIPTIONS', xDesc + 3, yPos + 6);
+    doc.text(t('DESCRIPTIONS', 'FANAZAVANA', 'DESCRIPTIONS'), xDesc + 3, yPos + 6);
     doc.text('U.', xU + 3, yPos + 6);
     doc.text('P.U. (Ar)', xPu + 3, yPos + 6);
-    doc.text('MONTANT (Ar)', xEnd - 3, yPos + 6, { align: 'right' });
+    doc.text(
+      `${t('MONTANT', 'VOLA', 'AMOUNT')} (Ar)`,
+      xEnd - 3,
+      yPos + 6,
+      { align: 'right' }
+    );
 
     yPos += 9;
     doc.line(xDesc, yPos, xEnd, yPos);
@@ -420,26 +456,27 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     const tableStartHeight = yPos - 9;
     yPos += 6;
 
-    // ✅ CONSTRUCTION DE LA DESCRIPTION avec retour à la ligne
+    // ✅ Construction de la description
     let descLine = '';
 
     if (factureData.description_personnalisee && factureData.description_personnalisee.trim() !== '') {
       descLine = factureData.description_personnalisee.trim();
     } else {
-      descLine = factureData.denomination || factureData.demandeur || factureData.organisateurs || 'Prestation OMDA';
+      descLine = factureData.denomination || factureData.demandeur || factureData.organisateurs || t('Prestation OMDA', 'Tolotra OMDA', 'OMDA Service');
 
       if (moisList.length > 0) {
         const moisNoms = moisList.map(m => moisLabels[m - 1]);
         descLine += ` - ${moisNoms.join(', ')} ${factureData.annee_facture || currentDate.getFullYear()}`;
         if (moisList.length > 1) {
-          descLine += ` (${moisList.length} mois)`;
+          descLine += ` (${moisList.length} ${t('mois', 'volana', 'months')})`;
         }
       }
     }
 
-    const maxWidth = xU - xDesc - 6;
+    // ✅ Calcul de la largeur max pour la description
+    const maxWidthDesc = xU - xDesc - 6;
     doc.setFontSize(11);
-    const lines = doc.splitTextToSize(descLine, maxWidth);
+    const lines = doc.splitTextToSize(descLine, maxWidthDesc);
     const lineHeight = 6;
 
     const hauteurLignes = lines.length * lineHeight;
@@ -466,7 +503,7 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
       yPos += 6.5;
       doc.setFont('times', 'normal');
       doc.setFontSize(11);
-      doc.text('Frais renouvellement Contrat', xDesc + 3, yPos);
+      doc.text(t('Frais renouvellement Contrat', 'Saran\'ny fanavaozana fifanarahana', 'Contract renewal fees'), xDesc + 3, yPos);
       doc.text('1', xU + 5, yPos);
       doc.text(formatNumber(fraisRenouvellement), xPu + 3, yPos);
       doc.text(formatNumber(fraisRenouvellement), xEnd - 3, yPos, { align: 'right' });
@@ -477,7 +514,7 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
       yPos += 6.5;
       doc.setFont('times', 'normal');
       doc.setFontSize(11);
-      doc.text('Pénalité de retard', xDesc + 3, yPos);
+      doc.text(t('Pénalité de retard', 'Sazy noho ny fahatarana', 'Late penalty'), xDesc + 3, yPos);
       doc.text('1', xU + 5, yPos);
       doc.text(formatNumber(montantRetard), xPu + 3, yPos);
       doc.text(formatNumber(montantRetard), xEnd - 3, yPos, { align: 'right' });
@@ -498,7 +535,7 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
 
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text('TOTAL', xDesc + 3, yPos + 6);
+    doc.text(t('TOTAL', 'TOTALY', 'TOTAL'), xDesc + 3, yPos + 6);
     doc.text(formatNumber(totalValue), xEnd - 3, yPos + 6, { align: 'right' });
 
     yPos += 11;
@@ -507,31 +544,36 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     doc.line(marginX, yPos, xEnd, yPos);
 
     // ========================================================================
-    // SOMME EN LETTRES (taille augmentée)
+    // SOMME EN LETTRES
     // ========================================================================
     yPos += 6;
     doc.setTextColor(17, 17, 17);
     doc.setFont('times', 'bold');
     doc.setFontSize(11.5);
-    doc.text('Arrêtée la présente facture à la somme de : ', marginX, yPos);
+    const phrase = t(
+      'Arrêtée la présente facture à la somme de : ',
+      'Voatokana ity faktiora ity ho vola : ',
+      'This invoice is set at the amount of: '
+    );
+    doc.text(phrase, marginX, yPos);
     doc.setFont('times', 'italic');
     doc.setFontSize(11.5);
-    const phraseWidth = doc.getTextWidth('Arrêtée la présente facture à la somme de : ');
-    const montantLettres = numberToWords(totalValue);
+    const phraseWidth = doc.getTextWidth(phrase);
+    const montantLettres = numberToWords(totalValue, langue);
     doc.text(montantLettres, marginX + phraseWidth + 5, yPos);
 
     yPos += 5;
     doc.line(marginX, yPos, xEnd, yPos);
 
     // ========================================================================
-    // SIGNATURES (taille augmentée)
+    // SIGNATURES
     // ========================================================================
     yPos += 13;
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
     doc.setTextColor(17, 17, 17);
-    doc.text('Le client', marginX + 10, yPos);
-    doc.text('Le Directeur Financier', xEnd - 55, yPos);
+    doc.text(t('Le client', 'Ny mpanjifa', 'The client'), marginX + 10, yPos);
+    doc.text(t('Le Directeur Financier', 'Talen\'ny fitantanam-bola', 'Chief Financial Officer'), xEnd - 55, yPos);
 
     yPos += 28;
     doc.setFont('times', 'bold');
@@ -545,7 +587,11 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     doc.setFont('times', 'normal');
     doc.setFontSize(10);
     doc.setTextColor(80, 80, 80);
-    const dafSubText = '(Directeur Administratif et Financier)';
+    const dafSubText = t(
+      '(Directeur Administratif et Financier)',
+      '(Talen\'ny fitantanam-bola)',
+      '(Chief Financial Officer)'
+    );
     const dafSubWidth = doc.getTextWidth(dafSubText);
     const dafSubX = (xEnd - 55) + 27 - (dafSubWidth / 2) - 10;
     doc.text(dafSubText, dafSubX, yPos + 5);
@@ -554,14 +600,14 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     doc.setFont('times', 'normal');
     doc.setFontSize(11);
     doc.setTextColor(80, 80, 80);
-    doc.text(`Reçu ce : ${dateStr}`, marginX, yPos);
+    doc.text(`${t('Reçu ce', 'Voaray ny', 'Received on')} : ${dateStr}`, marginX, yPos);
     yPos += 6;
 
     const personneRecuValue = factureData.personne_recu || responsable || '________________________';
-    doc.text(`Par : ${personneRecuValue}`, marginX, yPos);
+    doc.text(`${t('Par', 'Avy amin\'ny', 'By')} : ${personneRecuValue}`, marginX, yPos);
 
     // ========================================================================
-    // PIED DE PAGE (taille augmentée)
+    // PIED DE PAGE
     // ========================================================================
     const footerY = 274;
     doc.setDrawColor(180, 180, 180);
@@ -571,9 +617,19 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
     doc.setFont('times', 'normal');
     doc.setFontSize(9.5);
     doc.setTextColor(60, 60, 60);
-    doc.text('Lot IIF 62, Fredy Rajaofera - Antaninandro - ANTANANARIVO - 101  |  Contacts : 034 05 533 88  |  mail: omda@moov.mg', pageWidth / 2, footerY + 5, { align: 'center' });
+    doc.text(
+      'Lot IIF 62, Fredy Rajaofera - Antaninandro - ANTANANARIVO - 101  |  Contacts : 034 05 533 88  |  mail: omda@moov.mg',
+      pageWidth / 2,
+      footerY + 5,
+      { align: 'center' }
+    );
     doc.setFont('times', 'bold');
-    doc.text('Stat. N° 84212 11 2014 0 02912  •  NIF 4000 566 726', pageWidth / 2, footerY + 9, { align: 'center' });
+    doc.text(
+      'Stat. N° 84212 11 2014 0 02912  •  NIF 4000 566 726',
+      pageWidth / 2,
+      footerY + 9,
+      { align: 'center' }
+    );
 
     if (returnBlob) {
       return doc.output('blob');
@@ -592,6 +648,7 @@ export const generateFacturePDF = async (factureData, returnBlob = false) => {
 
     setTimeout(() => URL.revokeObjectURL(pdfUrl), 1000);
 
+    console.log(`✅ Facture PDF générée avec succès (langue: ${langue})`);
     return true;
 
   } catch (error) {

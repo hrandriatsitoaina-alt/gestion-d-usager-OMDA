@@ -1,10 +1,17 @@
 // src/pages/pdf/artiste_pdf.jsx
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import {
+  createPdfT,
+  formatPdfMontant,
+  formatPdfDate,
+} from './pdfI18n';
 
 /**
  * Génère un PDF de répartition des artistes - 1 PAGE UNIQUEMENT
  * Orientation PORTRAIT
+ * ✅ Gestion de langue FR / MG / EN
+ * ✅ Largeurs de colonnes ÉQUILIBRÉES pour les mots longs (3 mots)
  */
 export const generateArtistePDF = (evenements, options = {}) => {
   if (!evenements || evenements.length === 0) {
@@ -13,9 +20,13 @@ export const generateArtistePDF = (evenements, options = {}) => {
   }
 
   try {
+    // ✅ Langue depuis les options (transmise par la page)
+    const langue = options.langue || 'fr';
+    const t = createPdfT(langue);
+
     console.log('📄 Début génération PDF Artiste...');
+    console.log('🌍 Langue :', langue);
     console.log('📊 Nombre d\'événements:', evenements.length);
-    console.log('🔍 Détail 1er événement:', evenements[0]);
 
     const {
       mois = '',
@@ -38,34 +49,6 @@ export const generateArtistePDF = (evenements, options = {}) => {
         return isNaN(nombre) ? 0 : Math.round(nombre);
       }
       return Math.round(Number(valeur)) || 0;
-    };
-
-    const formatMontant = (valeur) => {
-      const nombre = nettoyerMontant(valeur);
-      return String(nombre).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-    };
-
-    // ✅ DATE sur 2 chiffres : 12/09/26
-    const formatDate = (dateStr) => {
-      if (!dateStr) return '';
-      try {
-        const date = new Date(dateStr);
-        if (isNaN(date.getTime())) return '';
-        const jour = String(date.getDate()).padStart(2, '0');
-        const mois = String(date.getMonth() + 1).padStart(2, '0');
-        const annee2 = String(date.getFullYear()).slice(-2);
-        return `${jour}/${mois}/${annee2}`;
-      } catch {
-        return '';
-      }
-    };
-
-    // ✅ Césure automatique : "Analamanga" → "Anala-manga"
-    const cesurerMot = (mot, maxLength = 6) => {
-      if (!mot || typeof mot !== 'string') return mot;
-      const trimmed = mot.trim();
-      // ✅ Retour simple sans tiret
-      return trimmed;
     };
 
     const extraireLieu = (event) => {
@@ -91,7 +74,7 @@ export const generateArtistePDF = (evenements, options = {}) => {
           }
         }
       }
-      return 'Non spécifié';
+      return t('Non spécifié', 'Tsy voafaritra', 'Not specified');
     };
 
     const extraireRegion = (event) => {
@@ -105,17 +88,13 @@ export const generateArtistePDF = (evenements, options = {}) => {
           }
         }
       }
-      return 'Non spécifiée';
+      return t('Non spécifiée', 'Tsy voafaritra', 'Not specified');
     };
 
-    // ✅ ORGANISATEURS — cherche dans representant_par EN PRIORITÉ
-    // (car dans la base, "representant_par" peut contenir le vrai nom
-    //  d'organisateur comme "Boma Event", alors que "organisateurs" peut
-    //  contenir le demandeur comme "RANALALA")
     const extraireOrganisateurs = (event) => {
       const champs = [
-        'representant_par',    // ✅ PRIORITÉ 1 : "Boma Event"
-        'organisateurs',       // priorité 2 : "RANALALA"
+        'representant_par',
+        'organisateurs',
         'denomination',
         'demandeur',
         'nom_evenement'
@@ -151,44 +130,61 @@ export const generateArtistePDF = (evenements, options = {}) => {
     doc.setFontSize(15);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(0, 0, 0);
-    doc.text('RÉPARTITION ARTISTES', pageWidth / 2, y, { align: 'center' });
+    doc.text(
+      t('RÉPARTITION ARTISTES', 'FIZARANA MPANAKANTO', 'ARTISTS DISTRIBUTION'),
+      pageWidth / 2,
+      y,
+      { align: 'center' }
+    );
     y += 7;
 
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
 
     const periodeText = periode === 'mensuelle'
-      ? `Période : ${mois} ${annee}`
-      : `Période : Année ${annee}`;
+      ? `${t('Période', 'Fe-potoana', 'Period')} : ${mois} ${annee}`
+      : `${t('Période', 'Fe-potoana', 'Period')} : ${t('Année', 'Taona', 'Year')} ${annee}`;
     doc.text(periodeText, margin, y);
 
-    const responsableText = `Responsable : ${responsable || '_______________'}`;
+    const responsableText = `${t('Responsable', 'Tompon\'andraikitra', 'Manager')} : ${responsable || '_______________'}`;
     doc.text(responsableText, pageWidth - margin - doc.getTextWidth(responsableText), y);
     y += 6;
 
     doc.setFont('helvetica', 'normal');
-    doc.text(`Lieu de l'agence du Représentant : ${lieu || '_______________'}`, margin, y);
+    doc.text(
+      `${t("Lieu de l'agence du Représentant", "Toeran'ny biraon'ny mpisolo tena", "Representative's agency location")} : ${lieu || '_______________'}`,
+      margin,
+      y
+    );
     y += 6;
 
-    doc.text(`Date de délivrance : ${dateDelivre}`, margin, y);
+    doc.text(`${t('Date de délivrance', 'Daty nanomezana', 'Issue date')} : ${dateDelivre}`, margin, y);
 
-    const dateRetourText = `Date de retour : ${dateRetour || '_______________'}`;
+    const dateRetourText = `${t('Date de retour', 'Daty famerenana', 'Return date')} : ${dateRetour || '_______________'}`;
     doc.text(dateRetourText, pageWidth - margin - doc.getTextWidth(dateRetourText), y);
     y += 7;
 
     // ============================================================
-    // TABLEAU
+    // TABLEAU — Colonnes ÉQUILIBRÉES pour FR / MG / EN
     // ============================================================
-    const tableHeaders = ['N', 'ORGANISATEURS', 'LIEU', 'RÉGION', 'DATE', 'ARTISTES', 'MONTANT'];
+    const tableHeaders = [
+      'N',
+      t('ORGANISATEURS', 'MPIKARAKARA', 'ORGANIZERS'),
+      t('LIEU', 'TOERANA', 'LOCATION'),
+      t('RÉGION', 'FARITRA', 'REGION'),
+      t('DATE', 'DATY', 'DATE'),
+      t('ARTISTES', 'MPANAKANTO', 'ARTISTS'),
+      t('MONTANT', 'VOLA', 'AMOUNT'),
+    ];
 
     const tableData = evenements.map((e, index) => {
       const num = index + 1;
-      const organisateurs = extraireOrganisateurs(e);       // ✅ Boma Event
+      const organisateurs = extraireOrganisateurs(e);
       const lieuEvent = extraireLieu(e);
       const regionEvent = extraireRegion(e);
-      const dateFormatted = formatDate(e.date_event);       // ✅ 12/09/26
-      const artistes = e.artistesString || 'Aucun artiste';
-      const montantFormatted = formatMontant(e.montant);
+      const dateFormatted = formatPdfDate(e.date_event, false);
+      const artistes = e.artistesString || t('Aucun artiste', 'Tsy misy mpanakanto', 'No artist');
+      const montantFormatted = formatPdfMontant(e.montant);
 
       return [
         String(num),
@@ -201,7 +197,7 @@ export const generateArtistePDF = (evenements, options = {}) => {
       ];
     });
 
-    // ✅ POLICE entre 9 et 10
+    // ✅ Police adaptative
     let fontSize = 10;
     let cellPadding = 3;
 
@@ -218,6 +214,9 @@ export const generateArtistePDF = (evenements, options = {}) => {
       cellPadding = 2.2;
     }
 
+    // ✅ Largeurs ÉQUILIBRÉES (total ≈ 194 mm utiles sur A4 portrait)
+    //    A4 = 210 mm, marges = 8+8 = 16 → 194 mm utiles
+    //    Somme : 8 + 40 + 28 + 26 + 20 + 44 + 28 = 194 mm
     autoTable(doc, {
       startY: y,
       head: [tableHeaders],
@@ -235,7 +234,7 @@ export const generateArtistePDF = (evenements, options = {}) => {
       headStyles: {
         fillColor: [220, 220, 220],
         textColor: [0, 0, 0],
-        fontSize: fontSize,
+        fontSize: fontSize - 0.5,  // ✅ En-têtes légèrement plus petits
         fontStyle: 'bold',
         halign: 'center',
         valign: 'middle',
@@ -243,17 +242,25 @@ export const generateArtistePDF = (evenements, options = {}) => {
       },
       columnStyles: {
         0: { cellWidth: 8,  halign: 'center' },   // N
-        1: { cellWidth: 34, halign: 'left' },     // ORGANISATEURS
-        2: { cellWidth: 26, halign: 'left' },     // LIEU
-        3: { cellWidth: 24, halign: 'left' },     // RÉGION
+        1: { cellWidth: 40, halign: 'left' },     // ORGANISATEURS
+        2: { cellWidth: 28, halign: 'left' },     // LIEU
+        3: { cellWidth: 26, halign: 'left' },     // RÉGION
         4: { cellWidth: 20, halign: 'center' },   // DATE
-        5: { cellWidth: 'auto', halign: 'left' }, // ARTISTES
+        5: { cellWidth: 44, halign: 'left' },     // ARTISTES
         6: { cellWidth: 28, halign: 'right' }     // MONTANT
       },
-      // ✅ Diminuer la police de la colonne RÉGION (index 3)
+      // ✅ Réduire la police des colonnes denses (ORGANISATEURS, LIEU, RÉGION, ARTISTES)
       didParseCell: function (data) {
-        if (data.section === 'body' && data.column.index === 3) {
-          data.cell.styles.fontSize = fontSize - 1; // ✅ 1 pt plus petit que les autres
+        if (data.section === 'body') {
+          const idx = data.column.index;
+          // Colonnes texte longues → police -0.5pt pour éviter débordement
+          if (idx === 1 || idx === 2 || idx === 3 || idx === 5) {
+            data.cell.styles.fontSize = fontSize - 0.5;
+          }
+          // RÉGION encore plus petite car souvent longue
+          if (idx === 3) {
+            data.cell.styles.fontSize = fontSize - 1;
+          }
         }
       },
       margin: { left: margin, right: margin },
@@ -276,17 +283,29 @@ export const generateArtistePDF = (evenements, options = {}) => {
     doc.setTextColor(0, 0, 0);
 
     const totalItems = evenements.length;
-    doc.text(`${totalItems} événement${totalItems > 1 ? 's' : ''}`, margin, y);
+    const eventsLabel = totalItems > 1
+      ? t('événements', 'hetsika', 'events')
+      : t('événement', 'hetsika', 'event');
+    doc.text(`${totalItems} ${eventsLabel}`, margin, y);
 
     const totalArtistes = evenements.reduce((sum, e) => sum + (e.artistesCount || 0), 0);
-    doc.text(`Total artistes : ${totalArtistes}`, pageWidth / 2 - 15, y);
+    doc.text(
+      `${t('Total artistes', 'Totalin\'ny mpanakanto', 'Total artists')} : ${totalArtistes}`,
+      pageWidth / 2 - 15,
+      y
+    );
 
     const totalMontantBrut = evenements.reduce(
       (sum, e) => sum + nettoyerMontant(e.montant),
       0
     );
-    const totalMontantFormatted = formatMontant(totalMontantBrut);
-    doc.text(`Total : ${totalMontantFormatted} Ar`, pageWidth - margin, y, { align: 'right' });
+    const totalMontantFormatted = formatPdfMontant(totalMontantBrut);
+    doc.text(
+      `${t('Total', 'Totaly', 'Total')} : ${totalMontantFormatted} Ar`,
+      pageWidth - margin,
+      y,
+      { align: 'right' }
+    );
 
     // ============================================================
     // SAUVEGARDE
@@ -298,7 +317,7 @@ export const generateArtistePDF = (evenements, options = {}) => {
 
     doc.save(filename);
 
-    console.log(`✅ PDF Artiste généré avec ${totalItems} événements`);
+    console.log(`✅ PDF Artiste généré avec ${totalItems} événements (langue: ${langue})`);
     return true;
 
   } catch (error) {

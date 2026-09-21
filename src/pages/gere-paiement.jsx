@@ -1,71 +1,42 @@
 // src/pages/GerePaiement.jsx
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft,
-  Users,
-  MapPin,
-  Phone,
-  Mail,
-  CreditCard,
-  Calendar,
-  DollarSign,
-  Hash,
-  FileText,
-  CheckCircle,
-  AlertCircle,
-  X,
-  Search,
-  RefreshCw,
-  Loader,
-  BadgeCheck,
-  AlertTriangle,
-  Info,
-  Hotel,
-  Store,
-  Bus,
-  Music,
-  Tv,
-  Eye,
-  EyeOff,
-  Star,
-  Award,
-  Wallet,
-  ReceiptText,
-  Package,
-  Plus,
-  Disc,
-  Globe,
-  Sparkles,
-  Video,
-  Repeat,
-  CalendarCheck,
-  FileCheck
+  ArrowLeft, Users, MapPin, Phone, Mail, CreditCard, Calendar,
+  DollarSign, Hash, FileText, CheckCircle, AlertCircle, X, Search,
+  RefreshCw, Loader, BadgeCheck, AlertTriangle, Info, Hotel, Store,
+  Bus, Music, Tv, Eye, EyeOff, Star, Award, Wallet, ReceiptText,
+  Package, Plus, Disc, Globe, Sparkles, Video, Repeat,
+  CalendarCheck, FileCheck,
 } from 'lucide-react';
 import '../styles/gere-paiement.css';
 import MiniSidebar from '../components/MiniSidebar';
+// ✅ Hook unique de traduction
+import { useT } from '../hooks/useT';
 
-// ✅ Icônes par type d'usager événementiel
+// ✅ Icônes par type d'usager événementiel (statiques)
 const OTHER_TYPE_ICONS = {
   cd: Disc,
   mp3: Music,
   'oeuvre-web': Globe,
   hologramme: Sparkles,
   video: Video,
-  autre: Package
-};
-
-const OTHER_TYPE_LABELS = {
-  cd: 'CD',
-  mp3: 'MP3',
-  'oeuvre-web': 'Œuvre Web',
-  hologramme: 'Hologramme',
-  video: 'Vidéo',
-  autre: 'Autre'
+  autre: Package,
 };
 
 const GerePaiement = () => {
   const navigate = useNavigate();
+
+  // ✅ LANGUE UNIQUE — vient du Context
+  const { t, langue } = useT();
+
+  // ✅ Locale pour formatage
+  const locale = useMemo(() => {
+    if (langue === 'en') return 'en-US';
+    if (langue === 'mg') return 'fr-MG';
+    return 'fr-FR';
+  }, [langue]);
+
   const [stats, setStats] = useState(null);
   const [selectedType, setSelectedType] = useState('hotel');
   const [selectedRegion, setSelectedRegion] = useState('tous');
@@ -100,18 +71,49 @@ const GerePaiement = () => {
 
   const notificationsAffichees = useRef(new Set());
 
-  // ✅ 6 types dont "other"
-  const typeConfig = {
-    hotel: { label: 'Hôtels', icon: Hotel },
-    'grand-surface': { label: 'Grandes Surfaces', icon: Store },
-    bus: { label: 'Bus', icon: Bus },
-    nightclub: { label: 'Night Clubs', icon: Music },
-    media: { label: 'Médias', icon: Tv },
-    other: { label: 'Usager événementiel', icon: Package }
-  };
+  // ✅ Labels des types événementiels (traduits)
+  const otherTypeLabels = useMemo(() => ({
+    cd: 'CD',
+    mp3: 'MP3',
+    'oeuvre-web': t('Œuvre Web', 'Asa an-tserasera', 'Web work'),
+    hologramme: t('Hologramme', 'Holograma', 'Hologram'),
+    video: t('Vidéo', 'Lahatsary', 'Video'),
+    autre: t('Autre', 'Hafa', 'Other'),
+  }), [t]);
 
-  const moisLabels = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-  const moisLabelsShort = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+  // ✅ 6 types dont "other"
+  const typeConfig = useMemo(() => ({
+    hotel: { label: t('Hôtels', 'Hotely', 'Hotels'), icon: Hotel },
+    'grand-surface': { label: t('Grandes Surfaces', 'Fivarotana lehibe', 'Large Stores'), icon: Store },
+    bus: { label: t('Bus', 'Bus', 'Bus'), icon: Bus },
+    nightclub: { label: t('Night Clubs', 'Club alina', 'Night Clubs'), icon: Music },
+    media: { label: t('Médias', 'Haino aman-jery', 'Media'), icon: Tv },
+    other: { label: t('Usager événementiel', 'Mpampiasa hetsika', 'Event user'), icon: Package },
+  }), [t]);
+
+  // ✅ Mois traduits
+  const moisLabels = useMemo(() => {
+    if (langue === 'en') {
+      return ['January', 'February', 'March', 'April', 'May', 'June',
+              'July', 'August', 'September', 'October', 'November', 'December'];
+    }
+    if (langue === 'mg') {
+      return ['Janoary', 'Febroary', 'Martsa', 'Aprily', 'Mey', 'Jona',
+              'Jolay', 'Aogositra', 'Septambra', 'Oktobra', 'Novambra', 'Desambra'];
+    }
+    return ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+            'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+  }, [langue]);
+
+  const moisLabelsShort = useMemo(() => {
+    if (langue === 'en') {
+      return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    }
+    if (langue === 'mg') {
+      return ['Jan', 'Feb', 'Mar', 'Apr', 'Mey', 'Jon', 'Jol', 'Aog', 'Sep', 'Okt', 'Nov', 'Des'];
+    }
+    return ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+  }, [langue]);
 
   // ========== CHARGEMENT ==========
   const loadRegions = useCallback(async () => {
@@ -128,7 +130,7 @@ const GerePaiement = () => {
       const countData = await countRes.json();
       if (countData.success && countData.nouveaux) {
         const idsTemp = {};
-        const typesFiltres = Object.keys(countData.nouveaux).filter(t => t !== 'occ');
+        const typesFiltres = Object.keys(countData.nouveaux).filter(t2 => t2 !== 'occ');
         for (const type of typesFiltres) {
           if (countData.nouveaux[type] > 0) {
             const idsRes = await fetch(`http://localhost:3001/api/usagers/nouveaux-ids/${type}`);
@@ -170,10 +172,8 @@ const GerePaiement = () => {
       const statsData = await statsRes.json();
       if (statsData.success) setStats(statsData.stats);
 
-      // Charger les usagers événementiels EN ARRIÈRE-PLAN (pour le compteur)
       loadOtherUsagers();
 
-      // ✅ Si le type sélectionné est "other", on s'arrête ici
       if (selectedType === 'other') {
         setLoading(false);
         return;
@@ -184,7 +184,7 @@ const GerePaiement = () => {
       const usagersData = await usagersRes.json();
 
       if (!usagersRes.ok) {
-        setApiError(`Erreur ${usagersRes.status} : ${usagersRes.statusText}`);
+        setApiError(`${t('Erreur', 'Olana', 'Error')} ${usagersRes.status} : ${usagersRes.statusText}`);
         setUsagers([]);
         setFilteredUsagers([]);
         setLoading(false);
@@ -206,7 +206,7 @@ const GerePaiement = () => {
       } else {
         setUsagers([]);
         setFilteredUsagers([]);
-        setApiError('Aucun usager trouvé');
+        setApiError(t('Aucun usager trouvé', 'Tsy misy mpampiasa hita', 'No user found'));
       }
 
       try {
@@ -232,11 +232,14 @@ const GerePaiement = () => {
       setUsagers([]);
       setFilteredUsagers([]);
       setAnneesDisponibles([currentYear, currentYear + 1]);
-      setNotification({ type: 'error', message: 'Erreur de chargement des données' });
+      setNotification({
+        type: 'error',
+        message: t('Erreur de chargement des données', 'Nisy olana tamin\'ny fakana ny angona', 'Error loading data'),
+      });
     } finally {
       setLoading(false);
     }
-  }, [selectedType, selectedRegion, currentYear, checkNouveauxUsagers, loadOtherUsagers]);
+  }, [selectedType, selectedRegion, currentYear, checkNouveauxUsagers, loadOtherUsagers, t]);
 
   useEffect(() => {
     loadRegions();
@@ -314,7 +317,7 @@ const GerePaiement = () => {
           <AlertTriangle size={14} /> {nbMoisPayes}/12
           <span className="badge-sub"> ({affichageMois})</span>
           <span className="badge-sub" style={{ display: 'block', marginTop: '2px' }}>
-            {moisRestants} mois restants
+            {moisRestants} {t('mois restants', 'volana sisa', 'months remaining')}
           </span>
         </span>
       );
@@ -329,24 +332,24 @@ const GerePaiement = () => {
     if (usager.email) infos.push({ icon: Mail, text: usager.email });
     switch (type) {
       case 'hotel':
-        if (usager.etoiles) infos.push({ icon: Star, text: `${usager.etoiles} étoiles` });
-        if (usager.ravinala) infos.push({ icon: Award, text: 'Label Ravinala' });
+        if (usager.etoiles) infos.push({ icon: Star, text: `${usager.etoiles} ${t('étoiles', 'kintana', 'stars')}` });
+        if (usager.ravinala) infos.push({ icon: Award, text: t('Label Ravinala', 'Tombokaso Ravinala', 'Ravinala Label') });
         break;
       case 'grand-surface':
-        if (usager.nombre_magasins) infos.push({ icon: Store, text: `${usager.nombre_magasins} magasins` });
+        if (usager.nombre_magasins) infos.push({ icon: Store, text: `${usager.nombre_magasins} ${t('magasins', 'fivarotana', 'stores')}` });
         if (usager.activite) infos.push({ icon: FileText, text: usager.activite });
         break;
       case 'bus':
-        if (usager.nombre_vehicules) infos.push({ icon: Bus, text: `${usager.nombre_vehicules} bus` });
-        if (usager.lignes) infos.push({ icon: MapPin, text: `Ligne : ${usager.lignes}` });
-        if (usager.trajet) infos.push({ icon: MapPin, text: `Trajet : ${usager.trajet}` });
+        if (usager.nombre_vehicules) infos.push({ icon: Bus, text: `${usager.nombre_vehicules} ${t('bus', 'fiara', 'buses')}` });
+        if (usager.lignes) infos.push({ icon: MapPin, text: `${t('Ligne', 'Lalana', 'Line')} : ${usager.lignes}` });
+        if (usager.trajet) infos.push({ icon: MapPin, text: `${t('Trajet', 'Lalana', 'Route')} : ${usager.trajet}` });
         break;
       case 'nightclub':
-        if (usager.jauge_max) infos.push({ icon: Users, text: `Jauge : ${usager.jauge_max}` });
+        if (usager.jauge_max) infos.push({ icon: Users, text: `${t('Jauge', 'Fahaiza-mandray', 'Capacity')} : ${usager.jauge_max}` });
         break;
       case 'media':
-        if (usager.frequence) infos.push({ icon: Tv, text: `Fréquence : ${usager.frequence}` });
-        if (usager.canal) infos.push({ icon: Tv, text: `Canal : ${usager.canal}` });
+        if (usager.frequence) infos.push({ icon: Tv, text: `${t('Fréquence', 'Fahita', 'Frequency')} : ${usager.frequence}` });
+        if (usager.canal) infos.push({ icon: Tv, text: `${t('Canal', 'Fantsona', 'Channel')} : ${usager.canal}` });
         break;
       default:
         break;
@@ -359,24 +362,24 @@ const GerePaiement = () => {
     try {
       const date = new Date(dateString);
       if (isNaN(date.getTime())) return dateString;
-      const jour = date.getDate();
-      const mois = date.toLocaleString('fr-FR', { month: 'long' });
-      const annee = date.getFullYear();
-      return `${jour} ${mois} ${annee}`;
+      return date.toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' });
     } catch { return dateString; }
   };
 
   const openPaymentModal = (usager) => {
     if (!usager || !usager.id) {
-      setNotification({ type: 'error', message: 'Usager invalide' });
+      setNotification({
+        type: 'error',
+        message: t('Usager invalide', 'Mpampiasa diso', 'Invalid user'),
+      });
       return;
     }
     navigate('/paiement-mensuel', {
       state: {
         usagerId: usager.id,
         usagerType: selectedType,
-        usagerData: usager
-      }
+        usagerData: usager,
+      },
     });
   };
 
@@ -393,7 +396,7 @@ const GerePaiement = () => {
     success: CheckCircle,
     error: AlertCircle,
     info: Info,
-    warning: AlertTriangle
+    warning: AlertTriangle,
   };
 
   // ✅ Rendu du tableau événementiel
@@ -419,7 +422,7 @@ const GerePaiement = () => {
       return (
         <div className="state-block">
           <Loader size={32} className="spinner" />
-          <p>Chargement des usagers événementiels...</p>
+          <p>{t('Chargement des usagers événementiels...', 'Maka ny mpampiasa hetsika...', 'Loading event users...')}</p>
         </div>
       );
     }
@@ -428,13 +431,9 @@ const GerePaiement = () => {
       return (
         <div className="state-block">
           <Package size={28} />
-          <p>Aucun usager événementiel trouvé</p>
-          <button
-            type="button"
-            className="btn-other-add"
-            onClick={() => navigate('/other-ajout')}
-          >
-            <Plus size={16} /> Ajouter un usager événementiel
+          <p>{t('Aucun usager événementiel trouvé', 'Tsy misy mpampiasa hetsika hita', 'No event user found')}</p>
+          <button type="button" className="btn-other-add" onClick={() => navigate('/other-ajout')}>
+            <Plus size={16} /> {t('Ajouter un usager événementiel', 'Hanampy mpampiasa hetsika', 'Add event user')}
           </button>
         </div>
       );
@@ -445,19 +444,19 @@ const GerePaiement = () => {
         <thead>
           <tr>
             <th>ID</th>
-            <th>Dénomination</th>
-            <th>Type</th>
-            <th>Représentant</th>
-            <th>Contact</th>
-            <th>Mode paiement</th>
-            <th>Quittance</th>
-            <th>Action</th>
+            <th>{t('Dénomination', 'Anarana', 'Name')}</th>
+            <th>{t('Type', 'Karazana', 'Type')}</th>
+            <th>{t('Représentant', 'Mpisolotena', 'Representative')}</th>
+            <th>{t('Contact', 'Fifandraisana', 'Contact')}</th>
+            <th>{t('Mode paiement', 'Fomba fandoavana', 'Payment mode')}</th>
+            <th>{t('Quittance', 'Taratasy', 'Receipt')}</th>
+            <th>{t('Action', 'Hetsika', 'Action')}</th>
           </tr>
         </thead>
         <tbody>
           {filtered.map((u) => {
             const TypeIcon = OTHER_TYPE_ICONS[u.type_usager] || Package;
-            const typeLabel = OTHER_TYPE_LABELS[u.type_usager] || u.type_usager;
+            const typeLabel = otherTypeLabels[u.type_usager] || u.type_usager;
             const lignes = u.lignes || [];
             const paiement = u.paiement || {};
             const totalLignes = lignes.reduce((acc, l) => acc + (parseFloat(l.montant) || 0), 0);
@@ -470,13 +469,13 @@ const GerePaiement = () => {
                   <span className="id-cell">
                     #{String(u.id).padStart(3, '0')}
                     <span className="tag tag-other">
-                      <Package size={10} /> Événementiel
+                      <Package size={10} /> {t('Événementiel', 'Hetsika', 'Event')}
                     </span>
                   </span>
                 </td>
 
                 <td data-label="Dénomination" className="name">
-                  <strong>{u.denomination || 'Sans nom'}</strong>
+                  <strong>{u.denomination || t('Sans nom', 'Tsy misy anarana', 'No name')}</strong>
                   {u.region && u.region !== 'N/A' && (
                     <div className="usager-sub"><MapPin size={12} /> {u.region}</div>
                   )}
@@ -508,12 +507,12 @@ const GerePaiement = () => {
                 <td data-label="Mode paiement">
                   <span className={`mode-badge mode-${u.mode_paiement || 'unique'}`}>
                     {u.mode_paiement === 'mensuel'
-                      ? <><Repeat size={12} /> Mensuel</>
-                      : <><CalendarCheck size={12} /> Unique</>}
+                      ? <><Repeat size={12} /> {t('Mensuel', 'Isam-bolana', 'Monthly')}</>
+                      : <><CalendarCheck size={12} /> {t('Unique', 'Indray mandeha', 'One-time')}</>}
                   </span>
                   {lignes.length > 0 && (
                     <div className="usager-sub" style={{ marginTop: '4px' }}>
-                      {lignes.length} ligne{lignes.length > 1 ? 's' : ''}
+                      {lignes.length} {t('ligne', 'andalana', 'line')}{lignes.length > 1 ? 's' : ''}
                     </div>
                   )}
                 </td>
@@ -528,13 +527,12 @@ const GerePaiement = () => {
                   )}
                   {total > 0 && (
                     <div className="pmt-montant" style={{ marginTop: '4px' }}>
-                      {total.toLocaleString('fr-FR')} Ar
+                      {total.toLocaleString(locale)} Ar
                     </div>
                   )}
                 </td>
 
                 <td data-label="Action">
-                  {/* ✅ Bouton "Payer" UNIQUEMENT si paiement mensuel */}
                   {!isUnique && (
                     <button
                       type="button"
@@ -544,17 +542,17 @@ const GerePaiement = () => {
                           state: {
                             usagerId: u.id,
                             usagerType: 'other',
-                            usagerData: u
-                          }
+                            usagerData: u,
+                          },
                         });
                       }}
                     >
-                      <CreditCard size={14} /> Payer
+                      <CreditCard size={14} /> {t('Payer', 'Mandoa', 'Pay')}
                     </button>
                   )}
                   {isUnique && (
                     <span className="paid-badge">
-                      <CheckCircle size={14} /> Payé
+                      <CheckCircle size={14} /> {t('Payé', 'Voaloa', 'Paid')}
                     </span>
                   )}
                 </td>
@@ -701,7 +699,6 @@ const GerePaiement = () => {
           color: #357ABD;
           font-size: 16px;
         }
-        /* ✅ Badge "Payé" pour les paiements uniques */
         .paid-badge {
           display: inline-flex;
           align-items: center;
@@ -733,7 +730,7 @@ const GerePaiement = () => {
                 type="button"
                 className="notif-close"
                 onClick={(e) => { e.stopPropagation(); setNotification(null); }}
-                aria-label="Fermer la notification"
+                aria-label={t('Fermer la notification', 'Hidio ny fampandrenesana', 'Close notification')}
               >
                 <X size={16} />
               </button>
@@ -746,13 +743,19 @@ const GerePaiement = () => {
           <header className="paiement-header">
             <div className="header-left">
               <button type="button" className="btn-retour" onClick={handleRetour}>
-                <ArrowLeft size={18} /> Retour
+                <ArrowLeft size={18} /> {t('Retour', 'Hiverina', 'Back')}
               </button>
               <div className="header-title-group">
                 <span className="header-icon-badge"><Wallet size={20} /></span>
                 <div className="header-title">
-                  <h1>Gestion des paiements</h1>
-                  <p className="header-subtitle">Suivez et gérez les paiements mensuels de vos usagers</p>
+                  <h1>{t('Gestion des paiements', 'Fitantanana ny fandoavana', 'Payment Management')}</h1>
+                  <p className="header-subtitle">
+                    {t(
+                      'Suivez et gérez les paiements mensuels de vos usagers',
+                      'Araho sy tantano ny fandoavana isam-bolana',
+                      'Track and manage your users monthly payments'
+                    )}
+                  </p>
                 </div>
               </div>
             </div>
@@ -761,15 +764,21 @@ const GerePaiement = () => {
                 type="button"
                 className="btn-other-ajout"
                 onClick={() => navigate('/other-ajout')}
-                title="Ajouter un usager événementiel (CD, MP3, œuvres web...)"
+                title={t(
+                  'Ajouter un usager événementiel (CD, MP3, œuvres web...)',
+                  'Hanampy mpampiasa hetsika (CD, MP3, asa an-tserasera...)',
+                  'Add event user (CD, MP3, web works...)'
+                )}
               >
-                <Package size={16} /> Usager événementiel
+                <Package size={16} /> {t('Usager événementiel', 'Mpampiasa hetsika', 'Event user')}
               </button>
-              <span className="header-badge"><Calendar size={14} /> Année {currentYear}</span>
+              <span className="header-badge">
+                <Calendar size={14} /> {t('Année', 'Taona', 'Year')} {currentYear}
+              </span>
             </div>
           </header>
 
-          {/* Types & Stats - 6 types sur UNE SEULE LIGNE */}
+          {/* Types & Stats - 6 types */}
           <div className="types-stats types-stats-6">
             {Object.keys(typeConfig).map((type) => {
               const Icon = typeConfig[type].icon;
@@ -801,8 +810,12 @@ const GerePaiement = () => {
             <div className="filters-left">
               <div className="filter-group">
                 <MapPin size={16} className="filter-icon" />
-                <select value={selectedRegion} onChange={(e) => setSelectedRegion(e.target.value)} className="filter-select">
-                  <option value="tous">Toutes les régions</option>
+                <select
+                  value={selectedRegion}
+                  onChange={(e) => setSelectedRegion(e.target.value)}
+                  className="filter-select"
+                >
+                  <option value="tous">{t('Toutes les régions', 'Ny faritra rehetra', 'All regions')}</option>
                   {regions.map(r => <option key={r.id} value={r.nom}>{r.nom}</option>)}
                 </select>
               </div>
@@ -810,7 +823,11 @@ const GerePaiement = () => {
               {selectedType !== 'other' && anneesDisponibles.length > 0 && (
                 <div className="filter-group">
                   <Calendar size={16} className="filter-icon" />
-                  <select value={filtreAnnee} onChange={(e) => setFiltreAnnee(parseInt(e.target.value, 10))} className="filter-select">
+                  <select
+                    value={filtreAnnee}
+                    onChange={(e) => setFiltreAnnee(parseInt(e.target.value, 10))}
+                    className="filter-select"
+                  >
                     {anneesDisponibles.map(y => <option key={y} value={y}>{y}</option>)}
                   </select>
                 </div>
@@ -821,8 +838,8 @@ const GerePaiement = () => {
                 <input
                   type="text"
                   placeholder={selectedType === 'other'
-                    ? "Rechercher un usager événementiel..."
-                    : "Rechercher (nom, demandeur, téléphone...)"}
+                    ? t('Rechercher un usager événementiel...', 'Hikaroka mpampiasa hetsika...', 'Search event user...')
+                    : t('Rechercher (nom, demandeur, téléphone...)', 'Hikaroka (anarana, mpangataka, finday...)', 'Search (name, applicant, phone...)')}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -833,17 +850,17 @@ const GerePaiement = () => {
                 <>
                   {showOnlyNouveaux ? (
                     <button type="button" className="btn-secondary" onClick={() => setShowOnlyNouveaux(false)}>
-                      <EyeOff size={16} /> Tous les usagers
+                      <EyeOff size={16} /> {t('Tous les usagers', 'Ny mpampiasa rehetra', 'All users')}
                     </button>
                   ) : (
                     <button type="button" className="btn-secondary" onClick={() => setShowOnlyNouveaux(true)}>
-                      <Eye size={16} /> Nouveaux uniquement
+                      <Eye size={16} /> {t('Nouveaux uniquement', 'Vaovao ihany', 'New only')}
                     </button>
                   )}
                 </>
               )}
               <button type="button" className="btn-refresh" onClick={loadAllData}>
-                <RefreshCw size={16} /> Rafraîchir
+                <RefreshCw size={16} /> {t('Rafraîchir', 'Havaozy', 'Refresh')}
               </button>
             </div>
           </div>
@@ -854,8 +871,9 @@ const GerePaiement = () => {
               <div className="other-header-info">
                 <Package size={18} color="#357ABD" />
                 <span>
-                  <strong className="other-header-count">{otherUsagers.length}</strong> usager(s) événementiel(s)
-                  {' '}— CD, MP3, Œuvres Web, Hologrammes, Vidéos...
+                  <strong className="other-header-count">{otherUsagers.length}</strong>{' '}
+                  {t('usager(s) événementiel(s)', 'mpampiasa hetsika', 'event user(s)')}
+                  {' '}— {t('CD, MP3, Œuvres Web, Hologrammes, Vidéos...', 'CD, MP3, Asa an-tserasera, Holograma, Lahatsary...', 'CD, MP3, Web works, Holograms, Videos...')}
                 </span>
               </div>
               <button
@@ -863,7 +881,7 @@ const GerePaiement = () => {
                 className="btn-other-add"
                 onClick={() => navigate('/other-ajout')}
               >
-                <Plus size={16} /> Ajouter
+                <Plus size={16} /> {t('Ajouter', 'Hanampy', 'Add')}
               </button>
             </div>
           )}
@@ -873,14 +891,14 @@ const GerePaiement = () => {
             {loading ? (
               <div className="state-block">
                 <Loader size={32} className="spinner" />
-                <p>Chargement des données...</p>
+                <p>{t('Chargement des données...', 'Maka ny angona...', 'Loading data...')}</p>
               </div>
             ) : apiError && selectedType !== 'other' ? (
               <div className="state-block state-error">
                 <AlertCircle size={28} />
                 <p>{apiError}</p>
                 <button type="button" className="btn-refresh" onClick={loadAllData}>
-                  <RefreshCw size={16} /> Rafraîchir
+                  <RefreshCw size={16} /> {t('Rafraîchir', 'Havaozy', 'Refresh')}
                 </button>
               </div>
             ) : selectedType === 'other' ? (
@@ -888,9 +906,13 @@ const GerePaiement = () => {
             ) : filteredUsagers.length === 0 ? (
               <div className="state-block">
                 <FileText size={28} />
-                <p>{showOnlyNouveaux ? 'Aucun nouvel usager en attente' : 'Aucun résultat trouvé'}</p>
+                <p>
+                  {showOnlyNouveaux
+                    ? t('Aucun nouvel usager en attente', 'Tsy misy mpampiasa vaovao miandry', 'No new user pending')
+                    : t('Aucun résultat trouvé', 'Tsy misy valiny hita', 'No result found')}
+                </p>
                 <button type="button" className="btn-refresh" onClick={loadAllData}>
-                  <RefreshCw size={16} /> Rafraîchir
+                  <RefreshCw size={16} /> {t('Rafraîchir', 'Havaozy', 'Refresh')}
                 </button>
               </div>
             ) : (
@@ -898,13 +920,13 @@ const GerePaiement = () => {
                 <thead>
                   <tr>
                     <th>ID</th>
-                    <th>Nom / Dénomination</th>
-                    <th>Demandeur</th>
-                    <th>Contact</th>
-                    <th>Informations</th>
-                    <th>Pmt {filtreAnnee}</th>
-                    <th>Statut</th>
-                    <th>Action</th>
+                    <th>{t('Nom / Dénomination', 'Anarana', 'Name')}</th>
+                    <th>{t('Demandeur', 'Mpangataka', 'Applicant')}</th>
+                    <th>{t('Contact', 'Fifandraisana', 'Contact')}</th>
+                    <th>{t('Informations', 'Fampahalalana', 'Information')}</th>
+                    <th>{t('Pmt', 'Pmt', 'Pmt')} {filtreAnnee}</th>
+                    <th>{t('Statut', 'Toe-javatra', 'Status')}</th>
+                    <th>{t('Action', 'Hetsika', 'Action')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -923,22 +945,32 @@ const GerePaiement = () => {
                         <td data-label="ID">
                           <span className="id-cell">
                             #{String(u.id).padStart(3, '0')}
-                            {isNew && <span className="tag tag-new">Nouveau</span>}
+                            {isNew && <span className="tag tag-new">{t('Nouveau', 'Vaovao', 'New')}</span>}
                             {isLate && <span className="tag tag-late"><AlertTriangle size={12} /></span>}
                           </span>
                         </td>
                         <td data-label="Nom" className="name">
-                          <strong>{u.denomination || u.nom_evenement || u.organisateurs || 'Sans nom'}</strong>
-                          {u.region && u.region !== 'N/A' && <div className="usager-sub"><MapPin size={12} /> {u.region}</div>}
-                          {u.adresse || u.adresse_siege ? <div className="usager-sub">{u.adresse || u.adresse_siege}</div> : null}
+                          <strong>
+                            {u.denomination || u.nom_evenement || u.organisateurs || t('Sans nom', 'Tsy misy anarana', 'No name')}
+                          </strong>
+                          {u.region && u.region !== 'N/A' && (
+                            <div className="usager-sub"><MapPin size={12} /> {u.region}</div>
+                          )}
+                          {u.adresse || u.adresse_siege ? (
+                            <div className="usager-sub">{u.adresse || u.adresse_siege}</div>
+                          ) : null}
                           {u.moisCreation && u.moisCreation > 1 && (
-                            <div className="usager-sub"><Calendar size={12} /> Début : {moisLabelsShort[u.moisCreation - 1]} {u.anneeCreation}</div>
+                            <div className="usager-sub">
+                              <Calendar size={12} /> {t('Début', 'Fanombohana', 'Start')} : {moisLabelsShort[u.moisCreation - 1]} {u.anneeCreation}
+                            </div>
                           )}
                         </td>
                         <td data-label="Demandeur">
                           <div className="demandeur-info">
                             <strong>{u.demandeur || u.representant_par || '-'}</strong>
-                            {u.representant_nom && <div className="usager-sub">Rep. {u.representant_nom}</div>}
+                            {u.representant_nom && (
+                              <div className="usager-sub">{t('Rep.', 'Mpisolo', 'Rep.')} {u.representant_nom}</div>
+                            )}
                           </div>
                         </td>
                         <td data-label="Contact">
@@ -954,7 +986,11 @@ const GerePaiement = () => {
                                 {info.icon ? <info.icon size={12} /> : null}
                                 <span>{info.text}</span>
                               </div>
-                            )) : <span className="usager-info-empty">Aucune information</span>}
+                            )) : (
+                              <span className="usager-info-empty">
+                                {t('Aucune information', 'Tsy misy fampahalalana', 'No information')}
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td data-label="Pmt">
@@ -963,7 +999,7 @@ const GerePaiement = () => {
                               <>
                                 <span style={{ fontWeight: 'bold', color: '#198754' }}>12/12 ✅</span>
                                 <div className="pmt-detail" style={{ fontSize: '10px', color: '#198754', marginTop: '2px' }}>
-                                  Tous les mois payés
+                                  {t('Tous les mois payés', 'Volana rehetra voaloa', 'All months paid')}
                                 </div>
                               </>
                             ) : nbMoisPayes > 0 ? (
@@ -971,13 +1007,17 @@ const GerePaiement = () => {
                                 <span style={{ fontWeight: '600' }}>{nbMoisPayes}/12</span>
                                 <span style={{ fontSize: '12px', color: '#0d6efd' }}> ({affichageMoisPayes})</span>
                                 <div className="pmt-detail" style={{ fontSize: '10px', color: '#6c757d', marginTop: '2px' }}>
-                                  Payés : {affichageMoisPayes}
+                                  {t('Payés', 'Voaloa', 'Paid')} : {affichageMoisPayes}
                                 </div>
                               </>
                             ) : (
                               <span style={{ color: '#dc3545' }}>0/12</span>
                             )}
-                            {u.montant_mensuel > 0 && <div className="pmt-montant">{u.montant_mensuel.toLocaleString()} Ar / mois</div>}
+                            {u.montant_mensuel > 0 && (
+                              <div className="pmt-montant">
+                                {u.montant_mensuel.toLocaleString(locale)} Ar / {t('mois', 'volana', 'month')}
+                              </div>
+                            )}
                           </div>
                         </td>
                         <td data-label="Statut">{getStatusBadge(u)}</td>
@@ -987,7 +1027,7 @@ const GerePaiement = () => {
                             className="btn-pay"
                             onClick={() => openPaymentModal(u)}
                           >
-                            <CreditCard size={14} /> Payer
+                            <CreditCard size={14} /> {t('Payer', 'Mandoa', 'Pay')}
                           </button>
                         </td>
                       </tr>

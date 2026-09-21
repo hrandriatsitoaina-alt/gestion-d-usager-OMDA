@@ -33,10 +33,22 @@ import {
 } from 'lucide-react';
 
 import MiniSidebar from '../components/MiniSidebar';
+// ✅ Hook unique de traduction
+import { useT } from '../hooks/useT';
 import '../styles/date_occ.css';
 
 const DateOcc = () => {
   const navigate = useNavigate();
+
+  // ✅ LANGUE UNIQUE — vient du Context
+  const { t, langue } = useT();
+
+  // ✅ Locale pour les dates (mg → fr-MG, pas mg-MG)
+  const locale = useMemo(() => {
+    if (langue === 'en') return 'en-US';
+    if (langue === 'mg') return 'fr-MG';
+    return 'fr-FR';
+  }, [langue]);
 
   // Filtres
   const [searchTerm, setSearchTerm] = useState('');
@@ -54,30 +66,50 @@ const DateOcc = () => {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [availableYears, setAvailableYears] = useState([]);
 
-  // ========== Helpers ==========
-  const formatDateComplete = (dateString) => {
+  // ============================================================
+  // ✅ MOIS traduits selon la langue (via useMemo)
+  // ============================================================
+  const MONTHS = useMemo(() => [
+    { value: 'janvier',   label: t('Janvier',   'Janoary',   'January') },
+    { value: 'février',   label: t('Février',   'Febroary',  'February') },
+    { value: 'mars',      label: t('Mars',      'Martsa',    'March') },
+    { value: 'avril',     label: t('Avril',     'Aprily',    'April') },
+    { value: 'mai',       label: t('Mai',       'Mey',       'May') },
+    { value: 'juin',      label: t('Juin',      'Jona',      'June') },
+    { value: 'juillet',   label: t('Juillet',   'Jolay',     'July') },
+    { value: 'août',      label: t('Août',      'Aogositra', 'August') },
+    { value: 'septembre', label: t('Septembre', 'Septambra', 'September') },
+    { value: 'octobre',   label: t('Octobre',   'Oktobra',   'October') },
+    { value: 'novembre',  label: t('Novembre',  'Novambra',  'November') },
+    { value: 'décembre',  label: t('Décembre',  'Desambra',  'December') },
+  ], [t]);
+
+  // ============================================================
+  // HELPERS DE FORMATAGE
+  // ============================================================
+  const formatDateComplete = useCallback((dateString) => {
     if (!dateString) return '—';
     const date = new Date(dateString);
     if (isNaN(date)) return '—';
-    return date.toLocaleDateString('fr-FR', {
+    return date.toLocaleDateString(locale, {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
       year: 'numeric',
     });
-  };
+  }, [locale]);
 
-  const formatDateShort = (dateString) => {
+  const formatDateShort = useCallback((dateString) => {
     if (!dateString) return '—';
     const date = new Date(dateString);
     if (isNaN(date)) return '—';
-    return date.toLocaleDateString('fr-FR');
-  };
+    return date.toLocaleDateString(locale);
+  }, [locale]);
 
-  const formatMoney = (value) => {
+  const formatMoney = useCallback((value) => {
     const num = parseFloat(value) || 0;
-    return num.toLocaleString('fr-FR') + ' Ar';
-  };
+    return num.toLocaleString(locale) + ' Ar';
+  }, [locale]);
 
   const firstNonEmpty = (...values) => {
     for (const v of values) {
@@ -99,7 +131,9 @@ const DateOcc = () => {
     return Array.from(years).sort((a, b) => b - a);
   };
 
-  // ========== Appels API ==========
+  // ============================================================
+  // APPELS API
+  // ============================================================
   const loadRegions = useCallback(async () => {
     try {
       const res = await fetch('http://localhost:3001/api/regions');
@@ -126,12 +160,19 @@ const DateOcc = () => {
       }
     } catch (err) {
       console.error(err);
-      setError('Impossible de charger les données.');
+      setError(t(
+        'Impossible de charger les données.',
+        'Tsy afaka maka ny angona.',
+        'Unable to load data.'
+      ));
       setEvents([]);
       setAvailableYears([]);
     } finally {
       setLoading(false);
     }
+  // ✅ PAS de dépendance [appLangue] — les données ne doivent PAS être rechargées
+  //    quand la langue change. On met [t] mais fetch ne dépend pas de la langue.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -139,7 +180,9 @@ const DateOcc = () => {
     fetchOccasionnels();
   }, [loadRegions, fetchOccasionnels]);
 
-  // ========== Filtrage ==========
+  // ============================================================
+  // FILTRAGE
+  // ============================================================
   const normalizeId = (input) => {
     if (!input) return null;
     const num = parseInt(input.trim(), 10);
@@ -216,7 +259,9 @@ const DateOcc = () => {
     selectedDay, selectedMonth, selectedYear, selectedRegion,
   ]);
 
-  // ========== Statistiques (basées sur FILTRÉ) ==========
+  // ============================================================
+  // STATISTIQUES
+  // ============================================================
   const totalEvents = getFilteredEvents.length;
 
   const totalArtistesUniques = useMemo(() => {
@@ -253,7 +298,9 @@ const DateOcc = () => {
     return s.size;
   }, [getFilteredEvents]);
 
-  // ========== Statut ==========
+  // ============================================================
+  // STATUT
+  // ============================================================
   const getEventStatus = (dateOriginal) => {
     if (!dateOriginal) return 'unknown';
     const eventDate = new Date(dateOriginal);
@@ -266,15 +313,38 @@ const DateOcc = () => {
     return 'upcoming';
   };
 
-  const statusConfig = {
-    passed: { label: 'Passé', icon: AlertCircle, className: 'occ-status-passed' },
-    today: { label: "Aujourd'hui", icon: CheckCircle, className: 'occ-status-today' },
-    near: { label: 'Proche', icon: Clock, className: 'occ-status-near' },
-    upcoming: { label: 'Futur', icon: Calendar, className: 'occ-status-upcoming' },
-    unknown: { label: 'Inconnu', icon: AlertCircle, className: 'occ-status-unknown' },
-  };
+  // ✅ statusConfig dans useMemo — recalculé quand la langue change
+  const statusConfig = useMemo(() => ({
+    passed: {
+      label: t('Passé', 'Lasana', 'Passed'),
+      icon: AlertCircle,
+      className: 'occ-status-passed'
+    },
+    today: {
+      label: t("Aujourd'hui", 'Androany', 'Today'),
+      icon: CheckCircle,
+      className: 'occ-status-today'
+    },
+    near: {
+      label: t('Proche', 'Akaiky', 'Near'),
+      icon: Clock,
+      className: 'occ-status-near'
+    },
+    upcoming: {
+      label: t('Futur', 'Ho avy', 'Upcoming'),
+      icon: Calendar,
+      className: 'occ-status-upcoming'
+    },
+    unknown: {
+      label: t('Inconnu', 'Tsy fantatra', 'Unknown'),
+      icon: AlertCircle,
+      className: 'occ-status-unknown'
+    },
+  }), [t]);
 
-  // ========== Modal ==========
+  // ============================================================
+  // MODAL
+  // ============================================================
   const openModal = (event) => {
     setSelectedEvent(event);
     document.body.style.overflow = 'hidden';
@@ -295,11 +365,10 @@ const DateOcc = () => {
 
   return (
     <>
-      {/* <Header /> */}
       <MiniSidebar />
 
       <main className="occ-page">
-        {/* ============ HEADER INDÉPENDANT ============ */}
+        {/* ============ HEADER ============ */}
         <header className="occ-header">
           <div className="occ-header-bg" />
           <div className="occ-header-content">
@@ -309,10 +378,14 @@ const DateOcc = () => {
               </div>
               <div>
                 <h1 className="occ-header-title">
-                  OMDA <span>Occasionnelles</span>
+                  OMDA <span>{t('Occasionnelles', 'Fotoana manokana', 'Occasionals')}</span>
                 </h1>
                 <p className="occ-header-subtitle">
-                  Gestion et suivi des événements occasionnels
+                  {t(
+                    'Gestion et suivi des événements occasionnels',
+                    "Fitantanana sy fanaraha-maso ny hetsika fotoana manokana",
+                    'Management and tracking of occasional events'
+                  )}
                 </p>
               </div>
             </div>
@@ -321,17 +394,17 @@ const DateOcc = () => {
               <button
                 className="occ-btn-refresh"
                 onClick={fetchOccasionnels}
-                title="Rafraîchir"
+                title={t('Rafraîchir', 'Havaozy', 'Refresh')}
               >
                 <RefreshCw size={16} />
-                Rafraîchir
+                {t('Rafraîchir', 'Havaozy', 'Refresh')}
               </button>
               <button
                 className="occ-btn-back"
                 onClick={() => navigate('/dashboard')}
               >
                 <ArrowLeft size={16} />
-                Retour
+                {t('Retour', 'Hiverina', 'Back')}
               </button>
             </div>
           </div>
@@ -344,7 +417,9 @@ const DateOcc = () => {
               </div>
               <div className="occ-kpi-data">
                 <span className="occ-kpi-value">{totalEvents}</span>
-                <span className="occ-kpi-label">Événements</span>
+                <span className="occ-kpi-label">
+                  {t('Événements', 'Hetsika', 'Events')}
+                </span>
               </div>
             </div>
 
@@ -354,7 +429,9 @@ const DateOcc = () => {
               </div>
               <div className="occ-kpi-data">
                 <span className="occ-kpi-value">{uniqueOrgs}</span>
-                <span className="occ-kpi-label">Organisateurs</span>
+                <span className="occ-kpi-label">
+                  {t('Organisateurs', 'Mpikarakara', 'Organizers')}
+                </span>
               </div>
             </div>
 
@@ -364,7 +441,9 @@ const DateOcc = () => {
               </div>
               <div className="occ-kpi-data">
                 <span className="occ-kpi-value">{totalArtistesUniques}</span>
-                <span className="occ-kpi-label">Artistes uniques</span>
+                <span className="occ-kpi-label">
+                  {t('Artistes uniques', 'Mpihira tsy manam-paharoa', 'Unique artists')}
+                </span>
               </div>
             </div>
 
@@ -374,7 +453,9 @@ const DateOcc = () => {
               </div>
               <div className="occ-kpi-data">
                 <span className="occ-kpi-value">{totalRegionsCouvertes}</span>
-                <span className="occ-kpi-label">Régions couvertes</span>
+                <span className="occ-kpi-label">
+                  {t('Régions couvertes', 'Faritra voarakotra', 'Covered regions')}
+                </span>
               </div>
             </div>
 
@@ -384,9 +465,11 @@ const DateOcc = () => {
               </div>
               <div className="occ-kpi-data">
                 <span className="occ-kpi-value">
-                  {chiffreAffaireTotal.toLocaleString('fr-FR')}
+                  {chiffreAffaireTotal.toLocaleString(locale)}
                 </span>
-                <span className="occ-kpi-label">Chiffre total (Ar)</span>
+                <span className="occ-kpi-label">
+                  {t('Chiffre total (Ar)', 'Totaly (Ar)', 'Total amount (Ar)')}
+                </span>
               </div>
             </div>
           </div>
@@ -397,14 +480,14 @@ const DateOcc = () => {
           <div className="occ-filters-header">
             <h3>
               <Activity size={16} />
-              Filtres de recherche
+              {t('Filtres de recherche', 'Sivana fikarohana', 'Search filters')}
             </h3>
           </div>
 
           <div className="occ-filters-row">
             <div className="occ-filter-item">
               <label htmlFor="occ-day">
-                <Calendar size={13} /> Jour
+                <Calendar size={13} /> {t('Jour', 'Andro', 'Day')}
               </label>
               <select
                 id="occ-day"
@@ -412,7 +495,7 @@ const DateOcc = () => {
                 onChange={(e) => setSelectedDay(e.target.value)}
                 className="occ-form-select"
               >
-                <option value="">Tous</option>
+                <option value="">{t('Tous', 'Rehetra', 'All')}</option>
                 {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
                   <option key={d} value={d}>{d}</option>
                 ))}
@@ -421,7 +504,7 @@ const DateOcc = () => {
 
             <div className="occ-filter-item">
               <label htmlFor="occ-month">
-                <Calendar size={13} /> Mois
+                <Calendar size={13} /> {t('Mois', 'Volana', 'Month')}
               </label>
               <select
                 id="occ-month"
@@ -429,13 +512,10 @@ const DateOcc = () => {
                 onChange={(e) => setSelectedMonth(e.target.value)}
                 className="occ-form-select"
               >
-                <option value="">Tous</option>
-                {[
-                  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
-                  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
-                ].map((m) => (
-                  <option key={m} value={m}>
-                    {m.charAt(0).toUpperCase() + m.slice(1)}
+                <option value="">{t('Tous', 'Rehetra', 'All')}</option>
+                {MONTHS.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
                   </option>
                 ))}
               </select>
@@ -443,7 +523,7 @@ const DateOcc = () => {
 
             <div className="occ-filter-item">
               <label htmlFor="occ-year">
-                <Calendar size={13} /> Année
+                <Calendar size={13} /> {t('Année', 'Taona', 'Year')}
               </label>
               <select
                 id="occ-year"
@@ -451,7 +531,7 @@ const DateOcc = () => {
                 onChange={(e) => setSelectedYear(e.target.value)}
                 className="occ-form-select"
               >
-                <option value="">Tous</option>
+                <option value="">{t('Tous', 'Rehetra', 'All')}</option>
                 {availableYears.map((y) => (
                   <option key={y} value={y}>{y}</option>
                 ))}
@@ -460,7 +540,7 @@ const DateOcc = () => {
 
             <div className="occ-filter-item">
               <label htmlFor="occ-region">
-                <MapPin size={13} /> Région
+                <MapPin size={13} /> {t('Région', 'Faritra', 'Region')}
               </label>
               <select
                 id="occ-region"
@@ -468,7 +548,7 @@ const DateOcc = () => {
                 onChange={(e) => setSelectedRegion(e.target.value)}
                 className="occ-form-select"
               >
-                <option value="">Toutes</option>
+                <option value="">{t('Toutes', 'Rehetra', 'All')}</option>
                 {regionsDisponibles.map((r) => (
                   <option key={r.id} value={r.nom}>{r.nom}</option>
                 ))}
@@ -478,7 +558,7 @@ const DateOcc = () => {
             <div className="occ-filter-item occ-filter-actions">
               <label>&nbsp;</label>
               <button className="occ-btn-reset" onClick={resetFilters}>
-                <RotateCcw size={14} /> Réinitialiser
+                <RotateCcw size={14} /> {t('Réinitialiser', 'Averina', 'Reset')}
               </button>
             </div>
           </div>
@@ -488,7 +568,11 @@ const DateOcc = () => {
               <Search size={16} className="occ-search-icon" />
               <input
                 type="text"
-                placeholder="Rechercher par nom, lieu, artiste, organisateur…"
+                placeholder={t(
+                  'Rechercher par nom, lieu, artiste, organisateur…',
+                  'Hikaroka amin\'ny anarana, toerana, mpihira, mpikarakara…',
+                  'Search by name, place, artist, organizer…'
+                )}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="occ-search-input"
@@ -498,7 +582,7 @@ const DateOcc = () => {
               <Tag size={16} className="occ-ref-icon" />
               <input
                 type="text"
-                placeholder="ID événement"
+                placeholder={t('ID événement', 'ID hetsika', 'Event ID')}
                 value={referenceId}
                 onChange={(e) => setReferenceId(e.target.value)}
                 className="occ-ref-input"
@@ -512,9 +596,9 @@ const DateOcc = () => {
           <div className="occ-table-header">
             <h3>
               <FileText size={16} />
-              Liste des événements
+              {t('Liste des événements', 'Lisitry ny hetsika', 'Event list')}
               <span className="occ-table-count">
-                {getFilteredEvents.length} résultat
+                {getFilteredEvents.length} {t('résultat', 'valiny', 'result')}
                 {getFilteredEvents.length > 1 ? 's' : ''}
               </span>
             </h3>
@@ -523,14 +607,14 @@ const DateOcc = () => {
           {loading ? (
             <div className="occ-state occ-state-loading">
               <div className="occ-spinner" />
-              <p>Chargement des événements…</p>
+              <p>{t('Chargement des événements…', 'Maka ny hetsika…', 'Loading events…')}</p>
             </div>
           ) : error ? (
             <div className="occ-state occ-state-error">
               <AlertCircle size={36} />
               <p>{error}</p>
               <button className="occ-btn-retry" onClick={fetchOccasionnels}>
-                <RefreshCw size={14} /> Réessayer
+                <RefreshCw size={14} /> {t('Réessayer', 'Andramo indray', 'Retry')}
               </button>
             </div>
           ) : getFilteredEvents.length === 0 ? (
@@ -538,8 +622,16 @@ const DateOcc = () => {
               <Search size={40} />
               <p>
                 {referenceId
-                  ? `Aucun événement avec la référence ${referenceId}`
-                  : 'Aucun événement ne correspond à vos critères'}
+                  ? t(
+                      `Aucun événement avec la référence ${referenceId}`,
+                      `Tsy misy hetsika misy ny referansa ${referenceId}`,
+                      `No event with reference ${referenceId}`
+                    )
+                  : t(
+                      'Aucun événement ne correspond à vos critères',
+                      'Tsy misy hetsika mifanaraka amin\'ny fepetrao',
+                      'No event matches your criteria'
+                    )}
               </p>
             </div>
           ) : (
@@ -547,15 +639,15 @@ const DateOcc = () => {
               <table className="occ-table">
                 <thead>
                   <tr>
-                    <th>Réf.</th>
-                    <th>Date</th>
-                    <th>Organisateur</th>
-                    <th>Événement</th>
-                    <th>Lieu</th>
-                    <th>Artistes</th>
-                    <th>Montant</th>
-                    <th>Statut</th>
-                    <th className="occ-th-action">Détail</th>
+                    <th>{t('Réf.', 'Ref.', 'Ref.')}</th>
+                    <th>{t('Date', 'Daty', 'Date')}</th>
+                    <th>{t('Organisateur', 'Mpikarakara', 'Organizer')}</th>
+                    <th>{t('Événement', 'Hetsika', 'Event')}</th>
+                    <th>{t('Lieu', 'Toerana', 'Location')}</th>
+                    <th>{t('Artistes', 'Mpihira', 'Artists')}</th>
+                    <th>{t('Montant', 'Vola', 'Amount')}</th>
+                    <th>{t('Statut', 'Toe-javatra', 'Status')}</th>
+                    <th className="occ-th-action">{t('Détail', 'Antsipiriany', 'Detail')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -607,7 +699,7 @@ const DateOcc = () => {
                           <button
                             className="occ-btn-view"
                             onClick={() => openModal(event)}
-                            aria-label="Voir les détails"
+                            aria-label={t('Voir les détails', 'Hijery ny antsipiriany', 'View details')}
                           >
                             <Eye size={17} />
                           </button>
@@ -621,33 +713,36 @@ const DateOcc = () => {
           )}
         </section>
 
-        {/* ============ FOOTER INDÉPENDANT ============ */}
+        {/* ============ FOOTER ============ */}
         <footer className="occ-footer">
           <div className="occ-footer-content">
             <div className="occ-footer-brand">
               <CalendarDays size={18} />
-              <span>OMDA · Occasionnelles</span>
+              <span>OMDA · {t('Occasionnelles', 'Fotoana manokana', 'Occasionals')}</span>
             </div>
             <div className="occ-footer-info">
               <span>
-                <Layers size={13} /> {totalEvents} événement{totalEvents > 1 ? 's' : ''}
+                <Layers size={13} /> {totalEvents} {t('événement', 'hetsika', 'event')}
+                {totalEvents > 1 ? 's' : ''}
               </span>
               <span className="occ-footer-sep">•</span>
               <span>
-                <Users size={13} /> {uniqueOrgs} organisateur{uniqueOrgs > 1 ? 's' : ''}
+                <Users size={13} /> {uniqueOrgs} {t('organisateur', 'mpikarakara', 'organizer')}
+                {uniqueOrgs > 1 ? 's' : ''}
               </span>
               <span className="occ-footer-sep">•</span>
               <span>
-                <Music size={13} /> {totalArtistesUniques} artiste{totalArtistesUniques > 1 ? 's' : ''}
+                <Music size={13} /> {totalArtistesUniques} {t('artiste', 'mpihira', 'artist')}
+                {totalArtistesUniques > 1 ? 's' : ''}
               </span>
               <span className="occ-footer-sep">•</span>
               <span>
-                <TrendingUp size={13} /> {chiffreAffaireTotal.toLocaleString('fr-FR')} Ar
+                <TrendingUp size={13} /> {chiffreAffaireTotal.toLocaleString(locale)} Ar
               </span>
             </div>
             <div className="occ-footer-date">
               <Calendar size={13} />
-              {new Date().toLocaleDateString('fr-FR', {
+              {new Date().toLocaleDateString(locale, {
                 day: '2-digit',
                 month: 'long',
                 year: 'numeric',
@@ -668,12 +763,14 @@ const DateOcc = () => {
                 </div>
                 <div>
                   <h3 className="occ-modal-title">
-                    Détails de l'événement
+                    {t("Détails de l'événement", "Antsipirian'ny hetsika", 'Event details')}
                   </h3>
-                  <span className="occ-modal-ref">Réf. #{selectedEvent.id}</span>
+                  <span className="occ-modal-ref">
+                    {t('Réf.', 'Ref.', 'Ref.')} #{selectedEvent.id}
+                  </span>
                 </div>
               </div>
-              <button className="occ-modal-close" onClick={closeModal} aria-label="Fermer">
+              <button className="occ-modal-close" onClick={closeModal} aria-label={t('Fermer', 'Hidio', 'Close')}>
                 ✕
               </button>
             </div>
@@ -682,27 +779,27 @@ const DateOcc = () => {
               {/* ===== Événement ===== */}
               <div className="occ-modal-section">
                 <h4>
-                  <Calendar size={15} /> Événement
+                  <Calendar size={15} /> {t('Événement', 'Hetsika', 'Event')}
                 </h4>
                 <div className="occ-modal-grid">
                   <div className="occ-modal-row">
-                    <span><CalendarClock size={13} /> Date</span>
+                    <span><CalendarClock size={13} /> {t('Date', 'Daty', 'Date')}</span>
                     <strong>{formatDateComplete(selectedEvent.date_evenement)}</strong>
                   </div>
                   <div className="occ-modal-row">
-                    <span><Tag size={13} /> Genre</span>
+                    <span><Tag size={13} /> {t('Genre', 'Karazana', 'Genre')}</span>
                     <strong>{selectedEvent.genre_manifestation || '—'}</strong>
                   </div>
                   <div className="occ-modal-row">
-                    <span><MapPin size={13} /> Lieu</span>
+                    <span><MapPin size={13} /> {t('Lieu', 'Toerana', 'Location')}</span>
                     <strong>{selectedEvent.lieu_evenement || '—'}</strong>
                   </div>
                   <div className="occ-modal-row">
-                    <span><MapPinned size={13} /> Région</span>
+                    <span><MapPinned size={13} /> {t('Région', 'Faritra', 'Region')}</span>
                     <strong>{selectedEvent.region || '—'}</strong>
                   </div>
                   <div className="occ-modal-row">
-                    <span><Music size={13} /> Artistes (texte)</span>
+                    <span><Music size={13} /> {t('Artistes (texte)', 'Mpihira (lahatsoratra)', 'Artists (text)')}</span>
                     <strong>{selectedEvent.artistes || '—'}</strong>
                   </div>
                 </div>
@@ -711,49 +808,49 @@ const DateOcc = () => {
               {/* ===== Organisateur ===== */}
               <div className="occ-modal-section">
                 <h4>
-                  <Building2 size={15} /> Organisateur
+                  <Building2 size={15} /> {t('Organisateur', 'Mpikarakara', 'Organizer')}
                 </h4>
                 <div className="occ-modal-grid">
                   <div className="occ-modal-row">
-                    <span><Users size={13} /> Organisateurs</span>
+                    <span><Users size={13} /> {t('Organisateurs', 'Mpikarakara', 'Organizers')}</span>
                     <strong className="occ-highlight">
                       {selectedEvent.organisateurs || '—'}
                     </strong>
                   </div>
                   <div className="occ-modal-row">
-                    <span><Building2 size={13} /> Dénomination</span>
+                    <span><Building2 size={13} /> {t('Dénomination', 'Anarana', 'Name')}</span>
                     <strong>{selectedEvent.denomination || '—'}</strong>
                   </div>
                   <div className="occ-modal-row">
-                    <span><User size={13} /> Demandeur</span>
+                    <span><User size={13} /> {t('Demandeur', 'Mpanao fangatahana', 'Applicant')}</span>
                     <strong>{selectedEvent.demandeur || '—'}</strong>
                   </div>
                   <div className="occ-modal-row">
-                    <span><User size={13} /> Représenté par</span>
+                    <span><User size={13} /> {t('Représenté par', 'Solontenan\'ny', 'Represented by')}</span>
                     <strong>{selectedEvent.representant_par || '—'}</strong>
                   </div>
                   <div className="occ-modal-row">
-                    <span><CreditCard size={13} /> CIN représentant</span>
+                    <span><CreditCard size={13} /> {t('CIN représentant', 'CIN mpisolo tena', 'Representative ID')}</span>
                     <strong>{selectedEvent.representant_cin || '—'}</strong>
                   </div>
                   <div className="occ-modal-row">
-                    <span><Calendar size={13} /> CIN délivrée le</span>
+                    <span><Calendar size={13} /> {t('CIN délivrée le', 'CIN nomena ny', 'ID issued on')}</span>
                     <strong>{formatDateShort(selectedEvent.representant_cin_delivree)}</strong>
                   </div>
                   <div className="occ-modal-row">
-                    <span><MapPin size={13} /> CIN lieu</span>
+                    <span><MapPin size={13} /> {t('CIN lieu', 'Toerana CIN', 'ID place')}</span>
                     <strong>{selectedEvent.representant_cin_lieu || '—'}</strong>
                   </div>
                   <div className="occ-modal-row">
-                    <span><Phone size={13} /> Téléphone</span>
+                    <span><Phone size={13} /> {t('Téléphone', 'Finday', 'Phone')}</span>
                     <strong>{selectedEvent.telephone || '—'}</strong>
                   </div>
                   <div className="occ-modal-row">
-                    <span><MapPin size={13} /> Adresse</span>
+                    <span><MapPin size={13} /> {t('Adresse', 'Adiresy', 'Address')}</span>
                     <strong>{selectedEvent.adresse || '—'}</strong>
                   </div>
                   <div className="occ-modal-row">
-                    <span><MapPin size={13} /> Domicile</span>
+                    <span><MapPin size={13} /> {t('Domicile', 'Fonenana', 'Residence')}</span>
                     <strong>{selectedEvent.domicile || '—'}</strong>
                   </div>
                 </div>
@@ -762,31 +859,31 @@ const DateOcc = () => {
               {/* ===== Dossier ===== */}
               <div className="occ-modal-section">
                 <h4>
-                  <FileText size={15} /> Dossier
+                  <FileText size={15} /> {t('Dossier', 'Rakitra', 'File')}
                 </h4>
                 <div className="occ-modal-grid">
                   <div className="occ-modal-row">
-                    <span><Hash size={13} /> N° global</span>
+                    <span><Hash size={13} /> {t('N° global', 'Laharana ankapobeny', 'Global N°')}</span>
                     <strong>{selectedEvent.numero_dossier_global || '—'}</strong>
                   </div>
                   <div className="occ-modal-row">
-                    <span><Hash size={13} /> N° utilisateur</span>
+                    <span><Hash size={13} /> {t('N° utilisateur', 'Laharana mpampiasa', 'User N°')}</span>
                     <strong>{selectedEvent.numero_dossier_utilisateur || '—'}</strong>
                   </div>
                   <div className="occ-modal-row">
-                    <span><Calendar size={13} /> Date d'ajout</span>
+                    <span><Calendar size={13} /> {t("Date d'ajout", 'Daty nampiana', 'Date added')}</span>
                     <strong>{formatDateShort(selectedEvent.date_ajout)}</strong>
                   </div>
                   <div className="occ-modal-row">
-                    <span><MapPin size={13} /> Lieu d'ajout</span>
+                    <span><MapPin size={13} /> {t("Lieu d'ajout", 'Toerana nampiana', 'Place added')}</span>
                     <strong>{selectedEvent.lieu_ajout || '—'}</strong>
                   </div>
                   <div className="occ-modal-row">
-                    <span><User size={13} /> Confirmation</span>
+                    <span><User size={13} /> {t('Confirmation', 'Fanamarinana', 'Confirmation')}</span>
                     <strong>{selectedEvent.confirmation_nom || '—'}</strong>
                   </div>
                   <div className="occ-modal-row">
-                    <span><Calendar size={13} /> Date signature</span>
+                    <span><Calendar size={13} /> {t('Date signature', 'Daty sonia', 'Signature date')}</span>
                     <strong>{formatDateShort(selectedEvent.date_signature)}</strong>
                   </div>
                 </div>
@@ -795,40 +892,42 @@ const DateOcc = () => {
               {/* ===== Finances ===== */}
               <div className="occ-modal-section">
                 <h4>
-                  <DollarSign size={15} /> Finances
+                  <DollarSign size={15} /> {t('Finances', 'Vola', 'Finances')}
                 </h4>
                 <div className="occ-modal-grid">
                   <div className="occ-modal-row">
-                    <span>Frais dossier</span>
+                    <span>{t('Frais dossier', 'Saram-pandraharahana', 'File fees')}</span>
                     <strong>{formatMoney(selectedEvent.frais_dossier)}</strong>
                   </div>
                   <div className="occ-modal-row">
-                    <span>Montant</span>
+                    <span>{t('Montant', 'Vola', 'Amount')}</span>
                     <strong>{formatMoney(selectedEvent.montant)}</strong>
                   </div>
                   <div className="occ-modal-row">
-                    <span><Ban size={13} /> Montant retard</span>
+                    <span><Ban size={13} /> {t('Montant retard', 'Vola tara', 'Late amount')}</span>
                     <strong>{formatMoney(selectedEvent.montant_retard)}</strong>
                   </div>
                   <div className="occ-modal-row">
-                    <span>En retard ?</span>
+                    <span>{t('En retard ?', 'Lasa tara?', 'Late?')}</span>
                     <strong
                       style={{
                         color: selectedEvent.is_retard ? '#dc3545' : '#28a745',
                       }}
                     >
-                      {selectedEvent.is_retard ? 'Oui' : 'Non'}
+                      {selectedEvent.is_retard
+                        ? t('Oui', 'Eny', 'Yes')
+                        : t('Non', 'Tsia', 'No')}
                     </strong>
                   </div>
                   <div className="occ-modal-row">
-                    <span>Soit total</span>
+                    <span>{t('Soit total', 'Totaly', 'Total')}</span>
                     <strong>{formatMoney(selectedEvent.soit_total)}</strong>
                   </div>
                 </div>
 
                 <div className="occ-modal-total">
                   <span>
-                    <DollarSign size={16} /> MONTANT TOTAL
+                    <DollarSign size={16} /> {t('MONTANT TOTAL', 'VOLA TOTAL', 'TOTAL AMOUNT')}
                   </span>
                   <strong>{formatMoney(selectedEvent.montant_total)}</strong>
                 </div>
@@ -838,7 +937,7 @@ const DateOcc = () => {
               {selectedEvent.artistesList && selectedEvent.artistesList.length > 0 && (
                 <div className="occ-modal-section">
                   <h4>
-                    <Music size={15} /> Artistes ({selectedEvent.artistesList.length})
+                    <Music size={15} /> {t('Artistes', 'Mpihira', 'Artists')} ({selectedEvent.artistesList.length})
                   </h4>
                   <ul className="occ-artist-list">
                     {selectedEvent.artistesList.map((artist, idx) => (
@@ -858,7 +957,7 @@ const DateOcc = () => {
 
             <div className="occ-modal-footer">
               <button className="occ-btn-close-modal" onClick={closeModal}>
-                Fermer
+                {t('Fermer', 'Hidio', 'Close')}
               </button>
             </div>
           </div>

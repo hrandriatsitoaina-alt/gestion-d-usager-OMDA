@@ -1023,7 +1023,236 @@
     color: #6b8a9a;
     margin-top: 2px;
   }
-  
+  /* ============================================================
+   IA Chat - Tableaux et cartes HTML
+   ============================================================ */
+.ia-chat-bubble.assistant { max-width: 100%; overflow-x: auto; }
+
+.ia-table-wrap {
+  margin: 10px 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  max-width: 100%;
+}
+.ia-table-title {
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 13px;
+  background: linear-gradient(135deg, #3d99f5, #6bc1ff);
+  color: #fff;
+}
+.ia-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.ia-table thead th {
+  background: #f1f5f9;
+  color: #334155;
+  font-weight: 600;
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 2px solid #e2e8f0;
+  white-space: nowrap;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+.ia-table tbody td {
+  padding: 7px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+  vertical-align: middle;
+}
+.ia-table tbody tr:last-child td { border-bottom: none; }
+.ia-table tbody tr:nth-child(even) { background: #fafbfc; }
+.ia-table tbody tr:hover { background: #f0f7ff; }
+.ia-table .ia-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: 'Courier New', monospace;
+}
+.ia-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ia-badge.ok   { background: #dcfce7; color: #166534; }
+.ia-badge.mid  { background: #fef3c7; color: #92400e; }
+.ia-badge.warn { background: #fed7aa; color: #9a3412; }
+.ia-badge.bad  { background: #fee2e2; color: #991b1b; }
+.ia-list-wrap { margin: 10px 0; }
+.ia-list {
+  list-style: none;
+  padding: 10px 14px;
+  margin: 0;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+.ia-list li {
+  padding: 6px 0;
+  border-bottom: 1px dashed #e2e8f0;
+  font-size: 13px;
+  color: #334155;
+}
+.ia-list li:last-child { border-bottom: none; }
+.ia-card {
+  margin: 10px 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+.ia-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #3d99f5, #6bc1ff);
+  color: #fff;
+}
+.ia-card-title { font-weight: 600; font-size: 14px; }
+.ia-card-sub {
+  padding: 8px 14px;
+  background: #f1f5f9;
+  font-weight: 600;
+  font-size: 12px;
+  color: #334155;
+  border-top: 1px solid #e2e8f0;
+}
+.ia-kv { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ia-kv td { padding: 7px 14px; border-bottom: 1px solid #f1f5f9; }
+.ia-kv td:first-child { color: #64748b; font-weight: 500; width: 40%; }
+.ia-kv td:last-child { color: #1e293b; font-weight: 500; }
+.ia-kv tr:last-child td { border-bottom: none; }
+.ia-chat-bubble.assistant h4 { margin: 4px 0 8px; font-size: 14px; color: #1e40af; }
+.ia-chat-bubble.assistant code {
+  background: #f1f5f9;
+  color: #be185d;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-family: 'Courier New', monospace;
+}
+.ia-chat-bubble.assistant ul { padding-left: 18px; margin: 4px 0; }
+.ia-chat-bubble.assistant p { margin: 6px 0; line-height: 1.5; }
+.ia-help { margin: 8px 0; }
+.ia-help h5 { margin: 8px 0 4px; font-size: 13px; color: #334155; font-weight: 600; }
+/* ============================================================
+   IA Chat — Tableaux HTML, badges, cartes
+   ============================================================ */
+   .ia-chat-bubble.assistant { max-width: 100%; overflow-x: auto; }
+
+   .ia-table-wrap {
+     margin: 10px 0;
+     border-radius: 10px;
+     overflow: hidden;
+     border: 1px solid #e2e8f0;
+     background: #fff;
+     max-width: 100%;
+   }
+   .ia-table-title {
+     padding: 8px 12px;
+     font-weight: 600;
+     font-size: 13px;
+     background: linear-gradient(135deg, #3d99f5, #6bc1ff);
+     color: #fff;
+   }
+   .ia-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+   .ia-table thead th {
+     background: #f1f5f9;
+     color: #334155;
+     font-weight: 600;
+     text-align: left;
+     padding: 8px 10px;
+     border-bottom: 2px solid #e2e8f0;
+     white-space: nowrap;
+     font-size: 12px;
+     text-transform: uppercase;
+   }
+   .ia-table tbody td {
+     padding: 7px 10px;
+     border-bottom: 1px solid #f1f5f9;
+     color: #1e293b;
+     vertical-align: middle;
+   }
+   .ia-table tbody tr:last-child td { border-bottom: none; }
+   .ia-table tbody tr:nth-child(even) { background: #fafbfc; }
+   .ia-table tbody tr:hover { background: #f0f7ff; }
+   .ia-table .ia-num {
+     text-align: right;
+     font-variant-numeric: tabular-nums;
+     font-family: 'Courier New', monospace;
+   }
+   .ia-badge {
+     display: inline-block;
+     padding: 2px 8px;
+     border-radius: 10px;
+     font-size: 11px;
+     font-weight: 600;
+     white-space: nowrap;
+   }
+   .ia-badge.ok   { background: #dcfce7; color: #166534; }
+   .ia-badge.mid  { background: #fef3c7; color: #92400e; }
+   .ia-badge.warn { background: #fed7aa; color: #9a3412; }
+   .ia-badge.bad  { background: #fee2e2; color: #991b1b; }
+   .ia-list-wrap { margin: 10px 0; }
+   .ia-list {
+     list-style: none;
+     padding: 10px 14px;
+     margin: 0;
+     background: #f8fafc;
+     border-radius: 8px;
+   }
+   .ia-list li {
+     padding: 6px 0;
+     border-bottom: 1px dashed #e2e8f0;
+     font-size: 13px;
+     color: #334155;
+   }
+   .ia-list li:last-child { border-bottom: none; }
+   .ia-card {
+     margin: 10px 0;
+     border: 1px solid #e2e8f0;
+     border-radius: 12px;
+     background: #fff;
+     overflow: hidden;
+   }
+   .ia-card-header {
+     display: flex;
+     justify-content: space-between;
+     align-items: center;
+     padding: 10px 14px;
+     background: linear-gradient(135deg, #3d99f5, #6bc1ff);
+     color: #fff;
+   }
+   .ia-card-title { font-weight: 600; font-size: 14px; }
+   .ia-card-sub {
+     padding: 8px 14px;
+     background: #f1f5f9;
+     font-weight: 600;
+     font-size: 12px;
+     color: #334155;
+     border-top: 1px solid #e2e8f0;
+   }
+   .ia-kv { width: 100%; border-collapse: collapse; font-size: 13px; }
+   .ia-kv td { padding: 7px 14px; border-bottom: 1px solid #f1f5f9; }
+   .ia-kv td:first-child { color: #64748b; font-weight: 500; width: 40%; }
+   .ia-kv td:last-child { color: #1e293b; font-weight: 500; }
+   .ia-kv tr:last-child td { border-bottom: none; }
+   .ia-chat-bubble.assistant h4 { margin: 4px 0 8px; font-size: 14px; color: #1e40af; }
+   .ia-chat-bubble.assistant code {
+     background: #f1f5f9;
+     color: #be185d;
+     padding: 1px 5px;
+     border-radius: 4px;
+     font-size: 11.5px;
+     font-family: 'Courier New', monospace;
+   }
+   .ia-chat-bubble.assistant ul { padding-left: 18px; margin: 4px 0; }
+   .ia-chat-bubble.assistant p { margin: 6px 0; line-height: 1.5; }
+   .ia-help { margin: 8px 0; }
+   .ia-help h5 { margin: 8px 0 4px; font-size: 13px; color: #334155; font-weight: 600; }
 /* ============================================
    CHAT IA — EN BAS À DROITE (10px du bas)
    AVEC FLU UNIQUEMENT SUR LE HEADER
@@ -1418,7 +1647,184 @@
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
   }
-  
+  /* ============================================================
+   IA Chat - Tableaux et cartes HTML
+   ============================================================ */
+.ia-table-wrap {
+  margin: 10px 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.ia-table-title {
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 13px;
+  background: linear-gradient(135deg, #3d99f5, #6bc1ff);
+  color: #fff;
+}
+
+.ia-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.ia-table thead th {
+  background: #f1f5f9;
+  color: #334155;
+  font-weight: 600;
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 2px solid #e2e8f0;
+  white-space: nowrap;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.ia-table tbody td {
+  padding: 7px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+  vertical-align: middle;
+}
+
+.ia-table tbody tr:last-child td { border-bottom: none; }
+.ia-table tbody tr:nth-child(even) { background: #fafbfc; }
+.ia-table tbody tr:hover { background: #f0f7ff; }
+
+.ia-table .ia-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: 'Courier New', monospace;
+}
+
+/* Badges */
+.ia-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ia-badge.ok   { background: #dcfce7; color: #166534; }
+.ia-badge.mid  { background: #fef3c7; color: #92400e; }
+.ia-badge.warn { background: #fed7aa; color: #9a3412; }
+.ia-badge.bad  { background: #fee2e2; color: #991b1b; }
+
+/* Listes */
+.ia-list-wrap { margin: 10px 0; }
+.ia-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.ia-list li {
+  padding: 6px 0;
+  border-bottom: 1px dashed #e2e8f0;
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.5;
+}
+
+.ia-list li:last-child { border-bottom: none; }
+
+/* Carte usager */
+.ia-card {
+  margin: 10px 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.ia-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #3d99f5, #6bc1ff);
+  color: #fff;
+}
+
+.ia-card-title { font-weight: 600; font-size: 14px; }
+.ia-card-sub {
+  padding: 8px 14px;
+  background: #f1f5f9;
+  font-weight: 600;
+  font-size: 12px;
+  color: #334155;
+  border-top: 1px solid #e2e8f0;
+}
+
+.ia-kv {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ia-kv td {
+  padding: 7px 14px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.ia-kv td:first-child {
+  color: #64748b;
+  font-weight: 500;
+  width: 40%;
+}
+
+.ia-kv td:last-child { color: #1e293b; font-weight: 500; }
+.ia-kv tr:last-child td { border-bottom: none; }
+
+.ia-note {
+  font-size: 12px;
+  color: #64748b;
+  font-style: italic;
+  margin-top: 8px;
+}
+
+.ia-help { margin: 10px 0; }
+.ia-help h5 {
+  margin: 10px 0 6px;
+  font-size: 13px;
+  color: #334155;
+  font-weight: 600;
+}
+
+/* Bulles chat - adapter pour HTML */
+.ia-chat-bubble.assistant table {
+  font-size: 12px;
+}
+
+.ia-chat-bubble.assistant h4 {
+  margin: 4px 0 8px;
+  font-size: 14px;
+  color: #1e40af;
+}
+
+.ia-chat-bubble.assistant code {
+  background: #f1f5f9;
+  color: #be185d;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-family: 'Courier New', monospace;
+}
+
+.ia-chat-bubble.assistant ul {
+  padding-left: 18px;
+  margin: 4px 0;
+}
   /* ============================================
      RESPONSIVE - CHAT (10px du bas)
      ============================================ */

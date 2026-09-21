@@ -35,8 +35,14 @@ export function ToastProvider({ children }) {
 // Utilisation : const showToast = useToast(); showToast('Message', 'error');
 export function useToast() {
   const ctx = useContext(ToastContext);
+
+  // ✅ Si le Provider est absent, on retourne une fonction vide
+  //    au lieu de crasher → les inputs restent fonctionnels
   if (!ctx) {
-    throw new Error('useToast doit être utilisé dans un <ToastProvider>');
+    return (message, type = 'error') => {
+      console.warn(`[Toast ${type}]`, message);
+    };
   }
+
   return ctx;
 }

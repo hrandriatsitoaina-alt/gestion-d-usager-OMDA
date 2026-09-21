@@ -1,9 +1,15 @@
+// src/pages/pdf/quitance_pdf.js
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import {
+  createPdfT,
+  getPdfLocale,
+} from './pdfI18n';
 
 /**
  * Génère un PDF de suivi des quittances - 1 PAGE UNIQUEMENT
  * Style simple et épuré - Orientation PORTRAIT
+ * ✅ Gestion de langue FR / MG / EN
  */
 export const generateQuitancePDF = (quittances, options = {}) => {
   if (!quittances || quittances.length === 0) {
@@ -12,7 +18,12 @@ export const generateQuitancePDF = (quittances, options = {}) => {
   }
 
   try {
-    console.log('📄 Début génération PDF...');
+    // ✅ Langue depuis les options
+    const langue = options.langue || 'fr';
+    const t = createPdfT(langue);
+
+    console.log('📄 Début génération PDF Quittance...');
+    console.log('🌍 Langue :', langue);
     console.log('📊 Nombre de quittances:', quittances.length);
 
     const {
@@ -20,20 +31,17 @@ export const generateQuitancePDF = (quittances, options = {}) => {
       carnetFin = '0000000',
       responsable = '',
       lieu = 'Antananarivo',
-      region = 'Toutes les régions',
+      region = t('Toutes les régions', 'Ny faritra rehetra', 'All regions'),
       dateDelivre = new Date().toLocaleDateString('fr-FR'),
       dateRetour = ''
     } = options;
 
     // ============================================================
-    // ✅ FONCTIONS DE NETTOYAGE / FORMATAGE DES MONTANTS
+    // FONCTIONS DE NETTOYAGE / FORMATAGE DES MONTANTS
     // ============================================================
-
-    // Nettoie une valeur brute (string avec "/", nombre, etc.) en nombre entier propre
     const nettoyerMontant = (valeur) => {
       if (!valeur && valeur !== 0) return 0;
       if (typeof valeur === 'string') {
-        // Supprime tout ce qui n'est pas un chiffre, un point ou un signe moins
         const nettoye = valeur.replace(/[^\d.-]/g, '');
         const nombre = parseFloat(nettoye);
         return isNaN(nombre) ? 0 : Math.round(nombre);
@@ -41,16 +49,11 @@ export const generateQuitancePDF = (quittances, options = {}) => {
       return Math.round(Number(valeur)) || 0;
     };
 
-    // ✅ Formate un nombre en "1 234 567" avec une VRAIE espace normale
-    // (jamais toLocaleString('fr-FR') car il utilise une espace insécable fine
-    // que la police helvetica de jsPDF affiche comme "/" ou caractère cassé)
     const formatMontant = (valeur) => {
       const nombre = nettoyerMontant(valeur);
-      // Formatage manuel : on groupe les chiffres par 3 en partant de la droite
       return String(nombre).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
     };
 
-    // Créer le document en PORTRAIT
     const doc = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
@@ -62,53 +65,71 @@ export const generateQuitancePDF = (quittances, options = {}) => {
     let y = margin;
 
     // ============================================================
-    // EN-TÊTE - 5 LIGNES SIMPLES - POLICE 12
+    // EN-TÊTE
     // ============================================================
-
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(0, 0, 0);
-    doc.text('SUIVI QUITANCE', pageWidth / 2, y, { align: 'center' });
+    doc.text(
+      t('SUIVI QUITTANCE', 'FANARAHA-MASO TARATASY', 'RECEIPT TRACKING'),
+      pageWidth / 2,
+      y,
+      { align: 'center' }
+    );
     y += 9;
 
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(0, 0, 0);
-    doc.text(`N° de carnet : ${carnetDebut} à ${carnetFin}`, margin, y);
+    doc.text(
+      `${t('N° de carnet', 'Laharana carnet', 'Booklet N°')} : ${carnetDebut} ${t('à', 'ka hatramin\'ny', 'to')} ${carnetFin}`,
+      margin,
+      y
+    );
 
-    const responsableText = `Responsable : ${responsable || '_______________'}`;
+    const responsableText = `${t('Responsable', 'Tompon\'andraikitra', 'Manager')} : ${responsable || '_______________'}`;
     doc.text(responsableText, pageWidth - margin - doc.getTextWidth(responsableText), y);
     y += 8;
 
     doc.setFont('helvetica', 'normal');
-    doc.text(`Lieu de l'agence du Représentant : ${lieu || '_______________'}`, margin, y);
+    doc.text(
+      `${t("Lieu de l'agence du Représentant", 'Toeran\'ny biraon\'ny mpisolo tena', "Representative's agency location")} : ${lieu || '_______________'}`,
+      margin,
+      y
+    );
     y += 8;
 
-    doc.text(`Date de délivrance : ${dateDelivre}`, margin, y);
+    doc.text(`${t('Date de délivrance', 'Daty nanomezana', 'Issue date')} : ${dateDelivre}`, margin, y);
 
-    const dateRetourText = `Date de retour : ${dateRetour || '_______________'}`;
+    const dateRetourText = `${t('Date de retour', 'Daty famerenana', 'Return date')} : ${dateRetour || '_______________'}`;
     doc.text(dateRetourText, pageWidth - margin - doc.getTextWidth(dateRetourText), y);
     y += 10;
 
     // ============================================================
-    // TABLEAU - POLICE 11
+    // TABLEAU
     // ============================================================
     const typeLabels = {
-      'HTL': 'Hôtel',
-      'MGS': 'Grande Surface',
-      'RDP': 'Radio/Télé',
-      'TRP': 'Transport',
-      'NGT': 'Night Club',
-      'OCC': 'Occasionnel'
+      'HTL': t('Hôtel', 'Hotely', 'Hotel'),
+      'MGS': t('Grande Surface', 'Fivarotana lehibe', 'Grand Surface'),
+      'RDP': t('Radio/Télé', 'Radio/Tele', 'Radio/TV'),
+      'TRP': t('Transport', 'Fitaterana', 'Transport'),
+      'NGT': t('Night Club', 'Club alina', 'Night Club'),
+      'OCC': t('Occasionnel', 'Fotoana manokana', 'Occasional'),
+      'OTH': t('Usager événementiel', 'Mpampiasa hetsika', 'Event user')
     };
 
-    const tableHeaders = ['N° QUITANCE', 'TYPE', 'CLIENT', 'MONTANT', 'OBS'];
+    const tableHeaders = [
+      t('N° QUITTANCE', 'N° TARATASY', 'N° RECEIPT'),
+      t('TYPE', 'KARAZANA', 'TYPE'),
+      t('CLIENT', 'MPANJIFA', 'CLIENT'),
+      t('MONTANT', 'VOLA', 'AMOUNT'),
+      t('OBS', 'FANAMARIHANA', 'OBS')
+    ];
 
     const tableData = quittances.map((q, index) => {
       const numGlobal = index + 1;
       const typeLabel = typeLabels[q.ref_client_type] || q.ref_client_type || '-';
 
-      // ✅ Montant propre, formaté avec de vraies espaces
       const montantFormatted = formatMontant(q.soit_total);
 
       let clientInfo = q.denomination || q.demandeur || '-';
@@ -118,9 +139,9 @@ export const generateQuitancePDF = (quittances, options = {}) => {
 
       let obs = '';
       if (q.region_usager && q.region_usager !== 'N/A') {
-        obs += `Région: ${q.region_usager}`;
+        obs += `${t('Région', 'Faritra', 'Region')}: ${q.region_usager}`;
       }
-      if (!obs) obs = 'Aucune';
+      if (!obs) obs = t('Aucune', 'Tsy misy', 'None');
 
       return [
         String(q.quittance || numGlobal).padStart(7, '0'),
@@ -179,7 +200,7 @@ export const generateQuitancePDF = (quittances, options = {}) => {
     });
 
     // ============================================================
-    // PIED DE PAGE - POLICE 11
+    // PIED DE PAGE
     // ============================================================
     const finalY = doc.lastAutoTable.finalY + 4;
     y = finalY;
@@ -194,15 +215,22 @@ export const generateQuitancePDF = (quittances, options = {}) => {
     doc.setTextColor(0, 0, 0);
 
     const totalItems = quittances.length;
-    doc.text(`${totalItems} quittance`, margin, y);
+    const itemLabel = totalItems > 1
+      ? t('quittances', 'taratasy', 'receipts')
+      : t('quittance', 'taratasy', 'receipt');
+    doc.text(`${totalItems} ${itemLabel}`, margin, y);
 
-    // ✅ TOTAL propre, formaté avec de vraies espaces (plus de "/")
     const totalMontantBrut = quittances.reduce(
       (sum, q) => sum + nettoyerMontant(q.soit_total),
       0
     );
     const totalMontantFormatted = formatMontant(totalMontantBrut);
-    doc.text(`Total : ${totalMontantFormatted} Ar`, pageWidth - margin, y, { align: 'right' });
+    doc.text(
+      `${t('Total', 'Totaly', 'Total')} : ${totalMontantFormatted} Ar`,
+      pageWidth - margin,
+      y,
+      { align: 'right' }
+    );
 
     // ============================================================
     // SAUVEGARDE
@@ -215,11 +243,11 @@ export const generateQuitancePDF = (quittances, options = {}) => {
 
     doc.save(filename);
 
-    console.log(`✅ PDF généré avec ${totalItems} quittances en orientation PORTRAIT`);
+    console.log(`✅ PDF Quittance généré avec ${totalItems} quittances (langue: ${langue})`);
     return true;
 
   } catch (error) {
-    console.error('❌ Erreur génération PDF:', error);
+    console.error('❌ Erreur génération PDF Quittance:', error);
     console.error('❌ Stack:', error.stack);
     return false;
   }

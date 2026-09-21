@@ -5,9 +5,6 @@ const fs = require('fs');
 const path = require('path');
 const pool = require('../database');
 
-// ============================================================
-// UTILITAIRE : chemin vers package.json
-// ============================================================
 const PACKAGE_JSON_PATH = path.join(__dirname, '..', '..', 'package.json');
 
 function lireVersionActuelle() {
@@ -20,7 +17,7 @@ function lireVersionActuelle() {
 }
 
 // ============================================================
-// GET /api/parametres/:userId - Récupérer les paramètres
+// GET /api/parametres/:userId
 // ============================================================
 router.get('/parametres/:userId', async (req, res) => {
   const { userId } = req.params;
@@ -46,7 +43,35 @@ router.get('/parametres/:userId', async (req, res) => {
 });
 
 // ============================================================
-// PUT /api/parametres/:userId - Mettre à jour les paramètres
+// GET /api/parametres/utilisateur/:userId (alias)
+// ============================================================
+router.get('/parametres/utilisateur/:userId', async (req, res) => {
+  const { userId } = req.params;
+  try {
+    let result = await pool.query(
+      'SELECT * FROM omda_app.parametres_utilisateur WHERE utilisateur_id = $1',
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      result = await pool.query(
+        `INSERT INTO omda_app.parametres_utilisateur (utilisateur_id)
+         VALUES ($1) RETURNING *`,
+        [userId]
+      );
+    }
+
+    res.json({ success: true, parametres: result.rows[0] });
+  } catch (error) {
+    console.error('❌ Erreur récupération paramètres (alias):', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ============================================================
+// PUT /api/parametres/:userId
+// 🔒 COALESCE garantit qu'on ne remplace pas une valeur existante par null
+// ✅ accepte 'fr', 'mg', 'en'
 // ============================================================
 router.put('/parametres/:userId', async (req, res) => {
   const { userId } = req.params;
@@ -54,6 +79,12 @@ router.put('/parametres/:userId', async (req, res) => {
     appName, langue, theme, dateFormat, timeFormat,
     couleurPrincipale, police, notifications
   } = req.body;
+
+  // ✅ Validation langue
+  let langueValide = null;
+  if (langue && ['fr', 'mg', 'en'].includes(langue)) {
+    langueValide = langue;
+  }
 
   try {
     const existing = await pool.query(
@@ -83,7 +114,7 @@ router.put('/parametres/:userId', async (req, res) => {
        RETURNING *`,
       [
         appName || null,
-        langue || null,
+        langueValide,
         theme || null,
         dateFormat || null,
         timeFormat || null,
@@ -94,7 +125,11 @@ router.put('/parametres/:userId', async (req, res) => {
       ]
     );
 
-    res.json({ success: true, parametres: result.rows[0], message: 'Paramètres sauvegardés avec succès' });
+    res.json({
+      success: true,
+      parametres: result.rows[0],
+      message: 'Paramètres sauvegardés avec succès'
+    });
   } catch (error) {
     console.error('❌ Erreur sauvegarde paramètres:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -120,13 +155,12 @@ router.post('/parametres/notifications/:userId/test', async (req, res) => {
 });
 
 // ============================================================
-// GET /api/parametres/stats-charts - Données pour les graphiques
+// GET /api/parametres/stats-charts
 // ============================================================
 router.get('/parametres/stats-charts', async (req, res) => {
   try {
     const currentYear = new Date().getFullYear();
 
-    // Revenus mensuels
     const monthlyResult = await pool.query(
       `SELECT EXTRACT(MONTH FROM date_paiement)::int AS mois,
               COALESCE(SUM(montant), 0) AS total
@@ -143,7 +177,6 @@ router.get('/parametres/stats-charts', async (req, res) => {
       return { mois: label, montant: found ? parseFloat(found.total) : 0 };
     });
 
-    // Répartition par type d'usager
     const types = [
       { key: 'hotel', label: 'Hôtel', table: 'usagers_hotel' },
       { key: 'grand-surface', label: 'Grand Surface', table: 'usagers_magasin' },
@@ -171,11 +204,7 @@ router.get('/parametres/stats-charts', async (req, res) => {
       }
     }
 
-    res.json({
-      success: true,
-      revenusParMois,
-      repartition
-    });
+    res.json({ success: true, revenusParMois, repartition });
   } catch (error) {
     console.error('❌ Erreur stats-charts:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -183,13 +212,11 @@ router.get('/parametres/stats-charts', async (req, res) => {
 });
 
 // ============================================================
-// GET /api/parametres/db-size - Taille de la base de données
+// GET /api/parametres/db-size
 // ============================================================
 router.get('/parametres/db-size', async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT pg_database_size('omda_db') as size
-    `);
+    const result = await pool.query(`SELECT pg_database_size('omda_db') as size`);
     const sizeBytes = parseInt(result.rows[0].size) || 0;
     let sizeStr = '0 MB';
     if (sizeBytes > 0) {
@@ -203,12 +230,11 @@ router.get('/parametres/db-size', async (req, res) => {
 });
 
 // ============================================================
-// POST /api/parametres/update-app - Vérifier mise à jour
+// POST /api/parametres/update-app
 // ============================================================
 router.post('/parametres/update-app', async (req, res) => {
   try {
     const versionActuelle = lireVersionActuelle();
-    
     res.json({
       success: true,
       aJour: true,

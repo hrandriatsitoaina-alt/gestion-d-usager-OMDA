@@ -4,9 +4,15 @@ import { useNavigate } from 'react-router-dom';
 import '../styles/Register.css';
 import omdaLogo from '../assets/imagesOMDA.png';
 import { User, Mail, Lock, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+// ✅ Hook unique de traduction
+import { useT } from '../hooks/useT';
 
 const Register = () => {
   const navigate = useNavigate();
+
+  // ✅ LANGUE UNIQUE — vient du Context
+  const { t, langue } = useT();
+
   const [formData, setFormData] = useState({
     nom: '',
     email: '',
@@ -27,19 +33,27 @@ const Register = () => {
 
   const validateForm = () => {
     if (!formData.nom.trim()) {
-      setError('Le nom est requis');
+      setError(t('Le nom est requis', 'Ilaina ny anarana', 'Name is required'));
       return false;
     }
     if (!formData.email.trim()) {
-      setError('L\'email est requis');
+      setError(t('L\'email est requis', 'Ilaina ny mailaka', 'Email is required'));
       return false;
     }
     if (!formData.mot_de_passe || formData.mot_de_passe.length < 4) {
-      setError('Le mot de passe doit contenir au moins 4 caractères');
+      setError(t(
+        'Le mot de passe doit contenir au moins 4 caractères',
+        'Tsy maintsy misy tarehintsoratra 4 farafahakeliny ny kaody',
+        'Password must be at least 4 characters'
+      ));
       return false;
     }
     if (formData.mot_de_passe !== formData.confirm_mot_de_passe) {
-      setError('Les mots de passe ne correspondent pas');
+      setError(t(
+        'Les mots de passe ne correspondent pas',
+        'Tsy mifanaraka ny kaody',
+        'Passwords do not match'
+      ));
       return false;
     }
     return true;
@@ -69,14 +83,26 @@ const Register = () => {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        setSuccess('Compte créé avec succès ! Vous allez être redirigé vers la page de connexion.');
+        setSuccess(t(
+          'Compte créé avec succès ! Vous allez être redirigé vers la page de connexion.',
+          'Vita ny kaonty ! Hampidirina amin\'ny pejy fidirana ianao.',
+          'Account created successfully! You will be redirected to the login page.'
+        ));
         setTimeout(() => navigate('/'), 2000);
       } else {
-        setError(data.message || 'Erreur lors de la création du compte.');
+        setError(data.message || t(
+          'Erreur lors de la création du compte.',
+          'Nisy olana tamin\'ny famoronana ny kaonty.',
+          'Error while creating account.'
+        ));
       }
     } catch (err) {
       console.error('Erreur réseau:', err);
-      setError('Impossible de contacter le serveur. Vérifie qu\'il est bien lancé sur http://localhost:3001.');
+      setError(t(
+        'Impossible de contacter le serveur. Vérifie qu\'il est bien lancé sur http://localhost:3001.',
+        'Tsy afaka mifandray amin\'ny serveur. Hamarino raha mandeha amin\'ny http://localhost:3001.',
+        'Cannot reach server. Check that it is running on http://localhost:3001.'
+      ));
     } finally {
       setIsLoading(false);
     }
@@ -89,17 +115,23 @@ const Register = () => {
         <div className="register-card">
           <div className="register-header">
             <img src={omdaLogo} alt="OMDA" className="register-logo" />
-            <h1>Créer un compte</h1>
-            <p className="register-subtitle">Rejoignez l'Office Malagasy du Droit d'Auteur</p>
+            <h1>{t('Créer un compte', 'Hamorona kaonty', 'Create an account')}</h1>
+            <p className="register-subtitle">
+              {t(
+                "Rejoignez l'Office Malagasy du Droit d'Auteur",
+                "Midira ao amin'ny Birao Malagasy misahana ny Zon'ny Mpanoratra",
+                'Join the Malagasy Copyright Office'
+              )}
+            </p>
           </div>
 
           <form className="register-form" onSubmit={handleSubmit}>
             <div className="form-group">
-              <label><User size={16} /> Nom complet</label>
+              <label><User size={16} /> {t('Nom complet', 'Anarana feno', 'Full name')}</label>
               <input
                 type="text"
                 name="nom"
-                placeholder="Votre nom et prénom"
+                placeholder={t('Votre nom et prénom', 'Anaranao sy fanampin\'anaranao', 'Your first and last name')}
                 value={formData.nom}
                 onChange={handleChange}
                 disabled={isLoading}
@@ -121,16 +153,16 @@ const Register = () => {
             </div>
 
             <div className="form-group">
-              <label><Lock size={16} /> Mot de passe</label>
+              <label><Lock size={16} /> {t('Mot de passe', 'Kaody', 'Password')}</label>
               <div className="password-wrapper">
                 <input
                   type={showPassword ? "text" : "password"}
                   name="mot_de_passe"
-                  placeholder="Au moins 4 caractères"
+                  placeholder={t('Au moins 4 caractères', 'Tarehintsoratra 4 farafahakeliny', 'At least 4 characters')}
                   value={formData.mot_de_passe}
                   onChange={handleChange}
                   disabled={isLoading}
-                   maxLength="4"   // ← ajout
+                  maxLength="4"
                   required
                 />
                 <button
@@ -144,18 +176,18 @@ const Register = () => {
             </div>
 
             <div className="form-group">
-              <label><Lock size={16} /> Confirmer le mot de passe</label>
+              <label><Lock size={16} /> {t('Confirmer le mot de passe', 'Hamarino ny kaody', 'Confirm password')}</label>
               <div className="password-wrapper">
-              <input
-                type={showConfirmPassword ? "text" : "password"}
-                name="confirm_mot_de_passe"
-                placeholder="4 chiffres"
-                value={formData.confirm_mot_de_passe}
-                onChange={handleChange}
-                disabled={isLoading}
-                maxLength="4"   // ← ajout
-                required
-              />
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  name="confirm_mot_de_passe"
+                  placeholder={t('4 chiffres', 'Isa 4', '4 digits')}
+                  value={formData.confirm_mot_de_passe}
+                  onChange={handleChange}
+                  disabled={isLoading}
+                  maxLength="4"
+                  required
+                />
                 <button
                   type="button"
                   className="toggle-pwd"
@@ -174,17 +206,19 @@ const Register = () => {
               className={`register-btn ${isLoading ? 'loading' : ''}`}
               disabled={isLoading}
             >
-              {isLoading ? 'Création en cours...' : 'S\'inscrire'}
+              {isLoading
+                ? t('Création en cours...', 'Mamorona...', 'Creating...')
+                : t('S\'inscrire', 'Hisoratra anarana', 'Sign up')}
             </button>
 
             <div className="register-footer">
-              <span>Vous avez déjà un compte ?</span>
+              <span>{t('Vous avez déjà un compte ?', 'Efa manana kaonty ve ianao ?', 'Already have an account?')}</span>
               <button
                 type="button"
                 className="login-link"
                 onClick={() => navigate('/')}
               >
-                <ArrowLeft size={16} /> Se connecter
+                <ArrowLeft size={16} /> {t('Se connecter', 'Hiditra', 'Log in')}
               </button>
             </div>
           </form>

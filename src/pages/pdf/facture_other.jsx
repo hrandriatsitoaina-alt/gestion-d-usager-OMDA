@@ -1,6 +1,10 @@
 // src/pages/pdf/facture_other.jsx
 import jsPDF from 'jspdf';
 import logoRepoblika from '../../assets/repoblika.jpg';
+import {
+  createPdfT,
+  getPdfLocale,
+} from './pdfI18n';
 
 // ============================================================
 // HELPERS
@@ -12,9 +16,9 @@ const formatNumber = (value) => {
   return Math.round(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 };
 
-function numberToWords(num) {
+function numberToWords(num, langue = 'fr') {
   if (num === 0) return 'Zéro Ariary';
-  if (num < 0) return 'Moins ' + numberToWords(Math.abs(num));
+  if (num < 0) return 'Moins ' + numberToWords(Math.abs(num), langue);
   const units = ['', 'Un', 'Deux', 'Trois', 'Quatre', 'Cinq', 'Six', 'Sept', 'Huit', 'Neuf'];
   const teens = ['Dix', 'Onze', 'Douze', 'Treize', 'Quatorze', 'Quinze', 'Seize', 'Dix-sept', 'Dix-huit', 'Dix-neuf'];
   const tens = ['', 'Dix', 'Vingt', 'Trente', 'Quarante', 'Cinquante', 'Soixante', 'Soixante-dix', 'Quatre-vingt', 'Quatre-vingt-dix'];
@@ -57,12 +61,14 @@ function numberToWords(num) {
 
 // ============================================================
 // GÉNÉRATEUR PDF FACTURE OTHER
+// ✅ Signature étendue : (factureData, returnBlob, options)
 // ============================================================
-export const generateFactureOtherPDF = async (factureData, returnBlob = false) => {
+export const generateFactureOtherPDF = async (factureData, returnBlob = false, options = {}) => {
   try {
-    console.log('========== GÉNÉRATION FACTURE OTHER PDF ==========');
+    const langue = options.langue || 'fr';
+    const t = createPdfT(langue);
+    const locale = getPdfLocale(langue);
 
-    // ---------- Récupération DAF ----------
     let dafName = 'DAF';
     try {
       const response = await fetch('http://localhost:3001/api/daf/name');
@@ -71,7 +77,6 @@ export const generateFactureOtherPDF = async (factureData, returnBlob = false) =
     } catch { /* ignore */ }
     if (!dafName) dafName = 'DAF';
 
-    // ---------- Création doc ----------
     const doc = new jsPDF({ unit: 'mm', format: 'a4', putOnlyUsedFonts: true });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -107,14 +112,19 @@ export const generateFactureOtherPDF = async (factureData, returnBlob = false) =
     doc.text('OFFICE MALAGASY DU DROIT D\'AUTEUR', marginX, yPos);
 
     const currentDate = new Date();
-    const dateStr = currentDate.toLocaleDateString('fr-FR', {
+    const dateStr = currentDate.toLocaleDateString(locale, {
       day: 'numeric', month: 'long', year: 'numeric'
     });
     const currentYear = currentDate.getFullYear().toString().slice(-2);
 
     doc.setFont('times', 'bold');
     doc.setFontSize(10);
-    doc.text(`Antananarivo, le ${dateStr}`, pageWidth - marginX, yPos, { align: 'right' });
+    doc.text(
+      `Antananarivo, ${t('le', 'ny', 'on')} ${dateStr}`,
+      pageWidth - marginX,
+      yPos,
+      { align: 'right' }
+    );
     yPos += 5;
     const omdaWidth = doc.getTextWidth('OFFICE MALAGASY DU DROIT D\'AUTEUR ');
     doc.text('( OMDA )', marginX + (omdaWidth / 2), yPos, { align: 'center' });
@@ -130,7 +140,7 @@ export const generateFactureOtherPDF = async (factureData, returnBlob = false) =
 
     doc.setFont('times', 'normal');
     doc.setFontSize(11);
-    doc.text(`Réf : ${currentYear} / ${refOmda} / OMDA`, marginX, yPos);
+    doc.text(`${t('Réf', 'Fanondroana', 'Ref')} : ${currentYear} / ${refOmda} / OMDA`, marginX, yPos);
     yPos += 8;
 
     doc.setFont('times', 'bold');
@@ -140,14 +150,18 @@ export const generateFactureOtherPDF = async (factureData, returnBlob = false) =
     if (typeFactureLabel !== 'DAFC' && typeFactureLabel !== 'SFL') typeFactureLabel = 'DAFC';
     const factureNum = `${currentYear} / ${numFactureFormatted} / ${typeFactureLabel}`;
 
-    doc.text(`FACTURE n° ${factureNum}`, marginX + 50, yPos + 4);
+    doc.text(
+      `${t('FACTURE', 'FAKTIORA', 'INVOICE')} n° ${factureNum}`,
+      marginX + 50,
+      yPos + 4
+    );
     yPos += 6;
 
     doc.setFont('times', 'normal');
     doc.setFontSize(11);
     doc.setTextColor(80, 80, 80);
     const clientRef = `${refClientType} / ${String(refUsager).padStart(3, '0')}`;
-    doc.text(`Réf. Client : ${clientRef}`, marginX, yPos + 4);
+    doc.text(`${t('Réf. Client', 'Fanondroana Mpanjifa', 'Client Ref')} : ${clientRef}`, marginX, yPos + 4);
     doc.setTextColor(17, 17, 17);
     yPos += 10;
 
@@ -166,75 +180,107 @@ export const generateFactureOtherPDF = async (factureData, returnBlob = false) =
     let clientY = yPos + 7;
     doc.setFontSize(11);
 
-    const nomClient = factureData.denomination || 'CLIENT';
+    const nomClient = factureData.denomination || t('CLIENT', 'MPANJIFA', 'CLIENT');
     doc.setFont('times', 'bold');
-    doc.text('Doit :', labelX, clientY);
-    doc.text(nomClient, contentX, clientY);
-    clientY += 6.5;
+    doc.text(`${t('Doit', 'Tokony handoa', 'Owes')} :`, labelX, clientY);
+    const nomClientLines = doc.splitTextToSize(nomClient, boxWidth - (contentX - marginX) - 5);
+    doc.text(nomClientLines, contentX, clientY);
+    clientY += (nomClientLines.length * 5.5) + 1;
 
-    const responsable = factureData.representant_nom || factureData.demandeur || 'Non spécifié';
-    doc.text('Responsable :', labelX, clientY);
+    const responsable = factureData.representant_nom || factureData.demandeur || t('Non spécifié', 'Tsy voafaritra', 'Not specified');
+    doc.text(`${t('Responsable', 'Tompon\'andraikitra', 'Manager')} :`, labelX, clientY);
     doc.setFont('times', 'normal');
-    doc.text(responsable, contentX, clientY);
-    clientY += 6.5;
+    const respLines = doc.splitTextToSize(responsable, boxWidth - (contentX - marginX) - 5);
+    doc.text(respLines, contentX, clientY);
+    clientY += (respLines.length * 5.5) + 1;
 
-    const adresse = factureData.adresse || 'Adresse non spécifiée';
+    const adresse = factureData.adresse || t('Adresse non spécifiée', 'Adiresy tsy voafaritra', 'Address not specified');
     doc.setFont('times', 'bold');
-    doc.text('Adresse :', labelX, clientY);
+    doc.text(`${t('Adresse', 'Adiresy', 'Address')} :`, labelX, clientY);
     doc.setFont('times', 'normal');
-    doc.text(adresse, contentX, clientY);
-    clientY += 6.5;
+    const adresseLines = doc.splitTextToSize(adresse, boxWidth - (contentX - marginX) - 5);
+    doc.text(adresseLines, contentX, clientY);
+    clientY += (adresseLines.length * 5.5) + 1;
 
-    const contact = factureData.telephone || 'Non spécifié';
+    const contact = factureData.telephone || t('Non spécifié', 'Tsy voafaritra', 'Not specified');
     doc.setFont('times', 'bold');
-    doc.text('Contact :', labelX, clientY);
+    doc.text(`${t('Contact', 'Fifandraisana', 'Contact')} :`, labelX, clientY);
     doc.setFont('times', 'normal');
     doc.text(contact, contentX, clientY);
     clientY += 7;
 
     doc.setFont('times', 'bold');
-    doc.text('OBJET :', labelX, clientY);
-    doc.text("Redevances d'auteur", contentX, clientY);
+    doc.text(`${t('OBJET', 'ANTONY', 'SUBJECT')} :`, labelX, clientY);
+    doc.text(t("Redevances d'auteur", "Taham-bolan'ny mpanoratra", 'Copyright royalties'), contentX, clientY);
 
-    yPos += boxHeight + 10;
+    const finalBoxHeight = Math.max(boxHeight, (clientY - yPos) + 5);
+    doc.setFillColor(252, 252, 252);
+    doc.setDrawColor(229, 229, 229);
+    doc.rect(marginX, yPos, boxWidth, finalBoxHeight, 'FD');
+
+    // Réécriture
+    clientY = yPos + 7;
+    doc.setFont('times', 'bold');
+    doc.text(`${t('Doit', 'Tokony handoa', 'Owes')} :`, labelX, clientY);
+    doc.text(nomClientLines, contentX, clientY);
+    clientY += (nomClientLines.length * 5.5) + 1;
+    doc.text(`${t('Responsable', 'Tompon\'andraikitra', 'Manager')} :`, labelX, clientY);
+    doc.setFont('times', 'normal');
+    doc.text(respLines, contentX, clientY);
+    clientY += (respLines.length * 5.5) + 1;
+    doc.setFont('times', 'bold');
+    doc.text(`${t('Adresse', 'Adiresy', 'Address')} :`, labelX, clientY);
+    doc.setFont('times', 'normal');
+    doc.text(adresseLines, contentX, clientY);
+    clientY += (adresseLines.length * 5.5) + 1;
+    doc.setFont('times', 'bold');
+    doc.text(`${t('Contact', 'Fifandraisana', 'Contact')} :`, labelX, clientY);
+    doc.setFont('times', 'normal');
+    doc.text(contact, contentX, clientY);
+    clientY += 7;
+    doc.setFont('times', 'bold');
+    doc.text(`${t('OBJET', 'ANTONY', 'SUBJECT')} :`, labelX, clientY);
+    doc.text(t("Redevances d'auteur", "Taham-bolan'ny mpanoratra", 'Copyright royalties'), contentX, clientY);
+
+    yPos += finalBoxHeight + 10;
 
     // ============================================================
     // 4. TABLEAU — CONFIGURATION AVEC PADDING
     // ============================================================
     const xDesc = marginX;
-    const xU = 115;
-    const xPu = 130;
-    const xMnt = 155;
+    const xU = 125; // Ajusté
+    const xPu = 140; // Ajusté
+    const xMnt = 165; // Ajusté
 
-    // ✅ Padding vertical pour ne PAS toucher les lignes
-    const ROW_HEIGHT = 8;          // hauteur standard d'une ligne
-    const TEXT_OFFSET = 5.5;       // position du texte depuis le haut de la ligne
-    const HEADER_HEIGHT = 9;       // hauteur de l'en-tête
-    const TOTAL_HEIGHT = 9;        // hauteur de la ligne TOTAL
+    const ROW_HEIGHT = 8;
+    const TEXT_OFFSET = 5.5;
+    const HEADER_HEIGHT = 9;
+    const TOTAL_HEIGHT = 9;
 
-    // ---------- En-tête du tableau ----------
     const tableHeaderY = yPos;
 
     doc.setFont('times', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(90, 90, 90);
-    doc.text('( x 1 ariary )', xEnd - 3, tableHeaderY - 2, { align: 'right' });
+    doc.text(`( x 1 ${t('ariary', 'ariary', 'ariary')} )`, xEnd - 3, tableHeaderY - 2, { align: 'right' });
 
-    // Ligne haut du tableau
     doc.setDrawColor(26, 26, 26);
     doc.setLineWidth(0.3);
     doc.line(xDesc, tableHeaderY, xEnd, tableHeaderY);
 
-    // Texte de l'en-tête
     doc.setFont('times', 'bold');
     doc.setFontSize(10);
     doc.setTextColor(17, 17, 17);
-    doc.text('DESCRIPTIONS', xDesc + 3, tableHeaderY + TEXT_OFFSET);
+    doc.text(t('DESCRIPTIONS', 'FANAZAVANA', 'DESCRIPTIONS'), xDesc + 3, tableHeaderY + TEXT_OFFSET);
     doc.text('U.', xU + 3, tableHeaderY + TEXT_OFFSET);
     doc.text('P.U. (Ar)', xPu + 3, tableHeaderY + TEXT_OFFSET);
-    doc.text('MONTANT (Ar)', xEnd - 3, tableHeaderY + TEXT_OFFSET, { align: 'right' });
+    doc.text(
+      `${t('MONTANT', 'VOLA', 'AMOUNT')} (Ar)`,
+      xEnd - 3,
+      tableHeaderY + TEXT_OFFSET,
+      { align: 'right' }
+    );
 
-    // Ligne basse de l'en-tête
     const tableBodyStart = tableHeaderY + HEADER_HEIGHT;
     doc.line(xDesc, tableBodyStart, xEnd, tableBodyStart);
 
@@ -245,7 +291,6 @@ export const generateFactureOtherPDF = async (factureData, returnBlob = false) =
     let currentY = tableBodyStart;
 
     for (const ligne of lignes) {
-      // Saut de page si nécessaire
       if (currentY > pageHeight - 80) {
         doc.addPage();
         currentY = 20;
@@ -258,10 +303,6 @@ export const generateFactureOtherPDF = async (factureData, returnBlob = false) =
       const lines = doc.splitTextToSize(String(ligne.description || ''), maxWidthDesc);
       const rowHeight = Math.max(ROW_HEIGHT, lines.length * 6 + 2);
 
-      // Texte centré verticalement dans la ligne
-      const textY = currentY + (rowHeight / 2) + 1.5;
-
-      // Description (multi-lignes si nécessaire)
       doc.setFont('times', 'normal');
       doc.setFontSize(11);
       for (let i = 0; i < lines.length; i++) {
@@ -269,15 +310,12 @@ export const generateFactureOtherPDF = async (factureData, returnBlob = false) =
         doc.text(lines[i], xDesc + 3, lineY);
       }
 
-      // Colonnes U / PU / MONTANT alignées sur la 1ère ligne
       doc.text(String(ligne.uniter || 1), xU + 5, currentY + TEXT_OFFSET);
       doc.text(formatNumber(ligne.pu), xPu + 3, currentY + TEXT_OFFSET);
       doc.text(formatNumber(montantLigne), xEnd - 3, currentY + TEXT_OFFSET, { align: 'right' });
 
-      // Avancer
       currentY += rowHeight;
 
-      // Séparateur léger
       doc.setDrawColor(230, 230, 230);
       doc.setLineWidth(0.15);
       doc.line(xDesc, currentY, xEnd, currentY);
@@ -289,7 +327,7 @@ export const generateFactureOtherPDF = async (factureData, returnBlob = false) =
     if (factureData.frais_dossier && parseFloat(factureData.frais_dossier) > 0) {
       doc.setFont('times', 'normal');
       doc.setFontSize(11);
-      doc.text('Frais de dossier', xDesc + 3, currentY + TEXT_OFFSET);
+      doc.text(t('Frais de dossier', 'Saram-pandraharahana', 'File fees'), xDesc + 3, currentY + TEXT_OFFSET);
       doc.text('1', xU + 5, currentY + TEXT_OFFSET);
       doc.text(formatNumber(factureData.frais_dossier), xPu + 3, currentY + TEXT_OFFSET);
       doc.text(formatNumber(factureData.frais_dossier), xEnd - 3, currentY + TEXT_OFFSET, { align: 'right' });
@@ -306,7 +344,7 @@ export const generateFactureOtherPDF = async (factureData, returnBlob = false) =
     if (factureData.is_retard && factureData.montant_retard && parseFloat(factureData.montant_retard) > 0) {
       doc.setFont('times', 'normal');
       doc.setFontSize(11);
-      doc.text('Pénalité de retard', xDesc + 3, currentY + TEXT_OFFSET);
+      doc.text(t('Pénalité de retard', 'Sazy noho ny fahatarana', 'Late penalty'), xDesc + 3, currentY + TEXT_OFFSET);
       doc.text('1', xU + 5, currentY + TEXT_OFFSET);
       doc.text(formatNumber(factureData.montant_retard), xPu + 3, currentY + TEXT_OFFSET);
       doc.text(formatNumber(factureData.montant_retard), xEnd - 3, currentY + TEXT_OFFSET, { align: 'right' });
@@ -322,32 +360,30 @@ export const generateFactureOtherPDF = async (factureData, returnBlob = false) =
     // ============================================================
     const totalValue = parseFloat(factureData.soit_total) || 0;
 
-    // Case grise pour le montant
     doc.setFillColor(248, 248, 248);
     doc.rect(xMnt, currentY, xEnd - xMnt, TOTAL_HEIGHT, 'FD');
-    // Case blanche pour le libellé
     doc.rect(xDesc, currentY, xMnt - xDesc, TOTAL_HEIGHT, 'D');
 
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
     doc.setTextColor(17, 17, 17);
-    doc.text('TOTAL', xDesc + 3, currentY + 6.5);
+    doc.text(t('TOTAL', 'TOTALY', 'TOTAL'), xDesc + 3, currentY + 6.5);
     doc.text(formatNumber(totalValue), xEnd - 3, currentY + 6.5, { align: 'right' });
 
     // ============================================================
-    // 9. LIGNES VERTICALES DU TABLEAU (tracées en UNE FOIS)
+    // 9. LIGNES VERTICALES
     // ============================================================
     const tableStart = tableHeaderY;
     const tableEnd = currentY + TOTAL_HEIGHT;
 
     doc.setDrawColor(26, 26, 26);
     doc.setLineWidth(0.3);
-    doc.line(xDesc, tableStart, xDesc, tableEnd);   // gauche
+    doc.line(xDesc, tableStart, xDesc, tableEnd);
     doc.line(xU, tableStart, xU, tableEnd);
     doc.line(xPu, tableStart, xPu, tableEnd);
     doc.line(xMnt, tableStart, xMnt, tableEnd);
-    doc.line(xEnd, tableStart, xEnd, tableEnd);     // droite
-    doc.line(xDesc, tableEnd, xEnd, tableEnd);      // bas
+    doc.line(xEnd, tableStart, xEnd, tableEnd);
+    doc.line(xDesc, tableEnd, xEnd, tableEnd);
 
     yPos = tableEnd + 10;
 
@@ -357,11 +393,16 @@ export const generateFactureOtherPDF = async (factureData, returnBlob = false) =
     doc.setTextColor(17, 17, 17);
     doc.setFont('times', 'bold');
     doc.setFontSize(11);
-    doc.text('Arrêtée la présente facture à la somme de : ', marginX, yPos);
+    const phrase = t(
+      'Arrêtée la présente facture à la somme de : ',
+      'Voatokana ity faktiora ity ho vola : ',
+      'This invoice is set at the amount of: '
+    );
+    doc.text(phrase, marginX, yPos);
     doc.setFont('times', 'italic');
     doc.setFontSize(11);
-    const phraseWidth = doc.getTextWidth('Arrêtée la présente facture à la somme de : ');
-    doc.text(numberToWords(totalValue), marginX + phraseWidth + 3, yPos);
+    const phraseWidth = doc.getTextWidth(phrase);
+    doc.text(numberToWords(totalValue, langue), marginX + phraseWidth + 3, yPos);
 
     yPos += 5;
     doc.setDrawColor(200, 200, 200);
@@ -375,8 +416,8 @@ export const generateFactureOtherPDF = async (factureData, returnBlob = false) =
     doc.setFont('times', 'bold');
     doc.setFontSize(12);
     doc.setTextColor(17, 17, 17);
-    doc.text('Le client', marginX + 10, yPos);
-    doc.text('Le Directeur Financier', xEnd - 55, yPos);
+    doc.text(t('Le client', 'Ny mpanjifa', 'The client'), marginX + 10, yPos);
+    doc.text(t('Le Directeur Financier', 'Talen\'ny fitantanam-bola', 'Chief Financial Officer'), xEnd - 55, yPos);
 
     yPos += 28;
     const dafTextWidth = doc.getTextWidth(dafName);
@@ -386,21 +427,25 @@ export const generateFactureOtherPDF = async (factureData, returnBlob = false) =
     doc.setFont('times', 'normal');
     doc.setFontSize(10);
     doc.setTextColor(80, 80, 80);
-    const dafSubText = '(Directeur Administratif et Financier)';
+    const dafSubText = t(
+      '(Directeur Administratif et Financier)',
+      '(Talen\'ny fitantanam-bola)',
+      '(Chief Financial Officer)'
+    );
     const dafSubWidth = doc.getTextWidth(dafSubText);
     doc.text(dafSubText, (xEnd - 55) + 27 - (dafSubWidth / 2) - 10, yPos + 5);
 
     // ============================================================
-    // 12. REÇU CE / PAR (SANS QUITTANCE)
+    // 12. REÇU CE / PAR
     // ============================================================
     yPos += 10;
     doc.setFont('times', 'normal');
     doc.setFontSize(11);
     doc.setTextColor(80, 80, 80);
-    doc.text(`Reçu ce : ${dateStr}`, marginX, yPos);
+    doc.text(`${t('Reçu ce', 'Voaray ny', 'Received on')} : ${dateStr}`, marginX, yPos);
     yPos += 6;
     const personneRecuValue = factureData.personne_recu || '________________________';
-    doc.text(`Par : ${personneRecuValue}`, marginX, yPos);
+    doc.text(`${t('Par', 'Avy amin\'ny', 'By')} : ${personneRecuValue}`, marginX, yPos);
 
     // ============================================================
     // 13. PIED DE PAGE
@@ -438,6 +483,7 @@ export const generateFactureOtherPDF = async (factureData, returnBlob = false) =
     document.body.removeChild(link);
     setTimeout(() => URL.revokeObjectURL(pdfUrl), 1000);
 
+    console.log(`✅ PDF Facture Other généré (langue: ${langue})`);
     return true;
   } catch (error) {
     console.error('❌ Erreur génération facture other PDF:', error);

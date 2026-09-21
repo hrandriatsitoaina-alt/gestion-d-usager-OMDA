@@ -1,16 +1,29 @@
 // src/components/GenerateQRCode.jsx
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
 import html2canvas from 'html2canvas';
 import '../styles/generate-qrcode.css';
+// ✅ Hook unique de traduction
+import { useT } from '../hooks/useT';
 
-const GenerateQRCode = ({ 
-  usager, 
+const GenerateQRCode = ({
+  usager,
   type = 'occ',
   onClose = null,
-  onGenerate = null
+  onGenerate = null,
 }) => {
   const qrRef = useRef(null);
+
+  // ✅ LANGUE UNIQUE — vient du Context
+  const { t, langue } = useT();
+
+  // ✅ Locale pour formatage
+  const locale = useMemo(() => {
+    if (langue === 'en') return 'en-US';
+    if (langue === 'mg') return 'fr-MG';
+    return 'fr-FR';
+  }, [langue]);
+
   const [isDownloading, setIsDownloading] = useState(false);
   const [qrText, setQrText] = useState('');
   const [currentUser, setCurrentUser] = useState(null);
@@ -23,25 +36,27 @@ const GenerateQRCode = ({
         const token = localStorage.getItem('userId');
         const userResponse = await fetch('http://localhost:3001/api/auth/current-user', {
           headers: {
-            'Authorization': token ? `Bearer ${token}` : ''
-          }
+            'Authorization': token ? `Bearer ${token}` : '',
+          },
         });
         const userData = await userResponse.json();
         if (userData.success && userData.user) {
           setCurrentUser(userData.user);
-          
-          // Récupérer le compteur pour ce type
+
+          // ✅ On utilise le type BACKEND (toujours FR) indépendamment de la langue
           const typeLabels = {
             hotel: 'Hôtel',
             'grand-surface': 'Grand Surface',
             bus: 'Bus',
             nightclub: 'Night club',
             media: 'Média',
-            occ: 'OCC'
+            occ: 'OCC',
           };
-          
+
           const typeName = typeLabels[type] || type;
-          const counterResponse = await fetch(`http://localhost:3001/api/users/dossier-counter/${userData.user.id}/${typeName}`);
+          const counterResponse = await fetch(
+            `http://localhost:3001/api/users/dossier-counter/${userData.user.id}/${typeName}`
+          );
           const counterData = await counterResponse.json();
           if (counterData.success) {
             setCompteur(counterData.compteur + 1);
@@ -54,218 +69,235 @@ const GenerateQRCode = ({
     fetchUserAndCounter();
   }, [type]);
 
-  // Fonction pour formater la date depuis la base de données
-  const formatDateForQR = (dateString) => {
-    if (!dateString) return 'Date non spécifiée';
-    
+  // ============================================================
+  // ✅ Formatage de date pour QR (avec locale)
+  // ============================================================
+  const formatDateForQR = useCallback((dateString) => {
+    if (!dateString) return t('Date non spécifiée', 'Daty tsy voafaritra', 'Date not specified');
+
     try {
       const date = new Date(dateString);
-      if (isNaN(date.getTime())) return 'Date invalide';
-      
-      return date.toLocaleDateString('fr-FR', {
+      if (isNaN(date.getTime())) return t('Date invalide', 'Daty diso', 'Invalid date');
+
+      return date.toLocaleDateString(locale, {
         day: 'numeric',
         month: 'long',
-        year: 'numeric'
+        year: 'numeric',
       });
     } catch {
-      return 'Date invalide';
+      return t('Date invalide', 'Daty diso', 'Invalid date');
     }
-  };
+  }, [locale, t]);
 
-  // Fonction pour formater la date en JJ/MM/AAAA
-  const formatDateForReference = () => {
+  // ============================================================
+  // ✅ Formatage de date pour référence (JJ/MM/AAAA — universel)
+  // ============================================================
+  const formatDateForReference = useCallback(() => {
     const now = new Date();
     const day = String(now.getDate()).padStart(2, '0');
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const year = now.getFullYear();
     return `${day}/${month}/${year}`;
-  };
+  }, []);
 
-  // Génération du texte pour le QR code selon le type - FORMAT DEMANDÉ
-  const generateQRTextContent = (usager, type) => {
-    if (!usager) return '© OMDA - Document officiel';
-    
-    const userId = currentUser?.id || '1';
+  // ============================================================
+  // ✅ Génération du texte QR (avec traductions selon la langue)
+  // ============================================================
+  const generateQRTextContent = useCallback((usagerData, typeParam) => {
+    if (!usagerData) {
+      return `© OMDA - ${t('Document officiel', 'Rakitra ofisialy', 'Official document')}`;
+    }
+
     const dateStr = formatDateForReference();
-    // Utiliser le compteur ou l'ID de l'usager
-    const compteurValue = compteur || usager.id || 1;
+    const compteurValue = compteur || usagerData.id || 1;
     const andReference = `AND ${dateStr}-${compteurValue}`;
-    
+    const notSpecified = t('Non spécifié', 'Tsy voafaritra', 'Not specified');
+
     let typePrefix = '';
 
-    switch(type) {
-      case 'occ':
+    switch (typeParam) {
+      case 'occ': {
         typePrefix = 'OCC';
-        // Organisateurs: utiliser organisateurs ou demandeur
-        const organisateurs = usager.organisateurs || usager.demandeur || 'Non spécifié';
-        
-        // Artistes: récupérer depuis artistes_detail ou artistesList ou artistes
-        let artistesStr = 'Non spécifié';
-        if (usager.artistes_detail && usager.artistes_detail.length > 0) {
-          artistesStr = usager.artistes_detail.map(a => a.nom).join(', ');
-        } else if (usager.artistesList && usager.artistesList.length > 0) {
-          artistesStr = usager.artistesList.map(a => a.nom).join(', ');
-        } else if (usager.artistes && usager.artistes !== '' && usager.artistes !== 'Non spécifié') {
-          artistesStr = usager.artistes;
-        }
-        
-        const lieu = usager.lieu_evenement || usager.adresse || 'Lieu non spécifié';
-        const dateEvent = usager.date_evenement ? formatDateForQR(usager.date_evenement) : 'Date non spécifiée';
-        
-        return `© OMDA affirme un événement : ${typePrefix} : Organisateurs: ${organisateurs}, Artistes: ${artistesStr}, Lieu: ${lieu}, Date événement: ${dateEvent}, ${andReference}`;
+        const organisateurs = usagerData.organisateurs || usagerData.demandeur || notSpecified;
 
-      case 'hotel':
-        typePrefix = 'Hôtel';
-        const nomHotel = usager.denomination || usager.nom || 'HÔTEL';
-        const adresseHotel = usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
-        const etoiles = usager.etoiles || 'Non spécifié';
+        let artistesStr = notSpecified;
+        if (usagerData.artistes_detail && usagerData.artistes_detail.length > 0) {
+          artistesStr = usagerData.artistes_detail.map(a => a.nom).join(', ');
+        } else if (usagerData.artistesList && usagerData.artistesList.length > 0) {
+          artistesStr = usagerData.artistesList.map(a => a.nom).join(', ');
+        } else if (usagerData.artistes && usagerData.artistes !== '' && usagerData.artistes !== 'Non spécifié') {
+          artistesStr = usagerData.artistes;
+        }
+
+        const lieu = usagerData.lieu_evenement || usagerData.adresse || t('Lieu non spécifié', 'Toerana tsy voafaritra', 'Location not specified');
+        const dateEvent = usagerData.date_evenement
+          ? formatDateForQR(usagerData.date_evenement)
+          : t('Date non spécifiée', 'Daty tsy voafaritra', 'Date not specified');
+
+        return `© OMDA ${t('affirme un événement', 'manamarina hetsika', 'certifies an event')} : ${typePrefix} : ${t('Organisateurs', 'Mpikarakara', 'Organizers')}: ${organisateurs}, ${t('Artistes', 'Mpihira', 'Artists')}: ${artistesStr}, ${t('Lieu', 'Toerana', 'Location')}: ${lieu}, ${t('Date événement', 'Daty hetsika', 'Event date')}: ${dateEvent}, ${andReference}`;
+      }
+
+      case 'hotel': {
+        typePrefix = t('Hôtel', 'Hotely', 'Hotel');
+        const nomHotel = usagerData.denomination || usagerData.nom || 'HÔTEL';
+        const adresseHotel = usagerData.adresse_siege || usagerData.ville || usagerData.adresse || t('Adresse non spécifiée', 'Adiresy tsy voafaritra', 'Address not specified');
+        const etoiles = usagerData.etoiles || notSpecified;
         let anneePaiementHotel = new Date().getFullYear();
-        if (usager.annee_dernier_paiement) {
-          anneePaiementHotel = usager.annee_dernier_paiement;
-        } else if (usager.paiements && usager.paiements.length > 0) {
-          const dernierPaiement = usager.paiements.sort((a, b) => 
+        if (usagerData.annee_dernier_paiement) {
+          anneePaiementHotel = usagerData.annee_dernier_paiement;
+        } else if (usagerData.paiements && usagerData.paiements.length > 0) {
+          const dernierPaiement = usagerData.paiements.sort((a, b) =>
             new Date(b.date_paiement) - new Date(a.date_paiement)
           )[0];
           if (dernierPaiement) {
             anneePaiementHotel = new Date(dernierPaiement.date_paiement).getFullYear();
           }
         }
-        
-        return `${typePrefix} : ${nomHotel}, Adresse: ${adresseHotel}, Étoiles: ${etoiles}, Validation année: ${anneePaiementHotel}, ${andReference}`;
 
-      case 'grand-surface':
-        typePrefix = 'Grande Surface';
-        const nomGS = usager.denomination || usager.nom || 'GRANDE SURFACE';
-        const adresseGS = usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
-        const nbMagasins = usager.nombre_magasins || 0;
+        return `${typePrefix} : ${nomHotel}, ${t('Adresse', 'Adiresy', 'Address')}: ${adresseHotel}, ${t('Étoiles', 'Kintana', 'Stars')}: ${etoiles}, ${t('Validation année', 'Fanekena taona', 'Validation year')}: ${anneePaiementHotel}, ${andReference}`;
+      }
+
+      case 'grand-surface': {
+        typePrefix = t('Grande Surface', 'Fivarotana lehibe', 'Large Store');
+        const nomGS = usagerData.denomination || usagerData.nom || 'GRANDE SURFACE';
+        const adresseGS = usagerData.adresse_siege || usagerData.ville || usagerData.adresse || t('Adresse non spécifiée', 'Adiresy tsy voafaritra', 'Address not specified');
+        const nbMagasins = usagerData.nombre_magasins || 0;
         let anneePaiementGS = new Date().getFullYear();
-        if (usager.annee_dernier_paiement) {
-          anneePaiementGS = usager.annee_dernier_paiement;
-        } else if (usager.paiements && usager.paiements.length > 0) {
-          const dernierPaiement = usager.paiements.sort((a, b) => 
+        if (usagerData.annee_dernier_paiement) {
+          anneePaiementGS = usagerData.annee_dernier_paiement;
+        } else if (usagerData.paiements && usagerData.paiements.length > 0) {
+          const dernierPaiement = usagerData.paiements.sort((a, b) =>
             new Date(b.date_paiement) - new Date(a.date_paiement)
           )[0];
           if (dernierPaiement) {
             anneePaiementGS = new Date(dernierPaiement.date_paiement).getFullYear();
           }
         }
-        
-        return `${typePrefix} : ${nomGS}, Adresse: ${adresseGS}, Nb magasins: ${nbMagasins}, Validation année: ${anneePaiementGS}, ${andReference}`;
 
-      case 'bus':
-        typePrefix = 'Bus';
-        const nomBus = usager.denomination || usager.nom || 'ENTREPRISE DE BUS';
-        const adresseBus = usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
-        const typeBus = usager.type_bus || 'Non spécifié';
-        const nbBus = usager.nombre_vehicules || 0;
-        const lignes = usager.lignes || 'Non spécifiées';
+        return `${typePrefix} : ${nomGS}, ${t('Adresse', 'Adiresy', 'Address')}: ${adresseGS}, ${t('Nb magasins', 'Isan\'ny fivarotana', 'Stores')}: ${nbMagasins}, ${t('Validation année', 'Fanekena taona', 'Validation year')}: ${anneePaiementGS}, ${andReference}`;
+      }
+
+      case 'bus': {
+        typePrefix = t('Bus', 'Bus', 'Bus');
+        const nomBus = usagerData.denomination || usagerData.nom || 'ENTREPRISE DE BUS';
+        const adresseBus = usagerData.adresse_siege || usagerData.ville || usagerData.adresse || t('Adresse non spécifiée', 'Adiresy tsy voafaritra', 'Address not specified');
+        const typeBus = usagerData.type_bus || notSpecified;
+        const nbBus = usagerData.nombre_vehicules || 0;
+        const lignes = usagerData.lignes || t('Non spécifiées', 'Tsy voafaritra', 'Not specified');
         let anneePaiementBus = new Date().getFullYear();
-        if (usager.annee_dernier_paiement) {
-          anneePaiementBus = usager.annee_dernier_paiement;
-        } else if (usager.paiements && usager.paiements.length > 0) {
-          const dernierPaiement = usager.paiements.sort((a, b) => 
+        if (usagerData.annee_dernier_paiement) {
+          anneePaiementBus = usagerData.annee_dernier_paiement;
+        } else if (usagerData.paiements && usagerData.paiements.length > 0) {
+          const dernierPaiement = usagerData.paiements.sort((a, b) =>
             new Date(b.date_paiement) - new Date(a.date_paiement)
           )[0];
           if (dernierPaiement) {
             anneePaiementBus = new Date(dernierPaiement.date_paiement).getFullYear();
           }
         }
-        
-        return `${typePrefix} : ${nomBus}, type: ${typeBus}, Nb bus: ${nbBus}, Lignes: ${lignes}, Validation année: ${anneePaiementBus}, ${andReference}`;
 
-      case 'nightclub':
-        typePrefix = 'Night Club';
-        const nomNC = usager.denomination || usager.nom || 'NIGHT CLUB';
-        const adresseNC = usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
-        const jauge = usager.jauge_max || 0;
-        const horaires = usager.horaires || 'Non spécifiés';
+        return `${typePrefix} : ${nomBus}, ${t('Type', 'Karazana', 'Type')}: ${typeBus}, ${t('Nb bus', 'Isan\'ny fiara', 'Buses')}: ${nbBus}, ${t('Lignes', 'Lalana', 'Lines')}: ${lignes}, ${t('Validation année', 'Fanekena taona', 'Validation year')}: ${anneePaiementBus}, ${andReference}`;
+      }
+
+      case 'nightclub': {
+        typePrefix = t('Night Club', 'Club alina', 'Night Club');
+        const nomNC = usagerData.denomination || usagerData.nom || 'NIGHT CLUB';
+        const adresseNC = usagerData.adresse_siege || usagerData.ville || usagerData.adresse || t('Adresse non spécifiée', 'Adiresy tsy voafaritra', 'Address not specified');
+        const jauge = usagerData.jauge_max || 0;
+        const horaires = usagerData.horaires || t('Non spécifiés', 'Tsy voafaritra', 'Not specified');
         let anneePaiementNC = new Date().getFullYear();
-        if (usager.annee_dernier_paiement) {
-          anneePaiementNC = usager.annee_dernier_paiement;
-        } else if (usager.paiements && usager.paiements.length > 0) {
-          const dernierPaiement = usager.paiements.sort((a, b) => 
+        if (usagerData.annee_dernier_paiement) {
+          anneePaiementNC = usagerData.annee_dernier_paiement;
+        } else if (usagerData.paiements && usagerData.paiements.length > 0) {
+          const dernierPaiement = usagerData.paiements.sort((a, b) =>
             new Date(b.date_paiement) - new Date(a.date_paiement)
           )[0];
           if (dernierPaiement) {
             anneePaiementNC = new Date(dernierPaiement.date_paiement).getFullYear();
           }
         }
-        
-        return `${typePrefix} : ${nomNC}, Adresse: ${adresseNC}, Jauge: ${jauge}, Horaires: ${horaires}, Validation année: ${anneePaiementNC}, ${andReference}`;
 
-      case 'media':
-        typePrefix = 'Média';
-        const nomMedia = usager.denomination || usager.nom || 'MÉDIA';
-        const adresseMedia = usager.siege || usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
-        const canal = usager.canal || usager.frequence || 'Non spécifié';
+        return `${typePrefix} : ${nomNC}, ${t('Adresse', 'Adiresy', 'Address')}: ${adresseNC}, ${t('Jauge', 'Fahaiza-mandray', 'Capacity')}: ${jauge}, ${t('Horaires', 'Ora', 'Hours')}: ${horaires}, ${t('Validation année', 'Fanekena taona', 'Validation year')}: ${anneePaiementNC}, ${andReference}`;
+      }
+
+      case 'media': {
+        typePrefix = t('Média', 'Haino aman-jery', 'Media');
+        const nomMedia = usagerData.denomination || usagerData.nom || 'MÉDIA';
+        const adresseMedia = usagerData.siege || usagerData.adresse_siege || usagerData.ville || usagerData.adresse || t('Adresse non spécifiée', 'Adiresy tsy voafaritra', 'Address not specified');
+        const canal = usagerData.canal || usagerData.frequence || notSpecified;
         let anneePaiementMedia = new Date().getFullYear();
-        if (usager.annee_dernier_paiement) {
-          anneePaiementMedia = usager.annee_dernier_paiement;
-        } else if (usager.paiements && usager.paiements.length > 0) {
-          const dernierPaiement = usager.paiements.sort((a, b) => 
+        if (usagerData.annee_dernier_paiement) {
+          anneePaiementMedia = usagerData.annee_dernier_paiement;
+        } else if (usagerData.paiements && usagerData.paiements.length > 0) {
+          const dernierPaiement = usagerData.paiements.sort((a, b) =>
             new Date(b.date_paiement) - new Date(a.date_paiement)
           )[0];
           if (dernierPaiement) {
             anneePaiementMedia = new Date(dernierPaiement.date_paiement).getFullYear();
           }
         }
-        
-        return `${typePrefix} : ${nomMedia}, Adresse: ${adresseMedia}, Canal/Fréquence: ${canal}, Validation année: ${anneePaiementMedia}, ${andReference}`;
+
+        return `${typePrefix} : ${nomMedia}, ${t('Adresse', 'Adiresy', 'Address')}: ${adresseMedia}, ${t('Canal/Fréquence', 'Fantsona/Fahita', 'Channel/Frequency')}: ${canal}, ${t('Validation année', 'Fanekena taona', 'Validation year')}: ${anneePaiementMedia}, ${andReference}`;
+      }
 
       default:
-        return `© OMDA - Document officiel, ${andReference}`;
+        return `© OMDA - ${t('Document officiel', 'Rakitra ofisialy', 'Official document')}, ${andReference}`;
     }
-  };
+  }, [compteur, t, formatDateForQR, formatDateForReference]);
 
   useEffect(() => {
     if (usager) {
       const text = generateQRTextContent(usager, type);
       setQrText(text);
     }
-  }, [usager, type, currentUser, compteur]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usager, type, currentUser, compteur, langue]);
 
-  const formatDisplayDate = (dateString) => {
-    if (!dateString) return 'Date non spécifiée';
+  // ============================================================
+  // ✅ Formatage d'affichage (avec locale)
+  // ============================================================
+  const formatDisplayDate = useCallback((dateString) => {
+    if (!dateString) return t('Date non spécifiée', 'Daty tsy voafaritra', 'Date not specified');
     try {
       const date = new Date(dateString);
       if (isNaN(date.getTime())) return dateString;
-      return date.toLocaleDateString('fr-FR', {
+      return date.toLocaleDateString(locale, {
         day: 'numeric',
         month: 'long',
-        year: 'numeric'
+        year: 'numeric',
       });
     } catch {
       return dateString;
     }
-  };
+  }, [locale, t]);
 
   const handleDownload = async () => {
     if (!qrRef.current) {
-      alert('QR code non disponible');
+      alert(t('QR code non disponible', 'QR code tsy misy', 'QR code not available'));
       return;
     }
-    
+
     setIsDownloading(true);
-    
+
     try {
       const canvas = await html2canvas(qrRef.current, {
         scale: 3,
         backgroundColor: '#ffffff',
         useCORS: true,
         allowTaint: true,
-        logging: false
+        logging: false,
       });
-      
+
       const link = document.createElement('a');
       const timestamp = new Date().toISOString().split('T')[0];
       link.download = `qr-code-omda-${timestamp}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
-      
+
       if (onGenerate) onGenerate();
     } catch (error) {
       console.error('Erreur téléchargement:', error);
-      alert('Erreur lors du téléchargement du QR code');
+      alert(t('Erreur lors du téléchargement du QR code', 'Nisy olana tamin\'ny fakana ny QR code', 'Error downloading QR code'));
     } finally {
       setIsDownloading(false);
     }
@@ -280,15 +312,15 @@ const GenerateQRCode = ({
       <div className="qr-generate-overlay">
         <div className="qr-generate-modal">
           <div className="qr-modal-body">
-            <p>Aucun usager sélectionné</p>
+            <p>{t('Aucun usager sélectionné', 'Tsy misy mpampiasa voafidy', 'No user selected')}</p>
           </div>
         </div>
       </div>
     );
   }
 
-  // Fonction pour obtenir les noms des artistes formatés
-  const getArtistesFormatted = () => {
+  // ✅ Obtenir les artistes formatés (mémoïsé)
+  const artistesFormatted = useMemo(() => {
     if (usager.artistes_detail && usager.artistes_detail.length > 0) {
       return usager.artistes_detail.map(a => a.nom).join(', ');
     }
@@ -299,63 +331,63 @@ const GenerateQRCode = ({
       return usager.artistes;
     }
     return null;
-  };
+  }, [usager]);
 
-  const getEventName = () => {
+  const getEventName = useCallback(() => {
     if (type === 'occ') {
-      return usager.organisateurs || usager.demandeur || usager.nom_evenement || 'ÉVÉNEMENT';
-    } else {
-      return usager.denomination || usager.nom || 'ENTREPRISE';
+      return usager.organisateurs || usager.demandeur || usager.nom_evenement || t('ÉVÉNEMENT', 'HETSIKA', 'EVENT');
     }
-  };
+    return usager.denomination || usager.nom || t('ENTREPRISE', 'ORINASA', 'COMPANY');
+  }, [type, usager, t]);
 
-  const getLieu = () => {
+  const getLieu = useCallback(() => {
     if (type === 'occ') {
-      return usager.lieu_evenement || 'Lieu non spécifié';
-    } else {
-      return usager.adresse_siege || usager.ville || usager.adresse || 'Adresse non spécifiée';
+      return usager.lieu_evenement || t('Lieu non spécifié', 'Toerana tsy voafaritra', 'Location not specified');
     }
-  };
+    return usager.adresse_siege || usager.ville || usager.adresse || t('Adresse non spécifiée', 'Adiresy tsy voafaritra', 'Address not specified');
+  }, [type, usager, t]);
 
-  const getDate = () => {
+  const getDate = useCallback(() => {
     if (type === 'occ') {
       return formatDisplayDate(usager.date_evenement);
-    } else {
-      return formatDisplayDate(usager.created_at);
     }
-  };
+    return formatDisplayDate(usager.created_at);
+  }, [type, usager, formatDisplayDate]);
 
-  const getTypeLabel = () => {
+  const getTypeLabel = useCallback(() => {
     const labels = {
-      hotel: 'Hôtel',
-      'grand-surface': 'Grande Surface',
-      bus: 'Bus',
-      nightclub: 'Night Club',
-      media: 'Média',
-      occ: 'OCC'
+      hotel: t('Hôtel', 'Hotely', 'Hotel'),
+      'grand-surface': t('Grande Surface', 'Fivarotana lehibe', 'Large Store'),
+      bus: t('Bus', 'Bus', 'Bus'),
+      nightclub: t('Night Club', 'Club alina', 'Night Club'),
+      media: t('Média', 'Haino aman-jery', 'Media'),
+      occ: t('OCC', 'OCC', 'OCC'),
     };
     return labels[type] || type;
-  };
+  }, [type, t]);
 
-  const getSubTitle = () => {
+  const getSubTitle = useCallback(() => {
     if (type === 'occ') {
-      return 'affirme un événement';
-    } else if (type === 'hotel') {
-      return 'Autorisation d\'exploitation - Hôtel';
-    } else if (type === 'grand-surface') {
-      return 'Autorisation commerciale - Grande Surface';
-    } else if (type === 'bus') {
-      return 'Autorisation de transport - Bus';
-    } else if (type === 'nightclub') {
-      return 'Autorisation d\'exploitation - Night Club';
-    } else if (type === 'media') {
-      return 'Autorisation de diffusion - Média';
-    } else {
-      return 'Autorisation';
+      return t('affirme un événement', 'manamarina hetsika', 'certifies an event');
     }
-  };
+    if (type === 'hotel') {
+      return t('Autorisation d\'exploitation - Hôtel', 'Fahazoan-dalana hitantana - Hotely', 'Operating authorization - Hotel');
+    }
+    if (type === 'grand-surface') {
+      return t('Autorisation commerciale - Grande Surface', 'Fahazoan-dalana ara-barotra - Fivarotana lehibe', 'Commercial authorization - Large Store');
+    }
+    if (type === 'bus') {
+      return t('Autorisation de transport - Bus', 'Fahazoan-dalana fitaterana - Bus', 'Transport authorization - Bus');
+    }
+    if (type === 'nightclub') {
+      return t('Autorisation d\'exploitation - Night Club', 'Fahazoan-dalana hitantana - Club alina', 'Operating authorization - Night Club');
+    }
+    if (type === 'media') {
+      return t('Autorisation de diffusion - Média', 'Fahazoan-dalana fampielezana - Haino aman-jery', 'Broadcasting authorization - Media');
+    }
+    return t('Autorisation', 'Fahazoan-dalana', 'Authorization');
+  }, [type, t]);
 
-  const artistesFormatted = getArtistesFormatted();
   const dateStr = formatDateForReference();
   const compteurValue = compteur || usager.id || 1;
   const referenceText = `AND ${dateStr}-${compteurValue}`;
@@ -366,7 +398,7 @@ const GenerateQRCode = ({
         <div className="qr-modal-header">
           <div className="qr-modal-title">
             <span className="qr-title-icon">🔐</span>
-            <h3>Génération du QR Code</h3>
+            <h3>{t('Génération du QR Code', 'Famokarana QR Code', 'QR Code generation')}</h3>
           </div>
           <button className="qr-modal-close" onClick={onClose}>✕</button>
         </div>
@@ -377,8 +409,8 @@ const GenerateQRCode = ({
               {getEventName()}
             </div>
             <div className="qr-usager-details">
-              <span>📋 {usager.numero_dossier_utilisateur || 'N° dossier'}</span>
-              <span>📞 {usager.telephone || 'Téléphone'}</span>
+              <span>📋 {usager.numero_dossier_utilisateur || t('N° dossier', 'Laharana rakitra', 'File N°')}</span>
+              <span>📞 {usager.telephone || t('Téléphone', 'Finday', 'Phone')}</span>
               <span>🏷️ {getTypeLabel()}</span>
             </div>
           </div>
@@ -400,11 +432,8 @@ const GenerateQRCode = ({
                   </div>
                 </div>
               </div>
-              {/* <div className="qr-omda-footer">
-                OFFICE MALAGASY DU DROIT D'AUTEUR
-              </div> */}
             </div>
-            
+
             <div className="qr-text-container">
               <div className="qr-text-main">
                 © OMDA - {getSubTitle()}
@@ -416,44 +445,44 @@ const GenerateQRCode = ({
                 <>
                   {usager.organisateurs && (
                     <div className="qr-text-occ-infos">
-                      Organisateurs: {usager.organisateurs}
+                      {t('Organisateurs', 'Mpikarakara', 'Organizers')}: {usager.organisateurs}
                     </div>
                   )}
                   {artistesFormatted && (
                     <div className="qr-text-occ-infos">
-                      Artistes: {artistesFormatted}
+                      {t('Artistes', 'Mpihira', 'Artists')}: {artistesFormatted}
                     </div>
                   )}
                   {usager.genre_manifestation && (
                     <div className="qr-text-occ-infos">
-                      Genre: {usager.genre_manifestation}
+                      {t('Genre', 'Karazana', 'Genre')}: {usager.genre_manifestation}
                     </div>
                   )}
                 </>
               )}
               {type === 'hotel' && usager.etoiles && (
                 <div className="qr-text-occ-infos">
-                  Étoiles: {usager.etoiles}⭐
+                  {t('Étoiles', 'Kintana', 'Stars')}: {usager.etoiles}⭐
                 </div>
               )}
               {type === 'grand-surface' && usager.nombre_magasins && (
                 <div className="qr-text-occ-infos">
-                  Nb magasins: {usager.nombre_magasins}
+                  {t('Nb magasins', 'Isan\'ny fivarotana', 'Stores')}: {usager.nombre_magasins}
                 </div>
               )}
               {type === 'bus' && usager.nombre_vehicules && (
                 <div className="qr-text-occ-infos">
-                  Nb bus: {usager.nombre_vehicules} | Lignes: {usager.lignes || 'Non spécifiées'}
+                  {t('Nb bus', 'Isan\'ny fiara', 'Buses')}: {usager.nombre_vehicules} | {t('Lignes', 'Lalana', 'Lines')}: {usager.lignes || t('Non spécifiées', 'Tsy voafaritra', 'Not specified')}
                 </div>
               )}
               {type === 'nightclub' && usager.jauge_max && (
                 <div className="qr-text-occ-infos">
-                  Jauge: {usager.jauge_max} | Horaires: {usager.horaires || 'Non spécifiés'}
+                  {t('Jauge', 'Fahaiza-mandray', 'Capacity')}: {usager.jauge_max} | {t('Horaires', 'Ora', 'Hours')}: {usager.horaires || t('Non spécifiés', 'Tsy voafaritra', 'Not specified')}
                 </div>
               )}
               {type === 'media' && usager.canal && (
                 <div className="qr-text-occ-infos">
-                  Canal/Fréquence: {usager.canal}
+                  {t('Canal/Fréquence', 'Fantsona/Fahita', 'Channel/Frequency')}: {usager.canal}
                 </div>
               )}
               <div className="qr-text-lieu">
@@ -471,17 +500,19 @@ const GenerateQRCode = ({
 
         <div className="qr-modal-footer">
           <button className="qr-btn qr-btn-secondary" onClick={onClose}>
-            Fermer
+            {t('Fermer', 'Hidio', 'Close')}
           </button>
           <button className="qr-btn qr-btn-print" onClick={handlePrint}>
-            🖨️ Imprimer
+            🖨️ {t('Imprimer', 'Atonta', 'Print')}
           </button>
-          <button 
-            className="qr-btn qr-btn-primary" 
+          <button
+            className="qr-btn qr-btn-primary"
             onClick={handleDownload}
             disabled={isDownloading}
           >
-            {isDownloading ? '⏳ Téléchargement...' : '📥 Télécharger'}
+            {isDownloading
+              ? `⏳ ${t('Téléchargement...', 'Maka...', 'Downloading...')}`
+              : `📥 ${t('Télécharger', 'Alaina', 'Download')}`}
           </button>
         </div>
       </div>

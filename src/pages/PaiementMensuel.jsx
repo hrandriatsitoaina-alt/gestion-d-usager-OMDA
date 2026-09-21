@@ -1,24 +1,35 @@
 // src/pages/PaiementMensuel.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft, CreditCard, Calendar, DollarSign, Hash, FileText, CheckCircle,
   AlertCircle, Loader2, User, Building2, Phone, Mail, MapPin, Clock, Save,
   Printer, FileCheck, ReceiptText, ChevronDown, ChevronUp, AlertTriangle,
   Hotel, Store, Bus, Music, Tv, Tent, Check, X, ShieldCheck, Layers,
-  Edit3, CheckSquare, Download, FileArchive, RefreshCw, UserCog,
-  Package   // ✅ AJOUTÉ
+  Edit3, CheckSquare, Download, FileArchive, RefreshCw, UserCog, Package,
 } from 'lucide-react';
 import '../styles/paiement-mensuel.css';
 import MiniSidebar from '../components/MiniSidebar';
 import { useToast } from '../components/Toast';
 import { generateFacturePDF } from './pdf/facture_pdf';
 import JSZip from 'jszip';
+// ✅ Hook unique de traduction
+import { useT } from '../hooks/useT';
 
 const PaiementMensuel = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const showToast = useToast();
+
+  // ✅ LANGUE UNIQUE — vient du Context
+  const { t, langue } = useT();
+
+  // ✅ Locale pour formatage
+  const locale = useMemo(() => {
+    if (langue === 'en') return 'en-US';
+    if (langue === 'mg') return 'fr-MG';
+    return 'fr-FR';
+  }, [langue]);
 
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -57,10 +68,32 @@ const PaiementMensuel = () => {
   const [personneRecu, setPersonneRecu] = useState('');
 
   const [anneesDisponibles, setAnneesDisponibles] = useState([]);
-  const [moisLabels] = useState(['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']);
-  const [moisLabelsShort] = useState(['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc']);
-  const [userId, setUserId] = useState(null);
 
+  // ✅ Mois traduits
+  const moisLabels = useMemo(() => {
+    if (langue === 'en') {
+      return ['January', 'February', 'March', 'April', 'May', 'June',
+              'July', 'August', 'September', 'October', 'November', 'December'];
+    }
+    if (langue === 'mg') {
+      return ['Janoary', 'Febroary', 'Martsa', 'Aprily', 'Mey', 'Jona',
+              'Jolay', 'Aogositra', 'Septambra', 'Oktobra', 'Novambra', 'Desambra'];
+    }
+    return ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+            'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+  }, [langue]);
+
+  const moisLabelsShort = useMemo(() => {
+    if (langue === 'en') {
+      return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    }
+    if (langue === 'mg') {
+      return ['Jan', 'Feb', 'Mar', 'Apr', 'Mey', 'Jon', 'Jol', 'Aog', 'Sep', 'Okt', 'Nov', 'Des'];
+    }
+    return ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+  }, [langue]);
+
+  const [userId, setUserId] = useState(null);
   const [dataSource, setDataSource] = useState('api');
 
   const [showEditModal, setShowEditModal] = useState(false);
@@ -68,6 +101,64 @@ const PaiementMensuel = () => {
   const [isSavingUsager, setIsSavingUsager] = useState(false);
   const [usagerModifieRenouvellement, setUsagerModifieRenouvellement] = useState(false);
 
+  // ============================================================
+  // ✅ MAPPING BACKEND (indépendant de la langue)
+  // ============================================================
+  const getBackendType = (type) => {
+    const backendTypes = {
+      'hotel': 'Hôtel',
+      'grand-surface': 'Grand Surface',
+      'bus': 'Bus',
+      'nightclub': 'Night club',
+      'media': 'Télé/Radio',
+      'occ': 'OCC',
+      'other': 'Hôtel',
+    };
+    return backendTypes[type] || 'Hôtel';
+  };
+
+  const getTypeLabel = (type) => {
+    const labels = {
+      'hotel': t('Hôtel', 'Hotely', 'Hotel'),
+      'grand-surface': t('Grand Surface', 'Fivarotana lehibe', 'Grand Surface'),
+      'bus': t('Bus', 'Bus', 'Bus'),
+      'nightclub': t('Night club', 'Club alina', 'Night club'),
+      'media': t('Télé/Radio', 'Fahitalavitra/Radio', 'TV/Radio'),
+      'occ': t('OCC', 'OCC', 'OCC'),
+      'other': t('Usager événementiel', 'Mpampiasa hetsika', 'Event user'),
+    };
+    return labels[type] || type;
+  };
+
+  const getTypeLabelAffichage = (type) => {
+    const labels = {
+      'hotel': t('Hôtel', 'Hotely', 'Hotel'),
+      'grand-surface': t('Grande Surface', 'Fivarotana lehibe', 'Grand Surface'),
+      'bus': t('Transport', 'Fitaterana', 'Transport'),
+      'nightclub': t('Night Club', 'Club alina', 'Night Club'),
+      'media': t('Média', 'Haino aman-jery', 'Media'),
+      'occ': t('Occasionnel', 'Fotoana manokana', 'Occasional'),
+      'other': t('Usager événementiel', 'Mpampiasa hetsika', 'Event user'),
+    };
+    return labels[type] || type;
+  };
+
+  const getTypeIcon = (type) => {
+    const icons = {
+      'hotel': Hotel,
+      'grand-surface': Store,
+      'bus': Bus,
+      'nightclub': Music,
+      'media': Tv,
+      'occ': Tent,
+      'other': Package,
+    };
+    return icons[type] || Building2;
+  };
+
+  // ============================================================
+  // UTILITAIRES
+  // ============================================================
   const getOnlyNumbers = (value) => {
     if (!value) return '';
     return value.replace(/\D/g, '');
@@ -166,7 +257,6 @@ const PaiementMensuel = () => {
     }
   }, [usager, usagerType]);
 
-  // ✅ AJOUT : cas 'other' dans appliquerMontants
   const appliquerMontants = (usagerSource, type) => {
     let montant = 0;
     let retardVal = 0;
@@ -174,7 +264,6 @@ const PaiementMensuel = () => {
     let unit = 1;
 
     if (type === 'other') {
-      // ✅ Pour other : le montant vient de la facture (soit_total)
       montant = parseFloat(usagerSource.soit_total) ||
                 parseFloat(usagerSource.montant_total) ||
                 parseFloat(usagerSource.montant) || 0;
@@ -213,27 +302,40 @@ const PaiementMensuel = () => {
   const handleConfirmerDescription = () => {
     if (descriptionPersonnalisee.trim()) {
       setDescriptionConfirmee(descriptionPersonnalisee.trim());
-      showToast('✅ Description confirmée : ' + descriptionPersonnalisee.trim(), 'success');
+      showToast(
+        `✅ ${t('Description confirmée', 'Voamarina ny fanazavana', 'Description confirmed')} : ${descriptionPersonnalisee.trim()}`,
+        'success'
+      );
     } else {
       setDescriptionConfirmee('');
-      showToast('✅ Description effacée', 'info');
+      showToast(`✅ ${t('Description effacée', 'Voafafa ny fanazavana', 'Description cleared')}`, 'info');
     }
   };
 
   const handleEffacerDescription = () => {
     setDescriptionPersonnalisee('');
     setDescriptionConfirmee('');
-    showToast('✅ Description effacée', 'info');
+    showToast(`✅ ${t('Description effacée', 'Voafafa ny fanazavana', 'Description cleared')}`, 'info');
   };
 
   const openEditModal = (isObligatoire = false) => {
     setEditedUsager({ ...usager });
     setShowEditModal(true);
     if (isObligatoire) {
-      showToast('⚠️ Renouvellement de contrat : veuillez confirmer les informations de l\'usager', 'warning');
+      showToast(
+        t(
+          "⚠️ Renouvellement de contrat : veuillez confirmer les informations de l'usager",
+          "⚠️ Fanavaozana fifanarahana : hamarino ny mombamomba ny mpampiasa",
+          '⚠️ Contract renewal: please confirm user information'
+        ),
+        'warning'
+      );
     }
   };
 
+  // ============================================================
+  // ✅ SAUVEGARDE USAGER (CORRIGÉE)
+  // ============================================================
   const handleSaveUsager = async () => {
     const denominationValue =
       editedUsager.denomination ||
@@ -242,10 +344,28 @@ const PaiementMensuel = () => {
       editedUsager.organisateurs ||
       usager.denomination ||
       usager.nom_evenement ||
-      'Sans nom';
+      t('Sans nom', 'Tsy misy anarana', 'No name');
 
     if (!denominationValue || denominationValue.trim() === '') {
-      showToast('La dénomination est obligatoire', 'error');
+      showToast(t('La dénomination est obligatoire', 'Ilaina ny anarana', 'Name is required'), 'error');
+      return;
+    }
+
+    // ✅ CAS SPÉCIAL : usager événementiel (other)
+    // Le backend n'a pas de route PUT pour "other".
+    // On valide la modification en local pour ne pas bloquer.
+    if (usagerType === 'other') {
+      setUsager(prev => ({ ...prev, ...editedUsager, denomination: denominationValue }));
+      setUsagerModifieRenouvellement(true);
+      showToast(
+        t(
+          '✅ Informations confirmées (usager événementiel)',
+          '✅ Voamarina ny mombamomba (mpampiasa hetsika)',
+          '✅ Information confirmed (event user)'
+        ),
+        'success'
+      );
+      setShowEditModal(false);
       return;
     }
 
@@ -253,9 +373,10 @@ const PaiementMensuel = () => {
     try {
       const token = localStorage.getItem('adminToken');
 
+      // ✅ getBackendType garantit une valeur BACKEND connue, INDÉPENDANTE de la langue
       const payload = {
         denomination: denominationValue,
-        type_usager: getTypeLabel(usagerType),
+        type_usager: getBackendType(usagerType),
         demandeur: editedUsager.demandeur || editedUsager.organisateurs || '',
         telephone: editedUsager.telephone || '',
         email: editedUsager.email || '',
@@ -274,13 +395,13 @@ const PaiementMensuel = () => {
 
         ...(usagerType === 'occ' && {
           organisateurs: editedUsager.organisateurs || denominationValue,
-          representant_par: editedUsager.representant_par || editedUsager.demandeur || '',
+          representant_par_occ: editedUsager.representant_par || editedUsager.demandeur || '',
           genre_manifestation: editedUsager.genre_manifestation || denominationValue,
           artistes: editedUsager.artistes || '',
           date_evenement: editedUsager.date_evenement || null,
           lieu_evenement: editedUsager.lieu_evenement || '',
           lieu_ajout: editedUsager.lieu_ajout || 'Antananarivo',
-          domicile: editedUsager.domicile || ''
+          domicile: editedUsager.domicile || '',
         }),
 
         ...(usagerType === 'media' && {
@@ -289,24 +410,24 @@ const PaiementMensuel = () => {
           siege: editedUsager.siege || '',
           nif: editedUsager.nif || '',
           stat: editedUsager.stat || '',
-          taux: editedUsager.taux || editedUsager.montant_mensuel || 0
+          taux: editedUsager.taux || editedUsager.montant_mensuel || 0,
         }),
 
         ...(usagerType === 'hotel' && {
           activite: editedUsager.activite || '',
           etoiles: editedUsager.etoiles || '',
-          ravinala: editedUsager.ravinala || false
+          ravinala: editedUsager.ravinala || false,
         }),
 
         ...(usagerType === 'nightclub' && {
           activite: editedUsager.activite || '',
           jauge_max: editedUsager.jauge_max || 0,
-          horaires: editedUsager.horaires || ''
+          horaires: editedUsager.horaires || '',
         }),
 
         ...(usagerType === 'grand-surface' && {
           activite: editedUsager.activite || '',
-          nombre_magasins: editedUsager.nombre_magasins || 0
+          nombre_magasins: editedUsager.nombre_magasins || 0,
         }),
 
         ...(usagerType === 'bus' && {
@@ -314,17 +435,17 @@ const PaiementMensuel = () => {
           nombre_vehicules: editedUsager.nombre_vehicules || 0,
           type_bus: editedUsager.type_bus || '',
           trajet: editedUsager.trajet || '',
-          zones_desservies: editedUsager.zones_desservies || ''
-        })
+          zones_desservies: editedUsager.zones_desservies || '',
+        }),
       };
 
       const response = await fetch(`http://localhost:3001/api/usagers/${usager.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'adminToken': token || ''
+          'adminToken': token || '',
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
 
       const data = await response.json();
@@ -332,14 +453,14 @@ const PaiementMensuel = () => {
       if (data.success) {
         setUsager(prev => ({ ...prev, ...editedUsager, denomination: denominationValue }));
         setUsagerModifieRenouvellement(true);
-        showToast('✅ Usager modifié avec succès', 'success');
+        showToast(`✅ ${t('Usager modifié avec succès', 'Vita ny fanovana', 'User updated successfully')}`, 'success');
         setShowEditModal(false);
       } else {
-        showToast('❌ ' + (data.message || 'Erreur lors de la modification'), 'error');
+        showToast(`❌ ${data.message || t('Erreur lors de la modification', 'Nisy olana tamin\'ny fanovana', 'Error while updating')}`, 'error');
       }
     } catch (error) {
       console.error('Erreur modification usager:', error);
-      showToast('❌ Erreur de connexion', 'error');
+      showToast(`❌ ${t('Erreur de connexion', 'Nisy olana tamin\'ny fifandraisana', 'Connection error')}`, 'error');
     } finally {
       setIsSavingUsager(false);
     }
@@ -372,7 +493,7 @@ const PaiementMensuel = () => {
       fetchAnneesDisponibles(state.usagerType);
       fetchLastQuittance();
     } else {
-      showToast('Aucun usager sélectionné', 'error');
+      showToast(t('Aucun usager sélectionné', 'Tsy misy mpampiasa voafidy', 'No user selected'), 'error');
       navigate('/gere-payer');
     }
   }, [location]);
@@ -383,14 +504,11 @@ const PaiementMensuel = () => {
       let usagerFinal = null;
       let source = 'api';
 
-      // ✅ Pour "other", on n'utilise PAS /api/usagers/other/:id (route inexistante)
-      // On passe directement par le fallback (usagerData du state)
       if (type === 'other') {
         if (usagerFallback) {
           usagerFinal = usagerFallback;
           source = 'fallback';
         } else {
-          // Essayer de récupérer depuis la liste des other-usagers
           try {
             const res = await fetch('http://localhost:3001/api/other-usagers');
             const data = await res.json();
@@ -426,7 +544,7 @@ const PaiementMensuel = () => {
       }
 
       if (!usagerFinal) {
-        showToast('Impossible de charger cet usager', 'error');
+        showToast(t('Impossible de charger cet usager', 'Tsy afaka maka an\'ity mpampiasa ity', 'Unable to load this user'), 'error');
         navigate('/gere-payer');
         return;
       }
@@ -436,7 +554,7 @@ const PaiementMensuel = () => {
       appliquerMontants(usagerFinal, type);
 
       if (source === 'fallback') {
-        showToast('Données chargées en mode dégradé', 'warning');
+        showToast(t('Données chargées en mode dégradé', 'Nalaina tamin\'ny fomba tsotra ny angona', 'Data loaded in degraded mode'), 'warning');
       }
 
       try {
@@ -445,16 +563,15 @@ const PaiementMensuel = () => {
         console.warn('⚠️ Erreur récupération paiements:', err);
         setMoisPayes([]);
       }
-
     } catch (error) {
       console.error('❌ Erreur fetch usager:', error);
       if (usagerFallback) {
         setUsager(usagerFallback);
         setDataSource('fallback');
         appliquerMontants(usagerFallback, type);
-        showToast('Données chargées en mode dégradé', 'warning');
+        showToast(t('Données chargées en mode dégradé', 'Nalaina tamin\'ny fomba tsotra ny angona', 'Data loaded in degraded mode'), 'warning');
       } else {
-        showToast('Erreur de connexion', 'error');
+        showToast(t('Erreur de connexion', 'Nisy olana tamin\'ny fifandraisana', 'Connection error'), 'error');
         navigate('/gere-payer');
       }
     } finally {
@@ -519,7 +636,6 @@ const PaiementMensuel = () => {
       if (data.success) {
         const paiementsAnnee = data.paiements.filter(p => Number(p.annee) === Number(annee));
         setMoisPayes(paiementsAnnee);
-        console.log('✅ Paiements chargés pour', annee, ':', paiementsAnnee.length);
       } else {
         setMoisPayes([]);
       }
@@ -550,7 +666,10 @@ const PaiementMensuel = () => {
 
   const toggleMois = (mois) => {
     if (estMoisPaye(mois, selectedYear)) {
-      showToast(`Le mois ${moisLabels[mois - 1]} est déjà payé`, 'warning');
+      showToast(
+        `${t('Le mois', 'Ny volana', 'The month')} ${moisLabels[mois - 1]} ${t('est déjà payé', 'efa voaloa', 'is already paid')}`,
+        'warning'
+      );
       return;
     }
     setMoisSelectionnes(prev => {
@@ -575,30 +694,30 @@ const PaiementMensuel = () => {
     }
   };
 
-  const enregistrerPaiement = async (usagerId, usagerType, montant, datePaiement, mois, annee, montantRetard, isRetard) => {
+  const enregistrerPaiement = async (usagerId, usagerTypeParam, montant, datePaiement, mois, annee, montantRetardParam, isRetardParam) => {
     try {
       const token = localStorage.getItem('adminToken');
       const payload = {
         usagerId: usagerId,
-        usagerType: usagerType,
+        usagerType: usagerTypeParam,
         type_paiement: 'mensuel',
         annee: annee,
         mois: mois,
         montant: montant,
         date_paiement: datePaiement,
         frais_dossier: 0,
-        montant_retard: montantRetard || 0,
-        est_retard: isRetard || false,
-        statut: 'paye'
+        montant_retard: montantRetardParam || 0,
+        est_retard: isRetardParam || false,
+        statut: 'paye',
       };
 
       const response = await fetch('http://localhost:3001/api/paiements/enregistrer', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'adminToken': token || ''
+          'adminToken': token || '',
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
 
       const result = await response.json();
@@ -614,12 +733,12 @@ const PaiementMensuel = () => {
   const handleDownloadPDF = async (facture) => {
     try {
       setIsGenerating(true);
-      showToast('🔄 Génération du PDF en cours...', 'info');
+      showToast(t('🔄 Génération du PDF en cours...', '🔄 Mamorona PDF...', '🔄 Generating PDF...'), 'info');
       await generateFacturePDF(facture, false);
-      showToast('✅ PDF téléchargé avec succès !', 'success');
+      showToast(t('✅ PDF téléchargé avec succès !', '✅ Vita ny PDF !', '✅ PDF downloaded successfully!'), 'success');
     } catch (error) {
       console.error('Erreur PDF:', error);
-      showToast('❌ Erreur de génération PDF', 'error');
+      showToast(t('❌ Erreur de génération PDF', '❌ Nisy olana tamin\'ny famokarana PDF', '❌ PDF generation error'), 'error');
     } finally {
       setIsGenerating(false);
     }
@@ -627,13 +746,16 @@ const PaiementMensuel = () => {
 
   const handleDownloadZip = async () => {
     if (facturesGenerees.length === 0) {
-      showToast('Aucune facture à générer', 'error');
+      showToast(t('Aucune facture à générer', 'Tsy misy faktiora hamoronana', 'No invoice to generate'), 'error');
       return;
     }
 
     try {
       setIsGenerating(true);
-      showToast(`🔄 Génération du ZIP avec ${facturesGenerees.length} fichiers...`, 'info');
+      showToast(
+        `🔄 ${t('Génération du ZIP avec', 'Mamorona ZIP misy', 'Generating ZIP with')} ${facturesGenerees.length} ${t('fichiers...', 'rakitra...', 'files...')}`,
+        'info'
+      );
 
       const zip = new JSZip();
       let count = 0;
@@ -652,7 +774,7 @@ const PaiementMensuel = () => {
       }
 
       if (count === 0) {
-        showToast('❌ Aucun PDF généré', 'error');
+        showToast(t('❌ Aucun PDF généré', '❌ Tsy misy PDF vita', '❌ No PDF generated'), 'error');
         setIsGenerating(false);
         return;
       }
@@ -660,7 +782,7 @@ const PaiementMensuel = () => {
       const zipBlob = await zip.generateAsync({
         type: 'blob',
         compression: 'DEFLATE',
-        compressionOptions: { level: 6 }
+        compressionOptions: { level: 6 },
       });
 
       const zipUrl = URL.createObjectURL(zipBlob);
@@ -672,10 +794,10 @@ const PaiementMensuel = () => {
       document.body.removeChild(link);
 
       setTimeout(() => URL.revokeObjectURL(zipUrl), 5000);
-      showToast(`✅ ${count} PDFs téléchargés dans le ZIP !`, 'success');
+      showToast(`✅ ${count} ${t('PDFs téléchargés dans le ZIP !', 'PDFs alaina tao amin\'ny ZIP !', 'PDFs downloaded in ZIP!')}`, 'success');
     } catch (error) {
       console.error('Erreur ZIP:', error);
-      showToast('❌ Erreur de génération du ZIP: ' + error.message, 'error');
+      showToast(`❌ ${t('Erreur de génération du ZIP', 'Nisy olana tamin\'ny famokarana ZIP', 'ZIP generation error')}: ${error.message}`, 'error');
     } finally {
       setIsGenerating(false);
     }
@@ -683,7 +805,7 @@ const PaiementMensuel = () => {
 
   const genererFactures = async () => {
     if (!usager) {
-      showToast('Aucun usager sélectionné', 'error');
+      showToast(t('Aucun usager sélectionné', 'Tsy misy mpampiasa voafidy', 'No user selected'), 'error');
       return;
     }
 
@@ -693,19 +815,26 @@ const PaiementMensuel = () => {
     }
 
     if (!personneRecu.trim()) {
-      showToast('Veuillez saisir le nom de la personne qui reçoit', 'error');
+      showToast(t('Veuillez saisir le nom de la personne qui reçoit', 'Ampidiro ny anaran\'ny mpandray', 'Please enter the receiver name'), 'error');
       return;
     }
 
     if (moisSelectionnes.length === 0) {
-      showToast('Veuillez sélectionner au moins un mois', 'error');
+      showToast(t('Veuillez sélectionner au moins un mois', 'Misafidiana volana iray farafahakeliny', 'Please select at least one month'), 'error');
       return;
     }
 
     if (factureType === 'C') {
       const fraisRenouvVal = parseFloat(fraisRenouvellement) || 0;
       if (!fraisRenouvVal || fraisRenouvVal <= 0) {
-        showToast('⚠️ Type C : Veuillez saisir les frais de renouvellement de contrat (obligatoire)', 'error');
+        showToast(
+          t(
+            '⚠️ Type C : Veuillez saisir les frais de renouvellement de contrat (obligatoire)',
+            '⚠️ Karazana C : Ampidiro ny saran\'ny fanavaozana fifanarahana (tsy azo ihodivirana)',
+            '⚠️ Type C: Please enter contract renewal fees (mandatory)'
+          ),
+          'error'
+        );
         return;
       }
     }
@@ -791,8 +920,8 @@ const PaiementMensuel = () => {
             quittance: quittanceFacture,
             quittanceValidee: true,
             isRenouvellement: false,
-            fraisRenouvellement: 0
-          })
+            fraisRenouvellement: 0,
+          }),
         });
 
         const result = await response.json();
@@ -814,15 +943,14 @@ const PaiementMensuel = () => {
               description_personnalisee: descriptionCapture,
               is_renouvellement: false,
               frais_renouvellement: 0,
-              frais_dossier: 0
+              frais_dossier: 0,
             };
             facturesGenereesList.push(factureComplete);
             currentQuittance++;
           }
         } else {
-          erreurs.push(result.message || 'Erreur génération facture A');
+          erreurs.push(result.message || t('Erreur génération facture A', 'Olana tamin\'ny famokarana faktiora A', 'Invoice A generation error'));
         }
-
       } else if (factureTypeCapture === 'B') {
         const quittancePartage = currentQuittance;
 
@@ -862,8 +990,8 @@ const PaiementMensuel = () => {
                 quittance: quittancePartage,
                 quittanceValidee: true,
                 isRenouvellement: false,
-                fraisRenouvellement: 0
-              })
+                fraisRenouvellement: 0,
+              }),
             });
 
             const result = await response.json();
@@ -886,20 +1014,19 @@ const PaiementMensuel = () => {
                   description_personnalisee: descriptionCapture,
                   is_renouvellement: false,
                   frais_renouvellement: 0,
-                  frais_dossier: 0
+                  frais_dossier: 0,
                 };
                 facturesGenereesList.push(factureComplete);
               }
             } else {
-              erreurs.push(`${moisLabel} (${result.message || 'erreur'})`);
+              erreurs.push(`${moisLabel} (${result.message || t('erreur', 'olana', 'error')})`);
             }
           } catch (err) {
-            erreurs.push(`${moisLabel} (${err.message || 'erreur technique'})`);
+            erreurs.push(`${moisLabel} (${err.message || t('erreur technique', 'olana ara-teknika', 'technical error')})`);
           }
         }
 
         currentQuittance++;
-
       } else if (factureTypeCapture === 'C') {
         let totalFacture = montantTotalCapture;
         if (isRetardCapture) totalFacture += montantRetardCapture;
@@ -936,8 +1063,8 @@ const PaiementMensuel = () => {
             quittanceValidee: true,
             isRenouvellement: fraisRenouvellementCapture > 0,
             fraisRenouvellement: fraisRenouvellementCapture,
-            suffixe: null
-          })
+            suffixe: null,
+          }),
         });
 
         const result = await response.json();
@@ -959,13 +1086,13 @@ const PaiementMensuel = () => {
               description_personnalisee: descriptionCapture,
               is_renouvellement: fraisRenouvellementCapture > 0,
               frais_renouvellement: fraisRenouvellementCapture,
-              frais_dossier: fraisRenouvellementCapture
+              frais_dossier: fraisRenouvellementCapture,
             };
             facturesGenereesList.push(factureComplete);
             currentQuittance++;
           }
         } else {
-          erreurs.push(result.message || 'Erreur génération facture C');
+          erreurs.push(result.message || t('Erreur génération facture C', 'Olana tamin\'ny famokarana faktiora C', 'Invoice C generation error'));
         }
       }
 
@@ -983,63 +1110,25 @@ const PaiementMensuel = () => {
         setTousMois(false);
         setNombreMois(1);
 
-        let message = `✅ ${facturesGenereesList.length} facture(s) générée(s) avec succès`;
-        if (paiementsOk > 0) message += ` (${paiementsOk} paiement(s) enregistré(s))`;
-        message += ` - Prochain quittance: ${nextQuittance}`;
+        let message = `✅ ${facturesGenereesList.length} ${t('facture(s) générée(s) avec succès', 'faktiora vita soa aman-tsara', 'invoice(s) generated successfully')}`;
+        if (paiementsOk > 0) {
+          message += ` (${paiementsOk} ${t('paiement(s) enregistré(s)', 'fandoavana voarakitra', 'payment(s) recorded')})`;
+        }
+        message += ` - ${t('Prochain quittance', 'Taratasy manaraka', 'Next receipt')}: ${nextQuittance}`;
 
         if (erreurs.length > 0) {
-          message += `, mais ${erreurs.length} mois en erreur: ${erreurs.join(', ')}`;
+          message += `, ${t('mais', 'fa', 'but')} ${erreurs.length} ${t('mois en erreur', 'volana diso', 'months in error')}: ${erreurs.join(', ')}`;
         }
         showToast(message, 'success');
       } else if (erreurs.length > 0) {
-        showToast(`❌ Aucune facture générée. Erreurs: ${erreurs.join(', ')}`, 'error');
+        showToast(`❌ ${t('Aucune facture générée', 'Tsy misy faktiora vita', 'No invoice generated')}. ${t('Erreurs', 'Olana', 'Errors')}: ${erreurs.join(', ')}`, 'error');
       }
-
     } catch (error) {
       console.error('❌ Erreur génération factures:', error);
-      showToast('Erreur lors de la génération des factures', 'error');
+      showToast(t('Erreur lors de la génération des factures', 'Nisy olana tamin\'ny famokarana faktiora', 'Error while generating invoices'), 'error');
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const getTypeLabel = (type) => {
-    const labels = {
-      'hotel': 'Hôtel',
-      'grand-surface': 'Grand Surface',
-      'bus': 'Bus',
-      'nightclub': 'Night club',
-      'media': 'Télé/Radio',
-      'occ': 'OCC',
-      'other': 'Usager événementiel'   // ✅ AJOUTÉ
-    };
-    return labels[type] || type;
-  };
-
-  const getTypeLabelAffichage = (type) => {
-    const labels = {
-      'hotel': 'Hôtel',
-      'grand-surface': 'Grande Surface',
-      'bus': 'Transport',
-      'nightclub': 'Night Club',
-      'media': 'Média',
-      'occ': 'Occasionnel',
-      'other': 'Usager événementiel'   // ✅ AJOUTÉ
-    };
-    return labels[type] || type;
-  };
-
-  const getTypeIcon = (type) => {
-    const icons = {
-      'hotel': Hotel,
-      'grand-surface': Store,
-      'bus': Bus,
-      'nightclub': Music,
-      'media': Tv,
-      'occ': Tent,
-      'other': Package   // ✅ AJOUTÉ
-    };
-    return icons[type] || Building2;
   };
 
   if (loading) {
@@ -1048,7 +1137,7 @@ const PaiementMensuel = () => {
         <MiniSidebar />
         <div className="pm-loading">
           <Loader2 size={48} className="spinner" />
-          <p>Chargement des données...</p>
+          <p>{t('Chargement des données...', 'Maka ny angona...', 'Loading data...')}</p>
         </div>
       </>
     );
@@ -1060,9 +1149,9 @@ const PaiementMensuel = () => {
         <MiniSidebar />
         <div className="pm-error">
           <AlertCircle size={48} />
-          <p>Usager non trouvé</p>
+          <p>{t('Usager non trouvé', 'Tsy hita ny mpampiasa', 'User not found')}</p>
           <button onClick={() => navigate('/gere-payer')} className="pm-btn-back">
-            Retour
+            {t('Retour', 'Hiverina', 'Back')}
           </button>
         </div>
       </>
@@ -1116,7 +1205,7 @@ const PaiementMensuel = () => {
               }}
               onClick={(e) => e.stopPropagation()}
               onFocus={(e) => e.target.select()}
-              placeholder="Montant"
+              placeholder={t('Montant', 'Vola', 'Amount')}
               className="pm-mois-input"
               step="1"
               min="0"
@@ -1127,13 +1216,17 @@ const PaiementMensuel = () => {
 
         <div className="pm-mois-badges">
           {estPaye && (
-            <span className="pm-mois-badge paye"><CheckCircle size={12} /> Payé</span>
+            <span className="pm-mois-badge paye">
+              <CheckCircle size={12} /> {t('Payé', 'Voaloa', 'Paid')}
+            </span>
           )}
           {estSelectionne && !estPaye && (
             <span className="pm-mois-badge selected"><Check size={12} /> ✓</span>
           )}
           {!estPaye && estDisponible && !estSelectionne && (
-            <span className="pm-mois-badge disponible">Sélectionner</span>
+            <span className="pm-mois-badge disponible">
+              {t('Sélectionner', 'Safidio', 'Select')}
+            </span>
           )}
           {!estPaye && !estDisponible && (
             <span className="pm-mois-badge indisponible"><X size={12} /></span>
@@ -1145,15 +1238,212 @@ const PaiementMensuel = () => {
 
   return (
     <>
+      {/* ✅ CSS INLINE : Overlay sombre garanti pour la modale, peu importe le thème */}
+      <style>{`
+        .pm-modal-overlay {
+          position: fixed !important;
+          top: 0 !important;
+          left: 0 !important;
+          right: 0 !important;
+          bottom: 0 !important;
+          background: rgba(15, 20, 35, 0.75) !important;
+          backdrop-filter: blur(4px);
+          -webkit-backdrop-filter: blur(4px);
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          z-index: 9999 !important;
+          padding: 20px;
+          overflow-y: auto;
+        }
+
+        .pm-modal-content {
+          background: #ffffff !important;
+          color: #1a1a2e !important;
+          border-radius: 16px;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4) !important;
+          max-width: 900px;
+          width: 100%;
+          max-height: 90vh;
+          overflow-y: auto;
+          padding: 0;
+        }
+
+        .pm-modal-header {
+          background: #f8f9fa !important;
+          color: #1a1a2e !important;
+          padding: 18px 24px;
+          border-bottom: 1px solid #e5e7eb;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          border-radius: 16px 16px 0 0;
+          position: sticky;
+          top: 0;
+          z-index: 1;
+        }
+
+        .pm-modal-header h2 {
+          color: #1a1a2e !important;
+          margin: 0;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 18px;
+        }
+
+        .pm-modal-close-btn {
+          background: transparent;
+          border: none;
+          color: #6b7280 !important;
+          font-size: 22px;
+          cursor: pointer;
+          padding: 4px 10px;
+          border-radius: 6px;
+          transition: all 0.2s;
+        }
+        .pm-modal-close-btn:hover {
+          background: #e5e7eb !important;
+          color: #1a1a2e !important;
+        }
+
+        .pm-modal-body {
+          padding: 24px;
+          background: #ffffff !important;
+          color: #1a1a2e !important;
+        }
+
+        .pm-modal-info-renouvellement {
+          background: #fff3cd !important;
+          color: #856404 !important;
+          padding: 12px 16px;
+          border-radius: 8px;
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+          margin-bottom: 20px;
+          border-left: 4px solid #ffc107;
+          font-size: 13px;
+          line-height: 1.5;
+        }
+
+        .pm-modal-info-renouvellement svg {
+          flex-shrink: 0;
+          margin-top: 2px;
+          color: #856404 !important;
+        }
+
+        .pm-modal-obligatoire {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          background: #dc3545 !important;
+          color: #ffffff !important;
+          padding: 2px 8px;
+          border-radius: 4px;
+          font-size: 10px;
+          font-weight: 700;
+          margin-left: 8px;
+        }
+
+        .pm-modal-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+          gap: 16px;
+        }
+
+        .pm-modal-field {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .pm-modal-field label {
+          font-size: 12px;
+          font-weight: 600;
+          color: #374151 !important;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+        }
+
+        .pm-modal-field input,
+        .pm-modal-field select {
+          padding: 10px 12px;
+          border: 1px solid #d1d5db !important;
+          border-radius: 8px;
+          font-size: 14px;
+          color: #1a1a2e !important;
+          background: #ffffff !important;
+          transition: all 0.2s;
+        }
+
+        .pm-modal-field input::placeholder {
+          color: #9ca3af !important;
+        }
+
+        .pm-modal-field input:focus,
+        .pm-modal-field select:focus {
+          outline: none;
+          border-color: #3498db !important;
+          box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.15);
+        }
+
+        .pm-modal-footer {
+          display: flex;
+          justify-content: flex-end;
+          gap: 10px;
+          padding: 16px 24px;
+          background: #f8f9fa !important;
+          border-top: 1px solid #e5e7eb;
+          border-radius: 0 0 16px 16px;
+          position: sticky;
+          bottom: 0;
+        }
+
+        .pm-modal-btn-cancel,
+        .pm-modal-btn-save {
+          padding: 10px 20px;
+          border-radius: 8px;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          border: none;
+          transition: all 0.2s;
+        }
+
+        .pm-modal-btn-cancel {
+          background: #e5e7eb !important;
+          color: #374151 !important;
+        }
+        .pm-modal-btn-cancel:hover {
+          background: #d1d5db !important;
+        }
+
+        .pm-modal-btn-save {
+          background: #3498db !important;
+          color: #ffffff !important;
+        }
+        .pm-modal-btn-save:hover {
+          background: #2980b9 !important;
+        }
+        .pm-modal-btn-save:disabled {
+          background: #93c5fd !important;
+          cursor: not-allowed;
+        }
+      `}</style>
+
       <MiniSidebar />
       <div className="paiement-mensuel-container">
         <div className="pm-header">
           <div className="pm-header-left">
             <button className="pm-btn-back" onClick={() => navigate('/gere-payer')}>
-              <ArrowLeft size={20} /> Retour
+              <ArrowLeft size={20} /> {t('Retour', 'Hiverina', 'Back')}
             </button>
             <div className="pm-header-info">
-              <h1>Paiement Mensuel</h1>
+              <h1>{t('Paiement Mensuel', 'Fandoavana isam-bolana', 'Monthly Payment')}</h1>
               <div className="pm-header-type">
                 <IconComponent size={18} />
                 <span>{typeLabel}</span>
@@ -1164,51 +1454,57 @@ const PaiementMensuel = () => {
           <div className="pm-header-right">
             {dataSource === 'fallback' && (
               <span className="pm-header-badge" style={{ background: '#fff3cd', color: '#856404' }}>
-                <AlertTriangle size={14} /> Mode dégradé
+                <AlertTriangle size={14} /> {t('Mode dégradé', 'Fomba tsotra', 'Degraded mode')}
               </span>
             )}
             <span className="pm-header-badge">
-              <Clock size={14} /> Paiement Multiple
+              <Clock size={14} /> {t('Paiement Multiple', 'Fandoavana maro', 'Multiple Payment')}
             </span>
-            <button className="pm-header-edit-btn" onClick={() => openEditModal(false)} title="Modifier l'usager">
-              <UserCog size={16} /> Modifier
+            <button
+              className="pm-header-edit-btn"
+              onClick={() => openEditModal(false)}
+              title={t("Modifier l'usager", 'Ovay ny mpampiasa', 'Edit user')}
+            >
+              <UserCog size={16} /> {t('Modifier', 'Ovay', 'Edit')}
             </button>
           </div>
         </div>
 
         <div className="pm-body">
           <div className="pm-section pm-usager-info">
-            <h3><User size={18} /> Informations de l'usager</h3>
+            <h3><User size={18} /> {t("Informations de l'usager", 'Mombamomba ny mpampiasa', 'User information')}</h3>
             <div className="pm-usager-grid">
               <div className="pm-usager-item">
-                <span className="pm-label">Dénomination</span>
-                <span className="pm-value">{usager.denomination || usager.nom_evenement || usager.organisateurs || '-'}</span>
+                <span className="pm-label">{t('Dénomination', 'Anarana', 'Name')}</span>
+                <span className="pm-value">
+                  {usager.denomination || usager.nom_evenement || usager.organisateurs || '-'}
+                </span>
               </div>
               <div className="pm-usager-item">
-                <span className="pm-label">Demandeur</span>
+                <span className="pm-label">{t('Demandeur', 'Mpangataka', 'Applicant')}</span>
                 <span className="pm-value">{usager.demandeur || usager.representant_par || '-'}</span>
               </div>
               <div className="pm-usager-item">
-                <span className="pm-label"><Phone size={14} /> Téléphone</span>
+                <span className="pm-label"><Phone size={14} /> {t('Téléphone', 'Finday', 'Phone')}</span>
                 <span className="pm-value">{usager.telephone || '-'}</span>
               </div>
               <div className="pm-usager-item">
-                <span className="pm-label"><Mail size={14} /> Email</span>
+                <span className="pm-label"><Mail size={14} /> {t('Email', 'Mailaka', 'Email')}</span>
                 <span className="pm-value">{usager.email || '-'}</span>
               </div>
               <div className="pm-usager-item">
-                <span className="pm-label"><MapPin size={14} /> Région</span>
+                <span className="pm-label"><MapPin size={14} /> {t('Région', 'Faritra', 'Region')}</span>
                 <span className="pm-value">{usager.region || '-'}</span>
               </div>
               <div className="pm-usager-item">
-                <span className="pm-label"><MapPin size={14} /> Adresse</span>
+                <span className="pm-label"><MapPin size={14} /> {t('Adresse', 'Adiresy', 'Address')}</span>
                 <span className="pm-value">{usager.adresse || usager.adresse_siege || '-'}</span>
               </div>
             </div>
           </div>
 
           <div className="pm-section pm-type-facture-section">
-            <h3><Layers size={18} /> Type de facture</h3>
+            <h3><Layers size={18} /> {t('Type de facture', 'Karazana faktiora', 'Invoice type')}</h3>
             <div className="pm-type-facture-container">
               <div className="pm-type-options">
                 <label className={`pm-type-option ${factureType === 'A' ? 'active' : ''}`}>
@@ -1226,9 +1522,13 @@ const PaiementMensuel = () => {
                     }}
                   />
                   <div className="pm-type-option-content">
-                    <span className="pm-type-option-title">Type A</span>
-                    <span className="pm-type-option-desc">Une seule facture groupée</span>
-                    <span className="pm-type-option-badge">Tous les mois sur une facture</span>
+                    <span className="pm-type-option-title">{t('Type A', 'Karazana A', 'Type A')}</span>
+                    <span className="pm-type-option-desc">
+                      {t('Une seule facture groupée', 'Faktiora tokana mitambatra', 'Single grouped invoice')}
+                    </span>
+                    <span className="pm-type-option-badge">
+                      {t('Tous les mois sur une facture', 'Volana rehetra amin\'ny faktiora iray', 'All months on one invoice')}
+                    </span>
                   </div>
                 </label>
 
@@ -1247,9 +1547,13 @@ const PaiementMensuel = () => {
                     }}
                   />
                   <div className="pm-type-option-content">
-                    <span className="pm-type-option-title">Type B</span>
-                    <span className="pm-type-option-desc">Factures séparées</span>
-                    <span className="pm-type-option-badge">Une facture par mois - Même quittance</span>
+                    <span className="pm-type-option-title">{t('Type B', 'Karazana B', 'Type B')}</span>
+                    <span className="pm-type-option-desc">
+                      {t('Factures séparées', 'Faktiora misaraka', 'Separate invoices')}
+                    </span>
+                    <span className="pm-type-option-badge">
+                      {t('Une facture par mois - Même quittance', 'Faktiora isam-bolana - Taratasy iray', 'One invoice per month - Same receipt')}
+                    </span>
                   </div>
                 </label>
 
@@ -1267,14 +1571,25 @@ const PaiementMensuel = () => {
                       setTimeout(() => {
                         setEditedUsager({ ...usager });
                         setShowEditModal(true);
-                        showToast('⚠️ Type C : Veuillez confirmer les informations de l\'usager pour continuer', 'warning');
+                        showToast(
+                          t(
+                            "⚠️ Type C : Veuillez confirmer les informations de l'usager pour continuer",
+                            "⚠️ Karazana C : Hamarino ny mombamomba ny mpampiasa hanohizana",
+                            '⚠️ Type C: Please confirm user information to continue'
+                          ),
+                          'warning'
+                        );
                       }, 300);
                     }}
                   />
                   <div className="pm-type-option-content">
-                    <span className="pm-type-option-title">Type C</span>
-                    <span className="pm-type-option-desc">Renouvellement de facture</span>
-                    <span className="pm-type-option-badge">Une seule facture + Renouvellement</span>
+                    <span className="pm-type-option-title">{t('Type C', 'Karazana C', 'Type C')}</span>
+                    <span className="pm-type-option-desc">
+                      {t('Renouvellement de facture', 'Fanavaozana faktiora', 'Invoice renewal')}
+                    </span>
+                    <span className="pm-type-option-badge">
+                      {t('Une seule facture + Renouvellement', 'Faktiora iray + Fanavaozana', 'Single invoice + Renewal')}
+                    </span>
                   </div>
                 </label>
               </div>
@@ -1282,11 +1597,11 @@ const PaiementMensuel = () => {
           </div>
 
           <div className="pm-section pm-paiement-section">
-            <h3><CreditCard size={18} /> Paramètres du paiement</h3>
+            <h3><CreditCard size={18} /> {t('Paramètres du paiement', 'Fikirana ny fandoavana', 'Payment settings')}</h3>
 
             <div className="pm-paiement-grid">
               <div className="pm-form-group">
-                <label><Calendar size={15} /> Date de paiement</label>
+                <label><Calendar size={15} /> {t('Date de paiement', 'Daty nandoavana', 'Payment date')}</label>
                 <input
                   type="date"
                   value={paymentDate}
@@ -1295,7 +1610,7 @@ const PaiementMensuel = () => {
               </div>
 
               <div className="pm-form-group">
-                <label><Calendar size={15} /> Année de paiement</label>
+                <label><Calendar size={15} /> {t('Année de paiement', 'Taom-pandoavana', 'Payment year')}</label>
                 <select
                   value={selectedYear}
                   onChange={(e) => setSelectedYear(parseInt(e.target.value))}
@@ -1303,19 +1618,23 @@ const PaiementMensuel = () => {
                 >
                   {anneesDisponibles.map(y => (
                     <option key={y} value={y}>
-                      {y} {y === new Date().getFullYear() ? '(En cours)' : y < new Date().getFullYear() ? '(Passée)' : '(Future)'}
+                      {y} {y === new Date().getFullYear()
+                        ? t('(En cours)', '(Ankehitriny)', '(Current)')
+                        : y < new Date().getFullYear()
+                        ? t('(Passée)', '(Lasana)', '(Past)')
+                        : t('(Future)', '(Ho avy)', '(Future)')}
                     </option>
                   ))}
                 </select>
               </div>
 
               <div className="pm-form-group">
-                <label><DollarSign size={15} /> Montant mensuel (Ar)</label>
+                <label><DollarSign size={15} /> {t('Montant mensuel (Ar)', 'Vola isam-bolana (Ar)', 'Monthly amount (Ar)')}</label>
                 <input
                   type="number"
                   value={montantMensuel}
                   onChange={(e) => setMontantMensuel(e.target.value)}
-                  placeholder="Saisir le montant mensuel"
+                  placeholder={t('Saisir le montant mensuel', 'Ampidiro ny vola isam-bolana', 'Enter monthly amount')}
                   step="1"
                   min="0"
                   className="pm-montant-input"
@@ -1323,7 +1642,7 @@ const PaiementMensuel = () => {
               </div>
 
               <div className="pm-form-group">
-                <label><Hash size={15} /> Uniter</label>
+                <label><Hash size={15} /> {t('Uniter', 'Isan\'ny', 'Unit')}</label>
                 <input
                   type="number"
                   value={uniter}
@@ -1332,14 +1651,19 @@ const PaiementMensuel = () => {
                   step="1"
                   className="pm-uniter-input"
                 />
-                <small className="pm-field-hint">Multiplicateur du montant mensuel</small>
+                <small className="pm-field-hint">
+                  {t('Multiplicateur du montant mensuel', 'Fampitomboana ny vola isam-bolana', 'Monthly amount multiplier')}
+                </small>
               </div>
 
               {factureType === 'C' && (
                 <div className="pm-form-group pm-renouvellement-group">
                   <label className="pm-renouvellement-direct-label">
                     <RefreshCw size={15} />
-                    <span>Frais de renouvellement Contrat (Ar) <span style={{ color: 'red' }}>*</span></span>
+                    <span>
+                      {t('Frais de renouvellement Contrat (Ar)', 'Saran\'ny fanavaozana fifanarahana (Ar)', 'Contract renewal fees (Ar)')}{' '}
+                      <span style={{ color: 'red' }}>*</span>
+                    </span>
                   </label>
                   <input
                     type="number"
@@ -1348,7 +1672,11 @@ const PaiementMensuel = () => {
                       const val = e.target.value;
                       setFraisRenouvellement(val === '' ? '' : (parseFloat(val) || 0));
                     }}
-                    placeholder="Saisir les frais de renouvellement (obligatoire)"
+                    placeholder={t(
+                      'Saisir les frais de renouvellement (obligatoire)',
+                      'Ampidiro ny saran\'ny fanavaozana (tsy azo ihodivirana)',
+                      'Enter renewal fees (mandatory)'
+                    )}
                     className={`pm-frais-renouvellement-input ${
                       (!fraisRenouvellement || parseFloat(fraisRenouvellement) <= 0) ? 'pm-input-error' : 'pm-input-valid'
                     }`}
@@ -1358,18 +1686,18 @@ const PaiementMensuel = () => {
                   />
                   {(!fraisRenouvellement || parseFloat(fraisRenouvellement) <= 0) ? (
                     <small className="pm-field-hint pm-renouvellement-hint pm-hint-error">
-                      <AlertCircle size={12} /> <strong>⚠️ OBLIGATOIRE</strong> - Saisissez les frais de renouvellement de contrat
+                      <AlertCircle size={12} /> <strong>{t('⚠️ OBLIGATOIRE', '⚠️ TSY AZO IHODIVIRANA', '⚠️ MANDATORY')}</strong> - {t('Saisissez les frais de renouvellement de contrat', 'Ampidiro ny saran\'ny fanavaozana fifanarahana', 'Enter contract renewal fees')}
                     </small>
                   ) : (
                     <small className="pm-field-hint pm-renouvellement-hint pm-hint-valid">
-                      <CheckCircle size={12} /> Frais de renouvellement de contrat : {parseFloat(fraisRenouvellement).toLocaleString('fr-FR')} Ar
+                      <CheckCircle size={12} /> {t('Frais de renouvellement de contrat', 'Saran\'ny fanavaozana fifanarahana', 'Contract renewal fees')} : {parseFloat(fraisRenouvellement).toLocaleString(locale)} Ar
                     </small>
                   )}
                 </div>
               )}
 
               <div className="pm-form-group pm-retard-group">
-                <label><AlertTriangle size={15} /> Retard</label>
+                <label><AlertTriangle size={15} /> {t('Retard', 'Tara', 'Late')}</label>
                 <div className="pm-retard-checkbox">
                   <label>
                     <input
@@ -1377,7 +1705,7 @@ const PaiementMensuel = () => {
                       checked={isRetard}
                       onChange={(e) => setIsRetard(e.target.checked)}
                     />
-                    Activer le retard
+                    {t('Activer le retard', 'Alefaso ny tara', 'Enable late')}
                   </label>
                 </div>
                 {isRetard && (
@@ -1385,7 +1713,7 @@ const PaiementMensuel = () => {
                     type="number"
                     value={montantRetard}
                     onChange={(e) => setMontantRetard(parseFloat(e.target.value) || 0)}
-                    placeholder="Montant du retard"
+                    placeholder={t('Montant du retard', 'Vola tara', 'Late amount')}
                     className="pm-retard-input"
                     step="1"
                     min="0"
@@ -1394,15 +1722,17 @@ const PaiementMensuel = () => {
               </div>
 
               <div className="pm-form-group pm-total-group">
-                <label><ReceiptText size={15} /> Total général (Ar)</label>
+                <label><ReceiptText size={15} /> {t('Total général (Ar)', 'Vola total (Ar)', 'Grand total (Ar)')}</label>
                 <div className="pm-total-display">
                   <span className="pm-total-amount">
-                    {totalGeneral.toLocaleString('fr-FR')} Ar
+                    {totalGeneral.toLocaleString(locale)} Ar
                   </span>
                   <span className="pm-total-detail">
                     {montantMensuel} × {uniter}
-                    {isRetard ? ` + ${montantRetard.toLocaleString('fr-FR')} Ar (retard)` : ''}
-                    {factureType === 'C' && parseFloat(fraisRenouvellement) > 0 ? ` + ${parseFloat(fraisRenouvellement).toLocaleString('fr-FR')} Ar (renouv.)` : ''}
+                    {isRetard ? ` + ${montantRetard.toLocaleString(locale)} Ar (${t('retard', 'tara', 'late')})` : ''}
+                    {factureType === 'C' && parseFloat(fraisRenouvellement) > 0
+                      ? ` + ${parseFloat(fraisRenouvellement).toLocaleString(locale)} Ar (${t('renouv.', 'fanavaozana', 'renewal')})`
+                      : ''}
                   </span>
                 </div>
               </div>
@@ -1410,18 +1740,22 @@ const PaiementMensuel = () => {
           </div>
 
           <div className="pm-section pm-description-section">
-            <h3><Edit3 size={18} /> Description personnalisée</h3>
+            <h3><Edit3 size={18} /> {t('Description personnalisée', 'Fanazavana manokana', 'Custom description')}</h3>
             <div className="pm-description-container">
               <div className="pm-description-input-group">
                 <input
                   type="text"
                   value={descriptionPersonnalisee}
                   onChange={(e) => setDescriptionPersonnalisee(e.target.value)}
-                  placeholder="Ex: Authentification de facture, Paiement anticipé, ..."
+                  placeholder={t(
+                    'Ex: Authentification de facture, Paiement anticipé, ...',
+                    'Ohatra: Fanamarinana faktiora, Fandoavana mialoha, ...',
+                    'Ex: Invoice authentication, Early payment, ...'
+                  )}
                   className="pm-description-input"
                 />
                 <button className="pm-description-btn-confirm" onClick={handleConfirmerDescription}>
-                  <CheckSquare size={18} /> Confirmer
+                  <CheckSquare size={18} /> {t('Confirmer', 'Hamarino', 'Confirm')}
                 </button>
                 <button className="pm-description-btn-clear" onClick={handleEffacerDescription}>
                   ✕
@@ -1430,23 +1764,25 @@ const PaiementMensuel = () => {
               {descriptionConfirmee && (
                 <div className="pm-description-confirmee">
                   <CheckCircle size={16} color="#27ae60" />
-                  <span>Description confirmée : <strong>"{descriptionConfirmee}"</strong></span>
+                  <span>
+                    {t('Description confirmée', 'Voamarina ny fanazavana', 'Description confirmed')} : <strong>"{descriptionConfirmee}"</strong>
+                  </span>
                 </div>
               )}
             </div>
           </div>
 
           <div className="pm-section pm-mois-section">
-            <h3><Calendar size={18} /> Sélection des mois à payer</h3>
+            <h3><Calendar size={18} /> {t('Sélection des mois à payer', 'Fisafidiana volana haloa', 'Select months to pay')}</h3>
 
             <div className="pm-mois-info">
               <span className="pm-mois-count">
-                {maxMoisDisponibles} mois disponibles pour {selectedYear}
+                {maxMoisDisponibles} {t('mois disponibles pour', 'volana misy ho an\'ny', 'months available for')} {selectedYear}
               </span>
               {moisPayes.length > 0 && (
                 <span className="pm-mois-payes">
                   <ShieldCheck size={14} color="#27ae60" />
-                  {moisPayes.length} mois déjà payés
+                  {moisPayes.length} {t('mois déjà payés', 'volana efa voaloa', 'months already paid')}
                 </span>
               )}
             </div>
@@ -1454,9 +1790,9 @@ const PaiementMensuel = () => {
             {factureType !== 'C' && (
               <div className="pm-mois-selecteur">
                 <div className="pm-mois-selecteur-label">
-                  <span>Nombre de mois à payer :</span>
+                  <span>{t('Nombre de mois à payer', 'Isan\'ny volana haloa', 'Number of months to pay')} :</span>
                   <span className="pm-mois-selecteur-info">
-                    (1 - {maxMoisDisponibles} disponible{maxMoisDisponibles > 1 ? 's' : ''})
+                    (1 - {maxMoisDisponibles} {t('disponible', 'misy', 'available')}{maxMoisDisponibles > 1 ? 's' : ''})
                   </span>
                 </div>
                 <div className="pm-mois-selecteur-input">
@@ -1497,11 +1833,13 @@ const PaiementMensuel = () => {
                     onClick={toggleTousMois}
                     disabled={maxMoisDisponibles === 0}
                   >
-                    {tousMois ? 'Tout désélectionner' : 'Tout sélectionner'}
+                    {tousMois
+                      ? t('Tout désélectionner', 'Esory ny safidy rehetra', 'Deselect all')
+                      : t('Tout sélectionner', 'Safidio ny rehetra', 'Select all')}
                   </button>
                 </div>
                 <div className="pm-mois-selected-info">
-                  {moisSelectionnes.length} mois sélectionné(s)
+                  {moisSelectionnes.length} {t('mois sélectionné(s)', 'volana voafidy', 'month(s) selected')}
                   {moisSelectionnes.length > 0 && (
                     <span className="pm-mois-selected-list">
                       ({moisSelectionnes.map(m => moisLabelsShort[m - 1]).join(', ')})
@@ -1509,7 +1847,7 @@ const PaiementMensuel = () => {
                   )}
                   {moisSelectionnes.length > 0 && (
                     <span className="pm-mois-selected-total">
-                      Total : {totalGeneral.toLocaleString('fr-FR')} Ar
+                      {t('Total', 'Totaly', 'Total')} : {totalGeneral.toLocaleString(locale)} Ar
                     </span>
                   )}
                 </div>
@@ -1519,18 +1857,20 @@ const PaiementMensuel = () => {
             {factureType === 'C' && (
               <div className="pm-mois-selecteur pm-mois-selecteur-typeC">
                 <div className="pm-mois-selecteur-label">
-                  <span>Mois couverts par le renouvellement (cliquez pour sélectionner) :</span>
+                  <span>{t('Mois couverts par le renouvellement (cliquez pour sélectionner)', 'Volana voarakotry ny fanavaozana (tsindrio hisafidiana)', 'Months covered by renewal (click to select)')} :</span>
                   <span className="pm-mois-selecteur-info">
-                    ({moisSelectionnes.length} mois sélectionné{moisSelectionnes.length > 1 ? 's' : ''})
+                    ({moisSelectionnes.length} {t('mois sélectionné', 'volana voafidy', 'month(s) selected')}{moisSelectionnes.length > 1 ? 's' : ''})
                   </span>
                 </div>
                 <div className="pm-mois-selected-info">
                   {moisSelectionnes.length > 0 ? (
                     <span className="pm-mois-selected-list">
-                      Mois : {moisSelectionnes.map(m => moisLabels[m - 1]).join(', ')}
+                      {t('Mois', 'Volana', 'Months')} : {moisSelectionnes.map(m => moisLabels[m - 1]).join(', ')}
                     </span>
                   ) : (
-                    <span style={{ color: '#dc3545' }}>Aucun mois sélectionné</span>
+                    <span style={{ color: '#dc3545' }}>
+                      {t('Aucun mois sélectionné', 'Tsy misy volana voafidy', 'No month selected')}
+                    </span>
                   )}
                 </div>
               </div>
@@ -1547,27 +1887,27 @@ const PaiementMensuel = () => {
           </div>
 
           <div className="pm-section pm-personne-section">
-            <h3><User size={18} /> Personne qui reçoit</h3>
+            <h3><User size={18} /> {t('Personne qui reçoit', 'Mpandray', 'Receiver')}</h3>
             <div className="pm-personne-container">
               <input
                 type="text"
                 value={personneRecu}
                 onChange={(e) => setPersonneRecu(e.target.value)}
-                placeholder="Saisir le nom de la personne qui reçoit"
+                placeholder={t('Saisir le nom de la personne qui reçoit', 'Ampidiro ny anaran\'ny mpandray', 'Enter the receiver name')}
                 className="pm-personne-input"
               />
             </div>
           </div>
 
           <div className="pm-section pm-quittance-section">
-            <h3><FileCheck size={18} /> Quittance</h3>
+            <h3><FileCheck size={18} /> {t('Quittance', 'Taratasy', 'Receipt')}</h3>
             <div className="pm-quittance-container">
               <div className="pm-quittance-input-group">
                 <input
                   type="text"
                   value={quittance}
                   onChange={(e) => setQuittance(getOnlyNumbers(e.target.value))}
-                  placeholder="Numéro de quittance"
+                  placeholder={t('Numéro de quittance', 'Laharana taratasy', 'Receipt number')}
                   className="pm-quittance-input"
                 />
                 <label className="pm-quittance-checkbox">
@@ -1576,19 +1916,21 @@ const PaiementMensuel = () => {
                     checked={quittanceValidee}
                     onChange={(e) => {
                       if (!quittance) {
-                        showToast('Veuillez saisir un numéro de quittance', 'error');
+                        showToast(t('Veuillez saisir un numéro de quittance', 'Ampidiro ny laharana taratasy', 'Please enter a receipt number'), 'error');
                         return;
                       }
                       setQuittanceValidee(e.target.checked);
                     }}
                   />
-                  Valider la quittance
+                  {t('Valider la quittance', 'Hamarino ny taratasy', 'Validate receipt')}
                 </label>
               </div>
               {quittance && quittanceValidee && (
                 <div className="pm-quittance-validee">
                   <CheckCircle size={16} color="#27ae60" />
-                  <span>Quittance validée : <strong>{quittance}</strong></span>
+                  <span>
+                    {t('Quittance validée', 'Voamarina ny taratasy', 'Receipt validated')} : <strong>{quittance}</strong>
+                  </span>
                 </div>
               )}
             </div>
@@ -1607,16 +1949,18 @@ const PaiementMensuel = () => {
             }
           >
             {isSubmitting ? (
-              <><Loader2 size={18} className="spinner" /> Génération en cours...</>
+              <><Loader2 size={18} className="spinner" /> {t('Génération en cours...', 'Mamorona...', 'Generating...')}</>
             ) : (
-              <><Save size={18} /> Générer la facture ({factureType})</>
+              <><Save size={18} /> {t('Générer la facture', 'Hamorona faktiora', 'Generate invoice')} ({factureType})</>
             )}
           </button>
 
           {factureType === 'C' && !fraisRenouvValide && (
             <div className="pm-generate-warning">
               <AlertCircle size={16} />
-              <span>⚠️ Frais de renouvellement de contrat obligatoire pour générer la facture</span>
+              <span>
+                ⚠️ {t('Frais de renouvellement de contrat obligatoire pour générer la facture', 'Tsy azo ihodivirana ny saran\'ny fanavaozana fifanarahana hamoronana faktiora', 'Contract renewal fees required to generate invoice')}
+              </span>
             </div>
           )}
         </div>
@@ -1624,7 +1968,9 @@ const PaiementMensuel = () => {
         {showFactures && facturesGenerees.length > 0 && (
           <div className="pm-factures-generees">
             <div className="pm-factures-header">
-              <h3><FileText size={18} /> Factures générées ({facturesGenerees.length})</h3>
+              <h3>
+                <FileText size={18} /> {t('Factures générées', 'Faktiora vita', 'Generated invoices')} ({facturesGenerees.length})
+              </h3>
               <div className="pm-factures-actions">
                 {facturesGenerees.length > 1 && (
                   <button
@@ -1633,9 +1979,9 @@ const PaiementMensuel = () => {
                     disabled={isGenerating}
                   >
                     {isGenerating ? (
-                      <><Loader2 size={16} className="spinner" /> Génération...</>
+                      <><Loader2 size={16} className="spinner" /> {t('Génération...', 'Mamorona...', 'Generating...')}</>
                     ) : (
-                      <><FileArchive size={16} /> Télécharger ZIP</>
+                      <><FileArchive size={16} /> {t('Télécharger ZIP', 'Alaina ZIP', 'Download ZIP')}</>
                     )}
                   </button>
                 )}
@@ -1659,14 +2005,16 @@ const PaiementMensuel = () => {
                         <span className="pm-facture-date">
                           {moisLabels[moisIndex]} {dateFacture.getFullYear()}
                         </span>
-                        <span className="pm-facture-montant">{facture.soit_total.toLocaleString('fr-FR')} Ar</span>
+                        <span className="pm-facture-montant">
+                          {facture.soit_total.toLocaleString(locale)} Ar
+                        </span>
                         <span className={`pm-facture-quittance ${isTypeB || isTypeC ? 'shared' : ''}`}>
-                          Quittance: {String(facture.quittance || '').padStart(7, '0')}
+                          {t('Quittance', 'Taratasy', 'Receipt')}: {String(facture.quittance || '').padStart(7, '0')}
                         </span>
                         <span className="pm-facture-uniter">U: {facture.uniter}</span>
                         {facture.is_renouvellement && (
                           <span className="pm-facture-renouvellement">
-                            <RefreshCw size={12} /> Renouv.
+                            <RefreshCw size={12} /> {t('Renouv.', 'Fanavaozana', 'Renewal')}
                           </span>
                         )}
                       </div>
@@ -1687,7 +2035,7 @@ const PaiementMensuel = () => {
 
         <div className="pm-footer">
           <button className="pm-btn-print" onClick={() => window.print()}>
-            <Printer size={18} /> Imprimer
+            <Printer size={18} /> {t('Imprimer', 'Atonta', 'Print')}
           </button>
         </div>
       </div>
@@ -1697,10 +2045,10 @@ const PaiementMensuel = () => {
           <div className="pm-modal-content">
             <div className="pm-modal-header">
               <h2>
-                <UserCog size={22} color="#3498db" /> Modifier l'usager
+                <UserCog size={22} color="#3498db" /> {t("Modifier l'usager", 'Ovay ny mpampiasa', 'Edit user')}
                 {factureType === 'C' && (
                   <span className="pm-modal-obligatoire">
-                    <AlertTriangle size={14} /> OBLIGATOIRE
+                    <AlertTriangle size={14} /> {t('OBLIGATOIRE', 'TSY AZO IHODIVIRANA', 'MANDATORY')}
                   </span>
                 )}
               </h2>
@@ -1713,13 +2061,19 @@ const PaiementMensuel = () => {
               {factureType === 'C' && (
                 <div className="pm-modal-info-renouvellement">
                   <AlertTriangle size={16} />
-                  <span>Renouvellement de contrat : vous devez confirmer les informations de l'usager pour continuer.</span>
+                  <span>
+                    {t(
+                      "Renouvellement de contrat : vous devez confirmer les informations de l'usager pour continuer.",
+                      "Fanavaozana fifanarahana : tsy maintsy manamarina ny mombamomba ny mpampiasa ianao hanohizana.",
+                      'Contract renewal: you must confirm user information to continue.'
+                    )}
+                  </span>
                 </div>
               )}
 
               <div className="pm-modal-grid">
                 <div className="pm-modal-field">
-                  <label>Dénomination <span style={{ color: 'red' }}>*</span></label>
+                  <label>{t('Dénomination', 'Anarana', 'Name')} <span style={{ color: 'red' }}>*</span></label>
                   <input
                     type="text"
                     value={editedUsager.denomination || editedUsager.nom_evenement || editedUsager.genre_manifestation || ''}
@@ -1727,7 +2081,7 @@ const PaiementMensuel = () => {
                   />
                 </div>
                 <div className="pm-modal-field">
-                  <label>Demandeur</label>
+                  <label>{t('Demandeur', 'Mpangataka', 'Applicant')}</label>
                   <input
                     type="text"
                     value={editedUsager.demandeur || editedUsager.organisateurs || ''}
@@ -1735,7 +2089,7 @@ const PaiementMensuel = () => {
                   />
                 </div>
                 <div className="pm-modal-field">
-                  <label>Téléphone</label>
+                  <label>{t('Téléphone', 'Finday', 'Phone')}</label>
                   <input
                     type="text"
                     value={editedUsager.telephone || ''}
@@ -1743,7 +2097,7 @@ const PaiementMensuel = () => {
                   />
                 </div>
                 <div className="pm-modal-field">
-                  <label>Email</label>
+                  <label>{t('Email', 'Mailaka', 'Email')}</label>
                   <input
                     type="email"
                     value={editedUsager.email || ''}
@@ -1751,7 +2105,7 @@ const PaiementMensuel = () => {
                   />
                 </div>
                 <div className="pm-modal-field">
-                  <label>Région</label>
+                  <label>{t('Région', 'Faritra', 'Region')}</label>
                   <input
                     type="text"
                     value={editedUsager.region || ''}
@@ -1759,7 +2113,7 @@ const PaiementMensuel = () => {
                   />
                 </div>
                 <div className="pm-modal-field">
-                  <label>Adresse</label>
+                  <label>{t('Adresse', 'Adiresy', 'Address')}</label>
                   <input
                     type="text"
                     value={editedUsager.adresse || editedUsager.adresse_siege || ''}
@@ -1770,7 +2124,7 @@ const PaiementMensuel = () => {
                 {usagerType === 'occ' && (
                   <>
                     <div className="pm-modal-field">
-                      <label>Genre manifestation</label>
+                      <label>{t('Genre manifestation', 'Karazana hetsika', 'Event type')}</label>
                       <input
                         type="text"
                         value={editedUsager.genre_manifestation || ''}
@@ -1778,7 +2132,7 @@ const PaiementMensuel = () => {
                       />
                     </div>
                     <div className="pm-modal-field">
-                      <label>Lieu événement</label>
+                      <label>{t('Lieu événement', 'Toerana hetsika', 'Event location')}</label>
                       <input
                         type="text"
                         value={editedUsager.lieu_evenement || ''}
@@ -1791,7 +2145,7 @@ const PaiementMensuel = () => {
                 {usagerType === 'media' && (
                   <>
                     <div className="pm-modal-field">
-                      <label>Fréquence</label>
+                      <label>{t('Fréquence', 'Fahita', 'Frequency')}</label>
                       <input
                         type="text"
                         value={editedUsager.frequence || ''}
@@ -1799,7 +2153,7 @@ const PaiementMensuel = () => {
                       />
                     </div>
                     <div className="pm-modal-field">
-                      <label>Canal</label>
+                      <label>{t('Canal', 'Fantsona', 'Channel')}</label>
                       <input
                         type="text"
                         value={editedUsager.canal || ''}
@@ -1809,11 +2163,10 @@ const PaiementMensuel = () => {
                   </>
                 )}
 
-                {/* ✅ NOUVEAU : Champs spécifiques "other" */}
                 {usagerType === 'other' && (
                   <>
                     <div className="pm-modal-field">
-                      <label>Nom</label>
+                      <label>{t('Nom', 'Anarana', 'Name')}</label>
                       <input
                         type="text"
                         value={editedUsager.nom || ''}
@@ -1821,7 +2174,7 @@ const PaiementMensuel = () => {
                       />
                     </div>
                     <div className="pm-modal-field">
-                      <label>Prénom</label>
+                      <label>{t('Prénom', 'Fanampin\'anarana', 'First name')}</label>
                       <input
                         type="text"
                         value={editedUsager.prenom || ''}
@@ -1834,7 +2187,7 @@ const PaiementMensuel = () => {
                 {(usagerType === 'hotel' || usagerType === 'nightclub' || usagerType === 'grand-surface') && (
                   <>
                     <div className="pm-modal-field">
-                      <label>Activité</label>
+                      <label>{t('Activité', 'Asa', 'Activity')}</label>
                       <input
                         type="text"
                         value={editedUsager.activite || ''}
@@ -1843,23 +2196,23 @@ const PaiementMensuel = () => {
                     </div>
                     {usagerType === 'hotel' && (
                       <div className="pm-modal-field">
-                        <label>Étoiles</label>
+                        <label>{t('Étoiles', 'Kintana', 'Stars')}</label>
                         <select
                           value={editedUsager.etoiles || ''}
                           onChange={(e) => setEditedUsager(prev => ({ ...prev, etoiles: e.target.value }))}
                         >
-                          <option value="">Sélectionner</option>
-                          <option value="1 étoile">1 étoile</option>
-                          <option value="2 étoiles">2 étoiles</option>
-                          <option value="3 étoiles">3 étoiles</option>
-                          <option value="4 étoiles">4 étoiles</option>
-                          <option value="5 étoiles">5 étoiles</option>
+                          <option value="">{t('Sélectionner', 'Safidio', 'Select')}</option>
+                          <option value="1 étoile">1 {t('étoile', 'kintana', 'star')}</option>
+                          <option value="2 étoiles">2 {t('étoiles', 'kintana', 'stars')}</option>
+                          <option value="3 étoiles">3 {t('étoiles', 'kintana', 'stars')}</option>
+                          <option value="4 étoiles">4 {t('étoiles', 'kintana', 'stars')}</option>
+                          <option value="5 étoiles">5 {t('étoiles', 'kintana', 'stars')}</option>
                         </select>
                       </div>
                     )}
                     {usagerType === 'nightclub' && (
                       <div className="pm-modal-field">
-                        <label>Jauge max</label>
+                        <label>{t('Jauge max', 'Fahaiza-mandray', 'Max capacity')}</label>
                         <input
                           type="number"
                           value={editedUsager.jauge_max || 0}
@@ -1869,7 +2222,7 @@ const PaiementMensuel = () => {
                     )}
                     {usagerType === 'grand-surface' && (
                       <div className="pm-modal-field">
-                        <label>Nombre de magasins</label>
+                        <label>{t('Nombre de magasins', 'Isan\'ny fivarotana', 'Number of stores')}</label>
                         <input
                           type="number"
                           value={editedUsager.nombre_magasins || 0}
@@ -1883,7 +2236,7 @@ const PaiementMensuel = () => {
                 {usagerType === 'bus' && (
                   <>
                     <div className="pm-modal-field">
-                      <label>Lignes</label>
+                      <label>{t('Lignes', 'Lalana', 'Lines')}</label>
                       <input
                         type="text"
                         value={editedUsager.lignes || ''}
@@ -1891,7 +2244,7 @@ const PaiementMensuel = () => {
                       />
                     </div>
                     <div className="pm-modal-field">
-                      <label>Nombre de véhicules</label>
+                      <label>{t('Nombre de véhicules', 'Isan\'ny fiara', 'Number of vehicles')}</label>
                       <input
                         type="number"
                         value={editedUsager.nombre_vehicules || 0}
@@ -1906,14 +2259,14 @@ const PaiementMensuel = () => {
             <div className="pm-modal-footer">
               {factureType !== 'C' && (
                 <button className="pm-modal-btn-cancel" onClick={() => setShowEditModal(false)}>
-                  Annuler
+                  {t('Annuler', 'Foanana', 'Cancel')}
                 </button>
               )}
               <button className="pm-modal-btn-save" onClick={handleSaveUsager} disabled={isSavingUsager}>
                 {isSavingUsager ? (
-                  <><Loader2 size={16} className="spinner" /> Sauvegarde...</>
+                  <><Loader2 size={16} className="spinner" /> {t('Sauvegarde...', 'Mitahiry...', 'Saving...')}</>
                 ) : (
-                  <><Save size={16} /> Enregistrer</>
+                  <><Save size={16} /> {t('Enregistrer', 'Tehirizo', 'Save')}</>
                 )}
               </button>
             </div>

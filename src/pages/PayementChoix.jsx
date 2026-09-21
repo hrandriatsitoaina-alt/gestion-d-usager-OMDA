@@ -1,39 +1,32 @@
 // src/pages/PayementChoix.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import {
-  BarChart3,
-  FileText,
-  Lock,
-  ArrowLeft,
-  MapPin,
-  Building2,
-  Users,
-  Coins,
-  CreditCard,
-  TrendingUp,
-  DollarSign,
-  X,
-  Calendar,
-  CalendarDays,
-  Hotel,
-  Store,
-  Tv,
-  Bus,
-  Music,
-  Clock,
-  User,
-  Clipboard,
-  Target
+  BarChart3, FileText, Lock, ArrowLeft, MapPin, Building2, Users,
+  Coins, CreditCard, TrendingUp, DollarSign, X, Calendar, CalendarDays,
+  Hotel, Store, Tv, Bus, Music, User, Clipboard, Target,
 } from 'lucide-react';
 import '../styles/gestionPaiement.css';
 import MiniSidebar from '../components/MiniSidebar';
+// ✅ Hook unique de traduction
+import { useT } from '../hooks/useT';
 
 const API_URL = 'http://localhost:3001/api';
 
 const PaiementChoix = () => {
   const navigate = useNavigate();
+
+  // ✅ LANGUE UNIQUE — vient du Context
+  const { t, langue } = useT();
+
+  // ✅ Locale pour formatage
+  const locale = useMemo(() => {
+    if (langue === 'en') return 'en-US';
+    if (langue === 'mg') return 'fr-MG';
+    return 'fr-FR';
+  }, [langue]);
+
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -43,9 +36,9 @@ const PaiementChoix = () => {
   const [regions, setRegions] = useState([]);
   const [usagersList, setUsagersList] = useState([]);
   const [financeData, setFinanceData] = useState(null);
-  const [loadingFinance, setLoadingFinance] = useState(false);
+  // ❌ SUPPRIMÉ : const [loadingFinance, setLoadingFinance] = useState(false);
   const [montantTotalRecu, setMontantTotalRecu] = useState(0);
-  const [filterContext, setFilterContext] = useState('Toutes les régions et tous les types');
+  const [filterContext, setFilterContext] = useState('');
   const [paymentHistory, setPaymentHistory] = useState([]);
   const [availableYears, setAvailableYears] = useState([]);
 
@@ -55,7 +48,7 @@ const PaiementChoix = () => {
   const [totalNonPayes, setTotalNonPayes] = useState(0);
   const [tauxPaiement, setTauxPaiement] = useState(0);
 
-  // État pour le diagramme
+  // États pour le diagramme
   const [chartData, setChartData] = useState([]);
   const [chartMax, setChartMax] = useState(0);
 
@@ -65,32 +58,60 @@ const PaiementChoix = () => {
   const [selectedMonth, setSelectedMonth] = useState('tous');
   const [selectedYear, setSelectedYear] = useState('tous');
 
-  // 6 types d'usagers avec icônes Lucide (mais on garde des émojis pour les options <select>)
-  const usagerTypes = [
-    { id: 'hotel', label: 'Hôtel', icon: '🏨' },
-    { id: 'grand-surface', label: 'Grand Surface', icon: '🏪' },
-    { id: 'media', label: 'Télé/Radio', icon: '📻' },
-    { id: 'occ', label: 'OCC', icon: '📅' },
-    { id: 'bus', label: 'Bus', icon: '🚌' },
-    { id: 'nightclub', label: 'Night club', icon: '🎵' }
-  ];
+  // ✅ Types d'usagers avec traductions inline
+  const usagerTypes = useMemo(() => [
+    { id: 'hotel',         labelKey: 'hotel',         icon: '🏨', label: t('Hôtel', 'Hotely', 'Hotel') },
+    { id: 'grand-surface', labelKey: 'grandSurface',  icon: '🏪', label: t('Grand Surface', 'Fivarotana lehibe', 'Grand Surface') },
+    { id: 'media',         labelKey: 'media',         icon: '📻', label: t('Télé/Radio', 'Fahitalavitra/Radio', 'TV/Radio') },
+    { id: 'occ',           labelKey: 'occ',           icon: '📅', label: t('OCC', 'OCC', 'OCC') },
+    { id: 'bus',           labelKey: 'bus',           icon: '🚌', label: t('Bus', 'Fiara fitateram-bahoaka', 'Bus') },
+    { id: 'nightclub',     labelKey: 'nightclub',     icon: '🎵', label: t('Night club', 'Club alina', 'Night club') },
+  ], [t]);
 
-  const monthNames = [
-    'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
-  ];
+  // ✅ Mois traduits selon la langue
+  const monthNames = useMemo(() => {
+    if (langue === 'en') {
+      return ['January', 'February', 'March', 'April', 'May', 'June',
+              'July', 'August', 'September', 'October', 'November', 'December'];
+    }
+    if (langue === 'mg') {
+      return ['Janoary', 'Febroary', 'Martsa', 'Aprily', 'Mey', 'Jona',
+              'Jolay', 'Aogositra', 'Septambra', 'Oktobra', 'Novambra', 'Desambra'];
+    }
+    return ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+            'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+  }, [langue]);
 
-  const monthLabels = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+  const monthLabels = useMemo(() => {
+    if (langue === 'en') {
+      return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    }
+    if (langue === 'mg') {
+      return ['Jan', 'Feb', 'Mar', 'Apr', 'Mey', 'Jon', 'Jol', 'Aog', 'Sep', 'Okt', 'Nov', 'Des'];
+    }
+    return ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+  }, [langue]);
 
+  // ============================================================
+  // ✅ CHARGEMENT INITIAL — un seul appel au premier montage
+  // ============================================================
   useEffect(() => {
     fetchAllData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ============================================================
+  // ✅ CHANGEMENT DE FILTRES — mise à jour silencieuse
+  // Ne se déclenche qu'une fois que les usagers sont chargés
+  // ============================================================
   useEffect(() => {
-    fetchFinanceData();
-    fetchPaymentHistory();
-    fetchChartData();
-  }, [selectedRegion, selectedUsagerType, selectedMonth, selectedYear]);
+    if (usagersList.length > 0) {
+      fetchFinanceData();
+      fetchChartData();
+      fetchPaymentHistory();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRegion, selectedUsagerType, selectedMonth, selectedYear, usagersList.length]);
 
   const fetchAllData = async () => {
     try {
@@ -99,11 +120,11 @@ const PaiementChoix = () => {
         fetchStats(),
         fetchRegions(),
         fetchUsagers(),
-        fetchAvailableYears()
+        fetchAvailableYears(),
       ]);
-      await fetchFinanceData();
-      await fetchPaymentHistory();
-      await fetchChartData();
+      // ✅ fetchFinanceData / fetchChartData / fetchPaymentHistory
+      //    sont déclenchés automatiquement par le 2e useEffect
+      //    dès que usagersList est rempli
     } catch (err) {
       console.error('Erreur chargement données:', err);
     } finally {
@@ -121,7 +142,11 @@ const PaiementChoix = () => {
       setError(null);
     } catch (err) {
       console.error('❌ Erreur fetchStats:', err);
-      setError('Erreur lors du chargement des statistiques');
+      setError(t(
+        'Erreur lors du chargement des statistiques',
+        'Nisy olana tamin\'ny fakana statistika',
+        'Error loading statistics'
+      ));
     }
   };
 
@@ -141,28 +166,22 @@ const PaiementChoix = () => {
     try {
       const response = await axios.get(`${API_URL}/usagers`);
       console.log('📥 Réponse brute /usagers:', response.data);
-      
+
       let usagers = [];
-      
-      if (Array.isArray(response.data)) {
-        usagers = response.data;
-      } else if (response.data.usagers && Array.isArray(response.data.usagers)) {
-        usagers = response.data.usagers;
-      } else if (response.data.data && Array.isArray(response.data.data)) {
-        usagers = response.data.data;
-      }
-      
+      if (Array.isArray(response.data)) usagers = response.data;
+      else if (response.data.usagers && Array.isArray(response.data.usagers)) usagers = response.data.usagers;
+      else if (response.data.data && Array.isArray(response.data.data)) usagers = response.data.data;
+
       if (usagers.length > 0) {
         const normalizedUsagers = usagers.map(u => ({
           id: u.id,
           type_usager: u.type_usager || u.type || 'hotel',
           region: u.region || 'N/A',
-          denomination: u.denomination || u.nom || 'Sans nom',
+          denomination: u.denomination || u.nom || t('Sans nom', 'Tsy misy anarana', 'No name'),
           telephone: u.telephone || '',
           email: u.email || '',
-          created_at: u.created_at || new Date().toISOString()
+          created_at: u.created_at || new Date().toISOString(),
         }));
-        
         setUsagersList(normalizedUsagers);
         console.log(`👥 ${normalizedUsagers.length} usagers chargés et normalisés`);
       } else {
@@ -186,7 +205,6 @@ const PaiementChoix = () => {
         } else {
           setSelectedYear(response.data.annees[0].toString());
         }
-        console.log('📆 Années disponibles:', response.data.annees);
       } else {
         const currentYear = new Date().getFullYear();
         const years = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
@@ -207,34 +225,27 @@ const PaiementChoix = () => {
       const response = await axios.get(`${API_URL}/paiements/historique-complet`);
       if (response.data.success) {
         let history = response.data.historique || [];
-        
-        if (selectedRegion !== 'tous') {
-          history = history.filter(p => p.region === selectedRegion);
-        }
-        
-        if (selectedUsagerType !== 'tous') {
-          history = history.filter(p => p.usager_type === selectedUsagerType);
-        }
+
+        if (selectedRegion !== 'tous') history = history.filter(p => p.region === selectedRegion);
+        if (selectedUsagerType !== 'tous') history = history.filter(p => p.usager_type === selectedUsagerType);
 
         if (selectedMonth !== 'tous' && selectedYear !== 'tous') {
-          history = history.filter(p => {
-            return p.mois === parseInt(selectedMonth) && 
-                   p.annee === parseInt(selectedYear);
-          });
+          history = history.filter(p =>
+            p.mois === parseInt(selectedMonth) && p.annee === parseInt(selectedYear)
+          );
         } else if (selectedMonth !== 'tous') {
           history = history.filter(p => p.mois === parseInt(selectedMonth));
         } else if (selectedYear !== 'tous') {
           history = history.filter(p => p.annee === parseInt(selectedYear));
         }
-        
+
         history.sort((a, b) => {
           const dateA = new Date(a.date_paiement || a.created_at);
           const dateB = new Date(b.date_paiement || b.created_at);
           return dateB - dateA;
         });
-        
+
         setPaymentHistory(history);
-        console.log(`📄 ${history.length} paiements dans l'historique (filtrés)`);
       } else {
         setPaymentHistory([]);
       }
@@ -247,62 +258,45 @@ const PaiementChoix = () => {
   const fetchChartData = async () => {
     try {
       const response = await axios.get(`${API_URL}/paiements/tous`);
-      
       if (response.data.success) {
         const paiements = response.data.paiements || [];
-        
         let paiementsFiltres = paiements.filter(p => p.statut === 'paye');
-        
-        if (selectedRegion !== 'tous') {
-          paiementsFiltres = paiementsFiltres.filter(p => p.region === selectedRegion);
-        }
-        
-        if (selectedUsagerType !== 'tous') {
-          paiementsFiltres = paiementsFiltres.filter(p => p.usager_type === selectedUsagerType);
-        }
-        
+
+        if (selectedRegion !== 'tous') paiementsFiltres = paiementsFiltres.filter(p => p.region === selectedRegion);
+        if (selectedUsagerType !== 'tous') paiementsFiltres = paiementsFiltres.filter(p => p.usager_type === selectedUsagerType);
+
         const yearToUse = selectedYear !== 'tous' ? parseInt(selectedYear) : new Date().getFullYear();
         const moisData = {};
-        for (let i = 1; i <= 12; i++) {
-          moisData[i] = 0;
-        }
-        
+        for (let i = 1; i <= 12; i++) moisData[i] = 0;
+
         for (const p of paiementsFiltres) {
           if (p.annee === yearToUse) {
             const mois = p.mois || 1;
-            if (moisData[mois] !== undefined) {
-              moisData[mois] += parseFloat(p.montant) || 0;
-            }
+            if (moisData[mois] !== undefined) moisData[mois] += parseFloat(p.montant) || 0;
           }
         }
-        
+
         if (selectedMonth !== 'tous') {
           const moisSelectionne = parseInt(selectedMonth);
-          for (let i = 1; i <= 12; i++) {
-            if (i !== moisSelectionne) {
-              moisData[i] = 0;
-            }
-          }
+          for (let i = 1; i <= 12; i++) if (i !== moisSelectionne) moisData[i] = 0;
         }
-        
+
         const chartDataArray = [];
         let maxValue = 0;
-        
+
         for (let i = 1; i <= 12; i++) {
           const value = moisData[i] || 0;
           chartDataArray.push({
             mois: i,
             label: monthLabels[i - 1],
-            value: value,
-            isSelected: selectedMonth !== 'tous' ? i === parseInt(selectedMonth) : false
+            value,
+            isSelected: selectedMonth !== 'tous' ? i === parseInt(selectedMonth) : false,
           });
           if (value > maxValue) maxValue = value;
         }
-        
+
         setChartData(chartDataArray);
         setChartMax(maxValue > 0 ? maxValue : 1);
-        
-        console.log('📊 Données du diagramme:', chartDataArray);
       }
     } catch (err) {
       console.error('❌ Erreur chargement données diagramme:', err);
@@ -312,7 +306,7 @@ const PaiementChoix = () => {
           mois: i,
           label: monthLabels[i - 1],
           value: 0,
-          isSelected: false
+          isSelected: false,
         });
       }
       setChartData(defaultData);
@@ -320,41 +314,33 @@ const PaiementChoix = () => {
     }
   };
 
+  // ============================================================
+  // ✅ fetchFinanceData — SILENCIEUX (plus de loadingFinance)
+  // ============================================================
   const fetchFinanceData = async () => {
     try {
-      setLoadingFinance(true);
-      
       let data = [];
-      let totalRecu = 0;
-      let context = 'Toutes les régions et tous les types';
-      
+      let context = `${t('Toutes les régions', 'Ny faritra rehetra', 'All regions')} / ${t('Tous les types', 'Ny karazana rehetra', 'All types')}`;
+
       const response = await axios.get(`${API_URL}/paiements/tous`);
-      console.log('📥 Réponse paiements/tous:', response.data);
-      
       if (response.data.success) {
         const paiements = response.data.paiements || [];
-        console.log(`📊 ${paiements.length} paiements reçus`);
-        
         let paiementsFiltres = paiements.filter(p => p.statut === 'paye');
-        console.log(`💰 ${paiementsFiltres.length} paiements payés`);
-        
+
         if (selectedMonth !== 'tous' && selectedYear !== 'tous') {
-          paiementsFiltres = paiementsFiltres.filter(p => {
-            return p.mois === parseInt(selectedMonth) && 
-                   p.annee === parseInt(selectedYear);
-          });
+          paiementsFiltres = paiementsFiltres.filter(p =>
+            p.mois === parseInt(selectedMonth) && p.annee === parseInt(selectedYear)
+          );
         } else if (selectedMonth !== 'tous') {
           paiementsFiltres = paiementsFiltres.filter(p => p.mois === parseInt(selectedMonth));
         } else if (selectedYear !== 'tous') {
           paiementsFiltres = paiementsFiltres.filter(p => p.annee === parseInt(selectedYear));
         }
-        
+
         if (selectedRegion !== 'tous') {
           paiementsFiltres = paiementsFiltres.filter(p => p.region === selectedRegion);
         }
-        
-        console.log(`🎯 ${paiementsFiltres.length} paiements après filtres`);
-        
+
         const usagersPayesMap = new Map();
         for (const p of paiementsFiltres) {
           const key = `${p.usager_id}-${p.usager_type}`;
@@ -363,67 +349,48 @@ const PaiementChoix = () => {
               usager_id: p.usager_id,
               usager_type: p.usager_type,
               montant_total: 0,
-              region: p.region || 'Non spécifiée'
+              region: p.region || t('Non spécifiée', 'Tsy voafaritra', 'Not specified'),
             });
           }
           const usager = usagersPayesMap.get(key);
           usager.montant_total += parseFloat(p.montant) || 0;
         }
-        
+
         const payesCount = usagersPayesMap.size;
-        console.log(`👤 ${payesCount} usagers payés uniques`);
-        
+
         let usagersFiltres = [...usagersList];
-        console.log(`📋 ${usagersFiltres.length} usagers dans la liste`);
-        
-        if (selectedRegion !== 'tous') {
-          usagersFiltres = usagersFiltres.filter(u => u.region === selectedRegion);
-          console.log(`📍 Après filtre région ${selectedRegion}: ${usagersFiltres.length}`);
-        }
-        
-        if (selectedUsagerType !== 'tous') {
-          usagersFiltres = usagersFiltres.filter(u => u.type_usager === selectedUsagerType);
-          console.log(`🏢 Après filtre type ${selectedUsagerType}: ${usagersFiltres.length}`);
-        }
-        
-        const totalUsagersFiltres = usagersFiltres.length;
-        const nonPayesCount = Math.max(0, totalUsagersFiltres - payesCount);
-        const taux = totalUsagersFiltres > 0 ? Math.round((payesCount / totalUsagersFiltres) * 100) : 0;
-        
-        console.log('📊 RÉSULTATS FINAUX:', {
-          totalUsagersFiltres,
-          payesCount,
-          nonPayesCount,
-          taux
-        });
-        
-        setTotalUsagersFiltres(totalUsagersFiltres);
+        if (selectedRegion !== 'tous') usagersFiltres = usagersFiltres.filter(u => u.region === selectedRegion);
+        if (selectedUsagerType !== 'tous') usagersFiltres = usagersFiltres.filter(u => u.type_usager === selectedUsagerType);
+
+        const totalUsagersFiltresLocal = usagersFiltres.length;
+        const nonPayesCount = Math.max(0, totalUsagersFiltresLocal - payesCount);
+        const taux = totalUsagersFiltresLocal > 0 ? Math.round((payesCount / totalUsagersFiltresLocal) * 100) : 0;
+
+        setTotalUsagersFiltres(totalUsagersFiltresLocal);
         setTotalPayes(payesCount);
         setTotalNonPayes(nonPayesCount);
         setTauxPaiement(taux);
-        
+
         let montantTotal = 0;
-        for (const [key, usager] of usagersPayesMap) {
-          montantTotal += usager.montant_total;
-        }
+        for (const [, usager] of usagersPayesMap) montantTotal += usager.montant_total;
         setMontantTotalRecu(montantTotal);
-        
-        context = `${selectedRegion !== 'tous' ? `Région: ${selectedRegion}, ` : 'Toutes les régions, '}${selectedMonth !== 'tous' ? monthNames[parseInt(selectedMonth) - 1] : 'Tous mois'} ${selectedYear !== 'tous' ? selectedYear : 'Toutes années'}`;
+
+        context = `${selectedRegion !== 'tous' ? `${t('Région', 'Faritra', 'Region')}: ${selectedRegion}, ` : t('Toutes les régions', 'Ny faritra rehetra', 'All regions') + ', '}${selectedMonth !== 'tous' ? monthNames[parseInt(selectedMonth) - 1] : t('Tous les mois', 'Ny volana rehetra', 'All months')} ${selectedYear !== 'tous' ? selectedYear : t('Toutes les années', 'Ny taona rehetra', 'All years')}`;
         setFilterContext(context);
-        
+
         data = usagerTypes.map(type => {
           const typeUsagers = usagersFiltres.filter(u => u.type_usager === type.id);
           const typeTotal = typeUsagers.length;
           let typePayes = 0;
           let typeMontant = 0;
-          
-          for (const [key, usager] of usagersPayesMap) {
+
+          for (const [, usager] of usagersPayesMap) {
             if (usager.usager_type === type.id) {
               typePayes++;
               typeMontant += usager.montant_total;
             }
           }
-          
+
           return {
             type: type.id,
             label: type.label,
@@ -431,49 +398,46 @@ const PaiementChoix = () => {
             usagersAvecPaiement: typePayes,
             usagersSansPaiement: Math.max(0, typeTotal - typePayes),
             montantTotalPaye: typeMontant,
-            details: []
+            details: [],
           };
         });
-        
+
         for (const typeData of data) {
           const typePayesMap = new Map();
-          for (const [key, usager] of usagersPayesMap) {
+          for (const [, usager] of usagersPayesMap) {
             if (usager.usager_type === typeData.type) {
-              const regionKey = usager.region || 'Non spécifiée';
-              if (!typePayesMap.has(regionKey)) {
-                typePayesMap.set(regionKey, { montant: 0, count: 0 });
-              }
+              const regionKey = usager.region || t('Non spécifiée', 'Tsy voafaritra', 'Not specified');
+              if (!typePayesMap.has(regionKey)) typePayesMap.set(regionKey, { montant: 0, count: 0 });
               const regionData = typePayesMap.get(regionKey);
               regionData.montant += usager.montant_total;
               regionData.count++;
             }
           }
-          
+
           for (const [region, regionData] of typePayesMap) {
             typeData.details.push({
-              region: region,
+              region,
               montant_total: regionData.montant,
-              nombre_usagers: regionData.count
+              nombre_usagers: regionData.count,
             });
           }
         }
       }
-      
+
       setFinanceData(data);
-      
     } catch (err) {
       console.error('❌ Erreur chargement données financières:', err);
       if (stats) {
         let totalUsagers = 0;
-        let totalPayes = 0;
-        let totalRecu = 0;
-        
+        let totalPayesLocal = 0;
+        let totalRecuLocal = 0;
+
         const dataTemp = usagerTypes.map(type => {
           const typeStats = stats[type.id] || { total: 0, totalPayes: 0, nonPayes: 0, montantTotal: 0 };
           totalUsagers += typeStats.total || 0;
-          totalPayes += typeStats.totalPayes || 0;
-          totalRecu += typeStats.montantTotal || 0;
-          
+          totalPayesLocal += typeStats.totalPayes || 0;
+          totalRecuLocal += typeStats.montantTotal || 0;
+
           return {
             type: type.id,
             label: type.label,
@@ -481,29 +445,26 @@ const PaiementChoix = () => {
             usagersAvecPaiement: typeStats.totalPayes || 0,
             usagersSansPaiement: typeStats.nonPayes || 0,
             montantTotalPaye: typeStats.montantTotal || 0,
-            details: []
+            details: [],
           };
         });
-        
+
         setFinanceData(dataTemp);
-        setMontantTotalRecu(totalRecu);
+        setMontantTotalRecu(totalRecuLocal);
         setTotalUsagersFiltres(totalUsagers);
-        setTotalPayes(totalPayes);
-        setTotalNonPayes(Math.max(0, totalUsagers - totalPayes));
-        setTauxPaiement(totalUsagers > 0 ? Math.round((totalPayes / totalUsagers) * 100) : 0);
+        setTotalPayes(totalPayesLocal);
+        setTotalNonPayes(Math.max(0, totalUsagers - totalPayesLocal));
+        setTauxPaiement(totalUsagers > 0 ? Math.round((totalPayesLocal / totalUsagers) * 100) : 0);
       }
-    } finally {
-      setLoadingFinance(false);
     }
+    // ✅ Pas de finally — pas de setLoadingFinance
   };
 
   const handleAdminLogin = async (e) => {
     e.preventDefault();
     setAdminError('');
     try {
-      const response = await axios.post(`${API_URL}/admin/verify`, {
-        password: adminPassword
-      });
+      const response = await axios.post(`${API_URL}/admin/verify`, { password: adminPassword });
       if (response.data.success) {
         setShowAdminModal(false);
         setAdminPassword('');
@@ -511,51 +472,44 @@ const PaiementChoix = () => {
         localStorage.setItem('adminRole', response.data.role || 'daf');
         navigate('/gere-payer');
       } else {
-        setAdminError('Mot de passe incorrect');
+        setAdminError(t('Mot de passe incorrect', 'Diso ny kaody', 'Incorrect password'));
       }
     } catch (err) {
-      setAdminError('Erreur de vérification');
+      setAdminError(t('Erreur de vérification', 'Nisy olana tamin\'ny fanamarinana', 'Verification error'));
       console.error(err);
     }
   };
 
-  const handlePrintPDF = () => {
-    window.print();
-  };
+  const handlePrintPDF = () => window.print();
 
-  const formatDate = (dateString) => {
+  const formatDate = useCallback((dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString);
-    return date.toLocaleDateString('fr-FR');
-  };
+    return date.toLocaleDateString(locale);
+  }, [locale]);
 
   const getTypeLabel = (typeId) => {
-    const type = usagerTypes.find(t => t.id === typeId);
+    const type = usagerTypes.find(x => x.id === typeId);
     return type ? type.label : typeId;
   };
 
   const getCorrectedStats = (typeId) => {
     const typeStats = stats?.[typeId] || { total: 0, totalPayes: 0, nonPayes: 0, montantTotal: 0 };
-    if (typeStats.nonPayes < 0) {
-      typeStats.nonPayes = 0;
-    }
+    if (typeStats.nonPayes < 0) typeStats.nonPayes = 0;
     return typeStats;
   };
 
-  const handleRetour = () => {
-    navigate('/dashboard');
-  };
+  const handleRetour = () => navigate('/dashboard');
 
   const getPeriodLabel = () => {
     if (selectedMonth === 'tous' && selectedYear === 'tous') {
-      return 'Toutes périodes';
+      return t('Toutes périodes', 'Ny vanim-potoana rehetra', 'All periods');
     } else if (selectedMonth === 'tous') {
-      return `Année ${selectedYear}`;
+      return `${t('Année', 'Taona', 'Year')} ${selectedYear}`;
     } else if (selectedYear === 'tous') {
-      return `Mois de ${monthNames[parseInt(selectedMonth) - 1]}`;
-    } else {
-      return `${monthNames[parseInt(selectedMonth) - 1]} ${selectedYear}`;
+      return `${t('Mois de', 'Volan\'ny', 'Month of')} ${monthNames[parseInt(selectedMonth) - 1]}`;
     }
+    return `${monthNames[parseInt(selectedMonth) - 1]} ${selectedYear}`;
   };
 
   if (loading) {
@@ -564,7 +518,7 @@ const PaiementChoix = () => {
         <MiniSidebar />
         <div className="payment-loading">
           <div className="spinner"></div>
-          <p>Chargement des données financières...</p>
+          <p>{t('Chargement des données financières...', 'Maka ny angona ara-bola...', 'Loading financial data...')}</p>
         </div>
       </>
     );
@@ -576,7 +530,9 @@ const PaiementChoix = () => {
         <MiniSidebar />
         <div className="payment-error">
           <p>{error}</p>
-          <button onClick={fetchAllData} className="btn-retry">Réessayer</button>
+          <button onClick={fetchAllData} className="btn-retry">
+            {t('Réessayer', 'Andramo indray', 'Retry')}
+          </button>
         </div>
       </>
     );
@@ -591,22 +547,24 @@ const PaiementChoix = () => {
           <div className="header-left">
             <h1>
               <BarChart3 className="header-icon" size={28} style={{ marginRight: '8px' }} />
-              Tableau de Bord Financier
+              {t('Tableau de Bord Financier', 'Tabilaom-bola', 'Financial Dashboard')}
             </h1>
-            <p className="header-subtitle">Suivi des paiements des usagers</p>
+            <p className="header-subtitle">
+              {t('Suivi des paiements des usagers', 'Fanaraha-maso ny fandoavana', 'User payment tracking')}
+            </p>
           </div>
           <div className="header-actions">
             <button onClick={handlePrintPDF} className="btn-pdf">
-              <FileText size={18} style={{ marginRight: '6px' }} /> Aperçu PDF
+              <FileText size={18} style={{ marginRight: '6px' }} />{' '}
+              {t('Aperçu PDF', 'Topi-drakitra PDF', 'PDF Preview')}
             </button>
-            <button 
-              onClick={() => setShowAdminModal(true)} 
-              className="btn-gestion"
-            >
-              <Lock size={18} style={{ marginRight: '6px' }} /> Gestion des paiements
+            <button onClick={() => setShowAdminModal(true)} className="btn-gestion">
+              <Lock size={18} style={{ marginRight: '6px' }} />{' '}
+              {t('Gestion des paiements', 'Fitantanana ny fandoavana', 'Payment Management')}
             </button>
             <button className="btn-retour" onClick={handleRetour}>
-              <ArrowLeft size={18} style={{ marginRight: '6px' }} /> Retour
+              <ArrowLeft size={18} style={{ marginRight: '6px' }} />{' '}
+              {t('Retour', 'Hiverina', 'Back')}
             </button>
           </div>
         </div>
@@ -615,26 +573,32 @@ const PaiementChoix = () => {
         <div className="filters-section">
           <div className="filters-left">
             <div className="filter-group">
-              <label><MapPin size={16} style={{ marginRight: '4px' }} /> Région</label>
-              <select 
-                value={selectedRegion} 
+              <label>
+                <MapPin size={16} style={{ marginRight: '4px' }} />{' '}
+                {t('Région', 'Faritra', 'Region')}
+              </label>
+              <select
+                value={selectedRegion}
                 onChange={(e) => setSelectedRegion(e.target.value)}
                 className="filter-select"
               >
-                <option value="tous">Toutes les régions</option>
+                <option value="tous">{t('Toutes les régions', 'Ny faritra rehetra', 'All regions')}</option>
                 {regions.map(region => (
                   <option key={region.id} value={region.nom}>{region.nom}</option>
                 ))}
               </select>
             </div>
             <div className="filter-group">
-              <label><Building2 size={16} style={{ marginRight: '4px' }} /> Type d'usager</label>
-              <select 
-                value={selectedUsagerType} 
+              <label>
+                <Building2 size={16} style={{ marginRight: '4px' }} />{' '}
+                {t("Type d'usager", 'Karazana mpampiasa', 'User type')}
+              </label>
+              <select
+                value={selectedUsagerType}
                 onChange={(e) => setSelectedUsagerType(e.target.value)}
                 className="filter-select"
               >
-                <option value="tous">Tous les types</option>
+                <option value="tous">{t('Tous les types', 'Ny karazana rehetra', 'All types')}</option>
                 {usagerTypes.map(type => (
                   <option key={type.id} value={type.id}>{type.icon} {type.label}</option>
                 ))}
@@ -643,33 +607,39 @@ const PaiementChoix = () => {
           </div>
           <div className="filters-right">
             <div className="filter-group">
-              <label><Calendar size={16} style={{ marginRight: '4px' }} /> Mois</label>
-              <select 
-                value={selectedMonth} 
+              <label>
+                <Calendar size={16} style={{ marginRight: '4px' }} />{' '}
+                {t('Mois', 'Volana', 'Month')}
+              </label>
+              <select
+                value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
                 className="filter-select"
               >
-                <option value="tous">Tous les mois</option>
+                <option value="tous">{t('Tous les mois', 'Ny volana rehetra', 'All months')}</option>
                 {monthNames.map((month, index) => (
                   <option key={index + 1} value={index + 1}>{month}</option>
                 ))}
               </select>
             </div>
             <div className="filter-group">
-              <label><CalendarDays size={16} style={{ marginRight: '4px' }} /> Année</label>
-              <select 
-                value={selectedYear} 
+              <label>
+                <CalendarDays size={16} style={{ marginRight: '4px' }} />{' '}
+                {t('Année', 'Taona', 'Year')}
+              </label>
+              <select
+                value={selectedYear}
                 onChange={(e) => setSelectedYear(e.target.value)}
                 className="filter-select"
               >
-                <option value="tous">Toutes les années</option>
+                <option value="tous">{t('Toutes les années', 'Ny taona rehetra', 'All years')}</option>
                 {availableYears.map(year => (
                   <option key={year} value={year}>{year}</option>
                 ))}
               </select>
             </div>
           </div>
-          {loadingFinance && <span className="loading-spinner"><Clock size={20} /></span>}
+          {/* ❌ SUPPRIMÉ : {loadingFinance && <span className="loading-spinner"><Clock size={20} /></span>} */}
         </div>
 
         {/* Cartes de synthèse */}
@@ -677,11 +647,14 @@ const PaiementChoix = () => {
           <div className="summary-card total-usagers">
             <div className="card-icon"><Users size={24} /></div>
             <div className="card-content">
-              <span className="card-label">Total Usagers</span>
+              <span className="card-label">{t('Total Usagers', 'Isan\'ny mpampiasa', 'Total Users')}</span>
               <span className="card-value">{totalUsagersFiltres}</span>
               <span className="card-sub-label">
-                {selectedRegion !== 'tous' ? `Région: ${selectedRegion}` : 'Toutes régions'}
-                {selectedUsagerType !== 'tous' && ` • ${usagerTypes.find(t => t.id === selectedUsagerType)?.label}`}
+                {selectedRegion !== 'tous'
+                  ? `${t('Région', 'Faritra', 'Region')}: ${selectedRegion}`
+                  : t('Toutes régions', 'Ny faritra rehetra', 'All regions')}
+                {selectedUsagerType !== 'tous' &&
+                  ` • ${usagerTypes.find(t2 => t2.id === selectedUsagerType)?.label || ''}`}
               </span>
             </div>
           </div>
@@ -689,19 +662,21 @@ const PaiementChoix = () => {
           <div className="summary-card total-payes">
             <div className="card-icon"><Coins size={24} /></div>
             <div className="card-content">
-              <span className="card-label">Total Payés</span>
+              <span className="card-label">{t('Total Payés', 'Efa nandoa', 'Total Paid')}</span>
               <span className="card-value">{totalPayes}</span>
-              <span className="card-sub-label">Usagers avec paiement</span>
+              <span className="card-sub-label">
+                {t('Usagers avec paiement', 'Mpampiasa nandoa', 'Users with payment')}
+              </span>
             </div>
           </div>
 
           <div className="summary-card total-non-payes">
             <div className="card-icon"><CreditCard size={24} /></div>
             <div className="card-content">
-              <span className="card-label">Non Payés</span>
+              <span className="card-label">{t('Non Payés', 'Tsy nandoa', 'Unpaid')}</span>
               <span className="card-value">{totalNonPayes}</span>
               <span className="card-sub-label">
-                {selectedMonth !== 'tous' ? monthNames[parseInt(selectedMonth) - 1] : 'Tous mois'}
+                {selectedMonth !== 'tous' ? monthNames[parseInt(selectedMonth) - 1] : t('Tous les mois', 'Ny volana rehetra', 'All months')}
                 {selectedYear !== 'tous' && ` ${selectedYear}`}
               </span>
             </div>
@@ -710,10 +685,12 @@ const PaiementChoix = () => {
           <div className="summary-card taux-paiement">
             <div className="card-icon"><TrendingUp size={24} /></div>
             <div className="card-content">
-              <span className="card-label">Taux de Paiement</span>
+              <span className="card-label">{t('Taux de Paiement', 'Tahan\'ny fandoavana', 'Payment Rate')}</span>
               <span className="card-value">{tauxPaiement}%</span>
               <span className="card-sub-label">
-                {totalUsagersFiltres > 0 ? `${totalPayes}/${totalUsagersFiltres} payés` : 'Aucun usager'}
+                {totalUsagersFiltres > 0
+                  ? `${totalPayes}/${totalUsagersFiltres} ${t('payés', 'nandoa', 'paid')}`
+                  : t('Aucun usager', 'Tsy misy mpampiasa', 'No user')}
               </span>
             </div>
           </div>
@@ -721,9 +698,9 @@ const PaiementChoix = () => {
           <div className="summary-card montant-recu">
             <div className="card-icon"><DollarSign size={24} /></div>
             <div className="card-content">
-              <span className="card-label">Montant Reçu</span>
+              <span className="card-label">{t('Montant Reçu', 'Vola voaray', 'Amount Received')}</span>
               <span className="card-value montant-recu-value">
-                {montantTotalRecu.toLocaleString()} Ar
+                {montantTotalRecu.toLocaleString(locale)} Ar
               </span>
               <span className="card-sub-label">{filterContext}</span>
             </div>
@@ -733,26 +710,23 @@ const PaiementChoix = () => {
         {/* 6 usagers sur une ligne */}
         <div className="usagers-stats-row">
           {usagerTypes.map(type => {
-            if (selectedUsagerType !== 'tous' && selectedUsagerType !== type.id) {
-              return null;
-            }
+            if (selectedUsagerType !== 'tous' && selectedUsagerType !== type.id) return null;
 
             const typeStats = getCorrectedStats(type.id);
-            let financeType = financeData?.find(f => f.type === type.id) || { 
-              totalUsagers: 0, 
-              usagersAvecPaiement: 0, 
-              usagersSansPaiement: 0, 
+            const financeType = financeData?.find(f => f.type === type.id) || {
+              totalUsagers: 0,
+              usagersAvecPaiement: 0,
+              usagersSansPaiement: 0,
               montantTotalPaye: 0,
-              details: []
+              details: [],
             };
-            
+
             const total = financeType.totalUsagers || typeStats.total || 0;
             const payes = financeType.usagersAvecPaiement || typeStats.totalPayes || 0;
             const nonPayes = Math.max(0, financeType.usagersSansPaiement || typeStats.nonPayes || 0);
             const montant = financeType.montantTotalPaye || typeStats.montantTotal || 0;
             const taux = total > 0 ? Math.round((payes / total) * 100) : 0;
 
-            // Choix de l'icône selon le type
             let TypeIcon = Hotel;
             if (type.id === 'grand-surface') TypeIcon = Store;
             else if (type.id === 'media') TypeIcon = Tv;
@@ -768,31 +742,30 @@ const PaiementChoix = () => {
                 </div>
                 <div className="usager-stat-body">
                   <div className="usager-stat-item">
-                    <span className="usager-stat-label">Total</span>
+                    <span className="usager-stat-label">{t('Total', 'Totaly', 'Total')}</span>
                     <span className="usager-stat-value">{total}</span>
                   </div>
                   <div className="usager-stat-item">
-                    <span className="usager-stat-label">Payés</span>
+                    <span className="usager-stat-label">{t('Payés', 'Nandoa', 'Paid')}</span>
                     <span className="usager-stat-value success">{payes}</span>
                   </div>
                   <div className="usager-stat-item">
-                    <span className="usager-stat-label">Non Payés</span>
+                    <span className="usager-stat-label">{t('Non Payés', 'Tsy nandoa', 'Unpaid')}</span>
                     <span className="usager-stat-value danger">{nonPayes}</span>
                   </div>
                   <div className="usager-stat-item montant-item">
-                    <span className="usager-stat-label">Montant</span>
+                    <span className="usager-stat-label">{t('Montant', 'Vola', 'Amount')}</span>
                     <span className="usager-stat-value montant-value">
-                      {montant.toLocaleString()} Ar
+                      {montant.toLocaleString(locale)} Ar
                     </span>
                   </div>
                   <div className="usager-progress">
                     <div className="usager-progress-bar">
-                      <div 
-                        className="usager-progress-fill" 
-                        style={{ width: `${taux}%` }}
-                      />
+                      <div className="usager-progress-fill" style={{ width: `${taux}%` }} />
                     </div>
-                    <span className="usager-progress-label">{taux}% payé</span>
+                    <span className="usager-progress-label">
+                      {taux}% {t('payé', 'voaloa', 'paid')}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -804,12 +777,16 @@ const PaiementChoix = () => {
         <div className="regions-section">
           <h2 className="section-title">
             <TrendingUp size={20} className="section-icon" style={{ marginRight: '8px' }} />
-            Aperçu par Région
+            {t('Aperçu par Région', 'Topi-tsipika isaky ny faritra', 'Overview by Region')}
             {selectedRegion !== 'tous' && (
-              <span className="filter-badge">Filtré: {selectedRegion}</span>
+              <span className="filter-badge">
+                {t('Filtré', 'Voasivana', 'Filtered')}: {selectedRegion}
+              </span>
             )}
             {selectedUsagerType !== 'tous' && (
-              <span className="filter-badge">Type: {usagerTypes.find(t => t.id === selectedUsagerType)?.label || ''}</span>
+              <span className="filter-badge">
+                {t('Type', 'Karazana', 'Type')}: {usagerTypes.find(t2 => t2.id === selectedUsagerType)?.label || ''}
+              </span>
             )}
             <span className="filter-badge" style={{ backgroundColor: '#2980b9', color: '#fff' }}>
               {getPeriodLabel()}
@@ -818,25 +795,25 @@ const PaiementChoix = () => {
           <div className="regions-grid">
             <div className="region-card region-total">
               <div className="region-header">
-                <span className="region-name">Toutes les régions</span>
+                <span className="region-name">
+                  {t('Toutes les régions', 'Ny faritra rehetra', 'All regions')}
+                </span>
                 <span className="region-total-amount">
-                  {montantTotalRecu.toLocaleString()} Ar
+                  {montantTotalRecu.toLocaleString(locale)} Ar
                 </span>
               </div>
               <div className="region-stats">
-                <span>Usagers: {totalUsagersFiltres}</span>
-                <span>Taux: {tauxPaiement}%</span>
-                <span>Reçu: {montantTotalRecu.toLocaleString()} Ar</span>
+                <span>{t('Usagers', 'Mpampiasa', 'Users')}: {totalUsagersFiltres}</span>
+                <span>{t('Taux', 'Taha', 'Rate')}: {tauxPaiement}%</span>
+                <span>{t('Reçu', 'Voaray', 'Received')}: {montantTotalRecu.toLocaleString(locale)} Ar</span>
               </div>
             </div>
             {regions.map(region => {
-              if (selectedRegion !== 'tous' && selectedRegion !== region.nom) {
-                return null;
-              }
+              if (selectedRegion !== 'tous' && selectedRegion !== region.nom) return null;
 
               let regionMontant = 0;
               let regionUsagers = 0;
-              
+
               if (financeData) {
                 for (const type of financeData) {
                   if (type.details) {
@@ -849,17 +826,17 @@ const PaiementChoix = () => {
                   }
                 }
               }
-              
+
               return (
                 <div key={region.id} className="region-card">
                   <div className="region-header">
                     <span className="region-name">{region.nom}</span>
                     <span className="region-amount">
-                      {regionMontant.toLocaleString()} Ar
+                      {regionMontant.toLocaleString(locale)} Ar
                     </span>
                   </div>
                   <div className="region-stats">
-                    <span>Usagers: {regionUsagers}</span>
+                    <span>{t('Usagers', 'Mpampiasa', 'Users')}: {regionUsagers}</span>
                   </div>
                 </div>
               );
@@ -867,69 +844,13 @@ const PaiementChoix = () => {
           </div>
         </div>
 
-        {/* Historique des paiements */}
-        <div className="history-section">
-          <h2 className="section-title">
-            <FileText size={20} className="section-icon" style={{ marginRight: '8px' }} />
-            Historique des paiements
-            {selectedRegion !== 'tous' && (
-              <span className="filter-badge">Région: {selectedRegion}</span>
-            )}
-            {selectedUsagerType !== 'tous' && (
-              <span className="filter-badge">Type: {usagerTypes.find(t => t.id === selectedUsagerType)?.label || ''}</span>
-            )}
-            <span className="filter-badge" style={{ backgroundColor: '#27ae60', color: '#fff' }}>
-              {getPeriodLabel()}
-            </span>
-            <span className="filter-badge" style={{ backgroundColor: '#8e44ad', color: '#fff' }}>
-              Total: {paymentHistory.length} paiements
-            </span>
-          </h2>
-          <div className="history-table-container">
-            <table className="history-table">
-              <thead>
-                <tr>
-                  <th>Usager</th>
-                  <th>Type</th>
-                  <th>Montant</th>
-                  <th>Mois/Année</th>
-                  <th>Date Paiement</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paymentHistory && paymentHistory.length > 0 ? (
-                  paymentHistory.map((payment, index) => (
-                    <tr key={payment.id || index}>
-                      <td>{payment.usager_nom || 'Inconnu'}</td>
-                      <td>
-                        <span className="type-badge">
-                          {usagerTypes.find(t => t.id === payment.usager_type)?.label || payment.usager_type}
-                        </span>
-                      </td>
-                      <td>{(payment.montant || 0).toLocaleString()} Ar</td>
-                      <td>
-                        {payment.mois ? monthNames[(payment.mois || 1) - 1] : ''} 
-                        {payment.annee || ''}
-                      </td>
-                      <td>{formatDate(payment.date_paiement || payment.created_at)}</td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="5" className="no-data">
-                      Aucun paiement enregistré pour {getPeriodLabel().toLowerCase()}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
         {/* Footer */}
         <div className="payment-footer">
-          <p>© 2026 OMDA - Gestion Financière</p>
-          <p>Dernière mise à jour: {new Date().toLocaleDateString('fr-FR')}</p>
+          <p>© 2026 OMDA - {t('Gestion Financière', 'Fitantanana ara-bola', 'Financial Management')}</p>
+          <p>
+            {t('Dernière mise à jour', 'Fanavaozana farany', 'Last update')}:{' '}
+            {new Date().toLocaleDateString(locale)}
+          </p>
         </div>
       </div>
 
@@ -937,7 +858,7 @@ const PaiementChoix = () => {
       {showAdminModal && (
         <div className="modal-overlay">
           <div className="modal-content admin-modal">
-            <button 
+            <button
               className="modal-close"
               onClick={() => {
                 setShowAdminModal(false);
@@ -949,13 +870,19 @@ const PaiementChoix = () => {
             </button>
             <div className="modal-header">
               <span className="modal-icon"><Lock size={24} /></span>
-              <h2>Accès Gestion des Paiements</h2>
-              <p>Veuillez entrer votre code d'authentification (DAF)</p>
+              <h2>{t('Accès Gestion des Paiements', 'Fidirana amin\'ny fitantanana', 'Payment Management Access')}</h2>
+              <p>
+                {t(
+                  "Veuillez entrer votre code d'authentification (DAF)",
+                  "Ampidiro ny kaody fanamarinana (DAF)",
+                  'Please enter your authentication code (DAF)'
+                )}
+              </p>
             </div>
             <form onSubmit={handleAdminLogin} className="admin-form">
               <input
                 type="password"
-                placeholder="Code à 4 chiffres"
+                placeholder={t('Code à 4 chiffres', 'Kaody 4 isa', '4-digit code')}
                 value={adminPassword}
                 onChange={(e) => setAdminPassword(e.target.value)}
                 maxLength={4}
@@ -965,7 +892,8 @@ const PaiementChoix = () => {
               />
               {adminError && <p className="error-message">{adminError}</p>}
               <button type="submit" className="btn-admin-login">
-                <Lock size={18} style={{ marginRight: '6px' }} /> Vérifier l'accès
+                <Lock size={18} style={{ marginRight: '6px' }} />{' '}
+                {t("Vérifier l'accès", 'Hamarino ny fidirana', 'Verify access')}
               </button>
             </form>
           </div>

@@ -1,8 +1,8 @@
 // ============================================================
-// COMPOSANT : BilanCards.jsx (version finale avec Recharts)
+// COMPOSANT : BilanCards.jsx (version finale avec Recharts + useT)
 // ============================================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   DollarSign, Users, Calendar, TrendingUp, PieChart,
@@ -17,49 +17,33 @@ import {
   ResponsiveContainer,
   Legend
 } from 'recharts';
-
-// ✅ Fonction pour formater les nombres avec espaces
-const formatNumber = (value) => {
-  if (value === undefined || value === null) return '0';
-  const num = Number(value);
-  if (isNaN(num)) return '0';
-  return num.toLocaleString('fr-FR');
-};
+// ✅ Hook unique de traduction
+import { useT } from '../hooks/useT';
 
 const BilanCards = () => {
   const navigate = useNavigate();
+
+  // ✅ LANGUE UNIQUE — vient du Context
+  const { t, langue } = useT();
+
+  // ✅ Locale pour formatage (mg → fr-MG)
+  const locale = useMemo(() => {
+    if (langue === 'en') return 'en-US';
+    if (langue === 'mg') return 'fr-MG';
+    return 'fr-FR';
+  }, [langue]);
+
+  // ✅ Fonction de formatage selon la locale
+  const formatNumber = useCallback((value) => {
+    if (value === undefined || value === null) return '0';
+    const num = Number(value);
+    if (isNaN(num)) return '0';
+    return num.toLocaleString(locale);
+  }, [locale]);
+
   const [stats, setStats] = useState(null);
   const [globalStats, setGlobalStats] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  // ===== ÉTATS POUR LA LANGUE =====
-  const [appLangue, setAppLangue] = useState('fr');
-
-  // ===== CHARGER LA LANGUE =====
-  useEffect(() => {
-    const langue = localStorage.getItem('app-langue') || 'fr';
-    setAppLangue(langue);
-    
-    const handleLangueChange = (event) => {
-      const { langue } = event.detail;
-      setAppLangue(langue);
-    };
-    
-    window.addEventListener('langue-change', handleLangueChange);
-    
-    return () => {
-      window.removeEventListener('langue-change', handleLangueChange);
-    };
-  }, []);
-
-  // ===== FONCTION DE TRADUCTION =====
-  const t = (fr, mg, en) => {
-    switch (appLangue) {
-      case 'mg': return mg || fr;
-      case 'en': return en || fr;
-      default: return fr;
-    }
-  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -95,10 +79,8 @@ const BilanCards = () => {
     ? Object.values(stats).reduce((sum, s) => sum + (s.montantTotal || 0), 0)
     : 0;
 
-  // ✅ En attente = usagers sans paiement (toujours >= 0)
   const enAttente = Math.max(0, totalUsagers - totalPayes);
 
-  // Données pour le diagramme avec couleurs personnalisées
   const typeColors = {
     hotel: '#E53935',
     'grand-surface': '#4CAF50',
@@ -108,25 +90,32 @@ const BilanCards = () => {
     occ: '#00BCD4'
   };
 
-  const typeLabels = {
-    hotel: t('Hôtel', 'Trano fandraisam-bahiny', 'Hotel'),
-    'grand-surface': t('Grande Surface', 'Trano fivarotana lehibe', 'Supermarket'),
-    bus: t('Bus', 'Fiarakodia', 'Bus'),
-    nightclub: t('Night Club', 'Kliobina alina', 'Night Club'),
-    media: t('Média', 'Haino aman-jery', 'Media'),
-    occ: t('Occasionnelle', 'Tsindraindray', 'Occasional')
-  };
+  // ✅ Labels des types mémoïsés (recalculés au changement de langue)
+  const typeLabels = useMemo(() => ({
+    hotel:           t('Hôtel',          'Trano fandraisam-bahiny',      'Hotel'),
+    'grand-surface': t('Grande Surface', 'Trano fivarotana lehibe',      'Supermarket'),
+    bus:             t('Bus',            'Fiarakodia',                   'Bus'),
+    nightclub:       t('Night Club',     'Kliobina alina',               'Night Club'),
+    media:           t('Média',          'Haino aman-jery',              'Media'),
+    occ:             t('Occasionnelle',  'Tsindraindray',                'Occasional'),
+  }), [t]);
 
-  const legendOrder = ['bus', 'grand-surface', 'hotel', 'media', 'nightclub', 'occ'];
+  const legendOrder = useMemo(
+    () => ['bus', 'grand-surface', 'hotel', 'media', 'nightclub', 'occ'],
+    []
+  );
 
-  const chartData = stats ? legendOrder
-    .filter(key => stats[key] && stats[key].montantTotal > 0)
-    .map(key => ({
-      name: typeLabels[key] || key,
-      value: stats[key].montantTotal || 0,
-      color: typeColors[key] || '#3d99f5',
-      formattedValue: formatNumber(stats[key].montantTotal || 0)
-    })) : [];
+  const chartData = useMemo(() => {
+    if (!stats) return [];
+    return legendOrder
+      .filter(key => stats[key] && stats[key].montantTotal > 0)
+      .map(key => ({
+        name: typeLabels[key] || key,
+        value: stats[key].montantTotal || 0,
+        color: typeColors[key] || '#3d99f5',
+        formattedValue: formatNumber(stats[key].montantTotal || 0),
+      }));
+  }, [stats, legendOrder, typeLabels, formatNumber]);
 
   const COLORS = chartData.map(item => item.color);
 
@@ -141,7 +130,7 @@ const BilanCards = () => {
           border: '1px solid #ddd',
           borderRadius: 6,
           boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-          fontSize: 13
+          fontSize: 13,
         }}>
           <strong>{data.name}</strong>
           <br />
@@ -161,33 +150,33 @@ const BilanCards = () => {
     const secondRow = payload.slice(3, 6);
 
     return (
-      <div style={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
         gap: '4px',
-        marginTop: '5px'
+        marginTop: '5px',
       }}>
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'center', 
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
           gap: '20px',
-          flexWrap: 'wrap'
+          flexWrap: 'wrap',
         }}>
           {firstRow.map((entry, index) => (
-            <div key={`row1-${index}`} style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
+            <div key={`row1-${index}`} style={{
+              display: 'flex',
+              alignItems: 'center',
               gap: '5px',
               fontSize: '11px',
-              color: '#555'
+              color: '#555',
             }}>
               <span style={{
                 display: 'inline-block',
                 width: '10px',
                 height: '10px',
                 borderRadius: '3px',
-                backgroundColor: entry.color
+                backgroundColor: entry.color,
               }} />
               <span>{entry.value}</span>
             </div>
@@ -195,26 +184,26 @@ const BilanCards = () => {
         </div>
 
         {secondRow.length > 0 && (
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'center', 
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
             gap: '20px',
-            flexWrap: 'wrap'
+            flexWrap: 'wrap',
           }}>
             {secondRow.map((entry, index) => (
-              <div key={`row2-${index}`} style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
+              <div key={`row2-${index}`} style={{
+                display: 'flex',
+                alignItems: 'center',
                 gap: '5px',
                 fontSize: '11px',
-                color: '#555'
+                color: '#555',
               }}>
                 <span style={{
                   display: 'inline-block',
                   width: '10px',
                   height: '10px',
                   borderRadius: '3px',
-                  backgroundColor: entry.color
+                  backgroundColor: entry.color,
                 }} />
                 <span>{entry.value}</span>
               </div>
@@ -234,13 +223,9 @@ const BilanCards = () => {
           {t('Bilan & Diagnostic', 'Famerenana sy Diagnostika', 'Assessment & Diagnosis')}
         </h2>
         <p className="bilan-sub">
-          {loading ? t('Chargement...', 'Mandrindra...', 'Loading...') : 
-            t('{users} usagers · {payments} paiements · {amount} Ar',
-              '{users} mpampiasa · {payments} fandoavana · {amount} Ar',
-              '{users} users · {payments} payments · {amount} Ar')
-              .replace('{users}', totalUsagers)
-              .replace('{payments}', totalPayes)
-              .replace('{amount}', formatNumber(totalMontant))}
+          {loading
+            ? t('Chargement...', 'Mandrindra...', 'Loading...')
+            : `${totalUsagers} ${t('usagers', 'mpampiasa', 'users')} · ${totalPayes} ${t('paiements', 'fandoavana', 'payments')} · ${formatNumber(totalMontant)} Ar`}
         </p>
       </div>
 
@@ -261,35 +246,40 @@ const BilanCards = () => {
                 <div className="bilan-stat-number" style={{ fontSize: '16px' }}>
                   {formatNumber(totalMontant)} Ar
                 </div>
-                <div className="bilan-stat-label">{t('Total collecté', 'Vola voangona', 'Total collected')}</div>
+                <div className="bilan-stat-label">
+                  {t('Total collecté', 'Vola voangona', 'Total collected')}
+                </div>
               </div>
             </div>
             <div className="bilan-stat-item">
               <span className="bilan-stat-icon"><TrendingUp size={16} /></span>
               <div>
-                {/* ✅ Chiffre brut — plus fiable qu'un pourcentage */}
                 <div className="bilan-stat-number">{totalPayes}</div>
-                <div className="bilan-stat-label">{t('Usagers payés', 'Mpampiasa nandoa', 'Paid users')}</div>
+                <div className="bilan-stat-label">
+                  {t('Usagers payés', 'Mpampiasa nandoa', 'Paid users')}
+                </div>
               </div>
             </div>
             <div className="bilan-stat-item">
               <span className="bilan-stat-icon"><AlertTriangle size={16} /></span>
               <div>
                 <div className="bilan-stat-number">{enAttente}</div>
-                <div className="bilan-stat-label">{t('En attente', 'Miandry', 'Pending')}</div>
+                <div className="bilan-stat-label">
+                  {t('En attente', 'Miandry', 'Pending')}
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Boutons d'action - Sans "Ajouter événement" */}
+          {/* Boutons d'action */}
           <div className="bilan-actions">
             <button className="btn-primary" onClick={() => navigate('/tableau-db')}>
               <BarChart size={16} /> {t('Tableau de bord', 'Tabilao', 'Dashboard')}
             </button>
-            
-            {/* ✅ Bouton IA - Analyse IA */}
-            <button 
-              className="btn-ia-diagnostic" 
+
+            {/* ✅ Bouton IA */}
+            <button
+              className="btn-ia-diagnostic"
               onClick={() => navigate('/diagnostique')}
             >
               <Brain size={18} className="ia-icon" />
@@ -312,9 +302,17 @@ const BilanCards = () => {
 
         {/* Partie droite : diagramme circulaire */}
         <div className="bilan-right">
-          <h5>{t('Répartition des montants par catégorie', 'Fizarana ny vola araka ny sokajy', 'Amount distribution by category')}</h5>
+          <h5>
+            {t(
+              'Répartition des montants par catégorie',
+              'Fizarana ny vola araka ny sokajy',
+              'Amount distribution by category'
+            )}
+          </h5>
           {loading ? (
-            <div className="chart-loading">{t('Chargement...', 'Mandrindra...', 'Loading...')}</div>
+            <div className="chart-loading">
+              {t('Chargement...', 'Mandrindra...', 'Loading...')}
+            </div>
           ) : chartData.length > 0 ? (
             <div className="donut-container">
               <ResponsiveContainer width="100%" height={280}>
@@ -333,29 +331,30 @@ const BilanCards = () => {
                     ))}
                   </Pie>
                   <Tooltip content={<CustomTooltip />} />
-                  <Legend 
+                  <Legend
                     verticalAlign="bottom"
                     align="center"
                     layout="horizontal"
                     content={renderCustomLegend}
-                    wrapperStyle={{ 
-                      fontSize: 11, 
+                    wrapperStyle={{
+                      fontSize: 11,
                       paddingTop: 5,
-                      width: '100%'
+                      width: '100%',
                     }}
                   />
                 </RePieChart>
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="chart-empty">{t('Aucune donnée disponible', 'Tsy misy data', 'No data available')}</div>
+            <div className="chart-empty">
+              {t('Aucune donnée disponible', 'Tsy misy data', 'No data available')}
+            </div>
           )}
         </div>
       </div>
 
       {/* ===== STYLES CSS INJECTÉS ===== */}
       <style>{`
-        /* === BOUTON IA ANALYSE === */
         .btn-ia-diagnostic {
           display: inline-flex;
           align-items: center;
@@ -384,12 +383,10 @@ const BilanCards = () => {
           transform: scale(0.97);
         }
 
-        /* Icône IA plus grande */
         .btn-ia-diagnostic .ia-icon {
           stroke-width: 2.5;
         }
 
-        /* Effet shimmer */
         .btn-ia-diagnostic::before {
           content: '';
           position: absolute;
@@ -415,7 +412,6 @@ const BilanCards = () => {
           animation-duration: 1.2s;
         }
 
-        /* Point pulsant */
         .btn-ia-diagnostic .ia-pulse-dot {
           position: absolute;
           top: -3px;
@@ -434,7 +430,6 @@ const BilanCards = () => {
           100% { transform: scale(1); opacity: 1; }
         }
 
-        /* Icône Sparkle */
         .btn-ia-diagnostic .ia-sparkle {
           animation: sparkle 2s infinite ease-in-out;
         }
@@ -444,7 +439,6 @@ const BilanCards = () => {
           50% { opacity: 1; transform: scale(1.2); }
         }
 
-        /* === STATISTIQUES AMÉLIORÉES === */
         .bilan-stat-item {
           background: #f8fcff;
           border-radius: 10px;
@@ -485,7 +479,6 @@ const BilanCards = () => {
           flex-shrink: 0;
         }
 
-        /* === SOUS-TITRE === */
         .bilan-sub {
           font-size: 14px;
           color: #7a8a9d;
@@ -494,7 +487,6 @@ const BilanCards = () => {
           font-weight: 500;
         }
 
-        /* === BOUTONS D'ACTION === */
         .bilan-actions {
           display: flex;
           gap: 8px;
@@ -523,7 +515,6 @@ const BilanCards = () => {
           box-shadow: 0 4px 12px rgba(43, 127, 212, 0.3);
         }
 
-        /* === LIENS RAPIDES === */
         .bilan-links {
           display: flex;
           gap: 16px;
@@ -547,7 +538,6 @@ const BilanCards = () => {
           text-decoration: underline;
         }
 
-        /* === DIAGRAMME === */
         .bilan-right h5 {
           font-size: 13px;
           font-weight: 600;
@@ -570,53 +560,22 @@ const BilanCards = () => {
           font-size: 14px;
         }
 
-        /* === RESPONSIVE === */
         @media (max-width: 768px) {
-          .bilan-stat-number {
-            font-size: 17px;
-          }
-          .bilan-stat-label {
-            font-size: 11px;
-          }
-          .bilan-actions .btn-primary {
-            padding: 6px 12px;
-            font-size: 11px;
-          }
-          .btn-ia-diagnostic {
-            padding: 6px 14px;
-            font-size: 11px;
-          }
-          .btn-ia-diagnostic .ia-icon {
-            width: 16px;
-            height: 16px;
-          }
-          .bilan-sub {
-            font-size: 12px;
-            padding-left: 0;
-          }
-          .bilan-header h2 {
-            font-size: 18px;
-          }
+          .bilan-stat-number { font-size: 17px; }
+          .bilan-stat-label { font-size: 11px; }
+          .bilan-actions .btn-primary { padding: 6px 12px; font-size: 11px; }
+          .btn-ia-diagnostic { padding: 6px 14px; font-size: 11px; }
+          .btn-ia-diagnostic .ia-icon { width: 16px; height: 16px; }
+          .bilan-sub { font-size: 12px; padding-left: 0; }
+          .bilan-header h2 { font-size: 18px; }
         }
 
         @media (max-width: 480px) {
-          .bilan-stats {
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-          }
-          .bilan-stat-item {
-            padding: 8px 10px;
-          }
-          .bilan-stat-number {
-            font-size: 15px;
-          }
-          .bilan-actions {
-            flex-direction: column;
-          }
-          .bilan-actions button {
-            width: 100%;
-            justify-content: center;
-          }
+          .bilan-stats { grid-template-columns: 1fr 1fr; gap: 8px; }
+          .bilan-stat-item { padding: 8px 10px; }
+          .bilan-stat-number { font-size: 15px; }
+          .bilan-actions { flex-direction: column; }
+          .bilan-actions button { width: 100%; justify-content: center; }
         }
       `}</style>
     </div>

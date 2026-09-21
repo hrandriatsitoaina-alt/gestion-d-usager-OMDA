@@ -1,5 +1,5 @@
 // VerificationUsager.jsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, FileText, Calendar, MapPin, Phone, Mail, Home,
@@ -12,22 +12,35 @@ import {
   EyeOff, List, Grid, Maximize2
 } from 'lucide-react';
 import '../styles/VerificationUsager.css';
+// ✅ Hook unique de traduction
+import { useT } from '../hooks/useT';
 
 const VerificationUsager = () => {
   const navigate = useNavigate();
+
+  // ✅ LANGUE UNIQUE — vient du Context
+  const { t, langue } = useT();
+
+  // ✅ Locale pour formatage
+  const locale = useMemo(() => {
+    if (langue === 'en') return 'en-US';
+    if (langue === 'mg') return 'fr-MG';
+    return 'fr-FR';
+  }, [langue]);
+
   const [loading, setLoading] = useState(true);
   const [usagers, setUsagers] = useState([]);
   const [filteredUsagers, setFilteredUsagers] = useState([]);
   const [selectedUsager, setSelectedUsager] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-  
+
   // Champs de recherche
   const [prefixe, setPrefixe] = useState('');
   const [numero, setNumero] = useState('');
   const [semestre, setSemestre] = useState('');
   const [annee, setAnnee] = useState('');
-  
+
   // Suggestions
   const [prefixeSuggestions, setPrefixeSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -35,7 +48,7 @@ const VerificationUsager = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [prefixeDetails, setPrefixeDetails] = useState({});
   const [showPrefixeList, setShowPrefixeList] = useState(false);
-  
+
   const suggestionRef = useRef(null);
 
   // Chargement initial
@@ -43,6 +56,7 @@ const VerificationUsager = () => {
     fetchAllUsagers();
     fetchAnnees();
     fetchPrefixeDetails();
+    // eslint-disable-next-line
   }, []);
 
   // Gestion du clic en dehors des suggestions
@@ -74,7 +88,7 @@ const VerificationUsager = () => {
     try {
       const response = await fetch('http://localhost:3001/api/verification/usagers');
       const data = await response.json();
-      
+
       if (data.success) {
         setUsagers(data.usagers);
         setFilteredUsagers(data.usagers);
@@ -121,7 +135,7 @@ const VerificationUsager = () => {
       setPrefixeSuggestions([]);
       return;
     }
-    
+
     try {
       const response = await fetch(`http://localhost:3001/api/verification/suggestions/prefixes?search=${search}`);
       const data = await response.json();
@@ -137,7 +151,7 @@ const VerificationUsager = () => {
   // Rechercher un usager par dossier
   const rechercherUsager = async () => {
     if (!prefixe || !numero || !semestre || !annee) {
-      alert('Veuillez remplir tous les champs');
+      alert(t('Veuillez remplir tous les champs', 'Fenoy ny saha rehetra', 'Please fill all fields'));
       return;
     }
 
@@ -147,14 +161,18 @@ const VerificationUsager = () => {
         `http://localhost:3001/api/verification/recherche?prefixe=${prefixe}&numero=${numero}&semestre=${semestre}&annee=${annee}`
       );
       const data = await response.json();
-      
+
       if (data.success) {
         setFilteredUsagers(data.usagers);
         if (data.usagers.length > 0) {
           setSelectedUsager(data.usagers[0]);
         } else {
           setSelectedUsager(null);
-          alert('Aucun usager trouvé avec ce numéro de dossier');
+          alert(t(
+            'Aucun usager trouvé avec ce numéro de dossier',
+            'Tsy misy mpampiasa hita amin\'io laharana rakitra io',
+            'No user found with this file number'
+          ));
         }
         setCurrentPage(1);
       }
@@ -207,7 +225,7 @@ const VerificationUsager = () => {
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     try {
-      return new Date(dateString).toLocaleDateString('fr-FR', {
+      return new Date(dateString).toLocaleDateString(locale, {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric'
@@ -218,23 +236,23 @@ const VerificationUsager = () => {
   };
 
   const formatMontant = (montant) => {
-    if (!montant) return '0 Ar';
-    return `${Number(montant).toLocaleString('fr-FR')} Ar`;
+    if (!montant) return `0 Ar`;
+    return `${Number(montant).toLocaleString(locale)} Ar`;
   };
 
   const getStatusBadge = (status) => {
     const configs = {
-      'validee': { label: 'Validé', className: 'status-approved', icon: CheckCircle },
-      'en_attente': { label: 'En attente', className: 'status-pending', icon: Clock },
-      'rejete': { label: 'Rejeté', className: 'status-rejected', icon: XCircle },
-      'pending': { label: 'En attente', className: 'status-pending', icon: Clock },
-      'approved': { label: 'Approuvé', className: 'status-approved', icon: CheckCircle },
-      'rejected': { label: 'Rejeté', className: 'status-rejected', icon: XCircle }
+      'validee': { label: t('Validé', 'Voamarina', 'Validated'), className: 'status-approved', icon: CheckCircle },
+      'en_attente': { label: t('En attente', 'Miandry', 'Pending'), className: 'status-pending', icon: Clock },
+      'rejete': { label: t('Rejeté', 'Nolavina', 'Rejected'), className: 'status-rejected', icon: XCircle },
+      'pending': { label: t('En attente', 'Miandry', 'Pending'), className: 'status-pending', icon: Clock },
+      'approved': { label: t('Approuvé', 'Nekena', 'Approved'), className: 'status-approved', icon: CheckCircle },
+      'rejected': { label: t('Rejeté', 'Nolavina', 'Rejected'), className: 'status-rejected', icon: XCircle }
     };
-    
+
     const config = configs[status?.toLowerCase()] || configs['pending'];
     const Icon = config.icon;
-    
+
     return (
       <span className={`status-badge ${config.className}`}>
         <Icon size={14} />
@@ -245,15 +263,15 @@ const VerificationUsager = () => {
 
   const getTypeBadge = (type) => {
     const types = {
-      'HTL': { label: 'Hôtel', color: '#2196F3', bg: '#E3F2FD', icon: Building },
-      'MGS': { label: 'Grand Surface', color: '#FF9800', bg: '#FFF3E0', icon: Map },
-      'RDP': { label: 'Télé/Radio', color: '#9C27B0', bg: '#F3E5F5', icon: Globe },
-      'TRP': { label: 'Bus', color: '#F44336', bg: '#FFEBEE', icon: Map },
-      'NGT': { label: 'Night Club', color: '#E91E63', bg: '#FCE4EC', icon: Music },
-      'OCC': { label: 'Occasionnelle', color: '#4CAF50', bg: '#E8F5E9', icon: Calendar },
-      'AUT': { label: 'Autre', color: '#757575', bg: '#F5F5F5', icon: FileText }
+      'HTL': { label: t('Hôtel', 'Hotely', 'Hotel'), color: '#2196F3', bg: '#E3F2FD', icon: Building },
+      'MGS': { label: t('Grand Surface', 'Fivarotana lehibe', 'Grand Surface'), color: '#FF9800', bg: '#FFF3E0', icon: Map },
+      'RDP': { label: t('Télé/Radio', 'Fahitalavitra/Radio', 'TV/Radio'), color: '#9C27B0', bg: '#F3E5F5', icon: Globe },
+      'TRP': { label: t('Bus', 'Bus', 'Bus'), color: '#F44336', bg: '#FFEBEE', icon: Map },
+      'NGT': { label: t('Night Club', 'Club alina', 'Night Club'), color: '#E91E63', bg: '#FCE4EC', icon: Music },
+      'OCC': { label: t('Occasionnelle', 'Fotoana manokana', 'Occasional'), color: '#4CAF50', bg: '#E8F5E9', icon: Calendar },
+      'AUT': { label: t('Autre', 'Hafa', 'Other'), color: '#757575', bg: '#F5F5F5', icon: FileText }
     };
-    
+
     const config = types[type] || types['AUT'];
     const Icon = config.icon;
     return (
@@ -279,16 +297,13 @@ const VerificationUsager = () => {
 
   // ============================================================
   // ✅ MODAL LISTE DES PRÉFIXES
-  // - Centré verticalement et horizontalement
-  // - Fond flouté (backdrop-filter: blur)
-  // - Animation d'entrée
   // ============================================================
   const PrefixeListModal = () => {
     if (!showPrefixeList) return null;
-    
+
     return (
-      <div 
-        className="prefixe-modal-overlay" 
+      <div
+        className="prefixe-modal-overlay"
         onClick={togglePrefixeList}
         style={{
           position: 'fixed',
@@ -306,8 +321,8 @@ const VerificationUsager = () => {
           animation: 'fadeIn 0.2s ease-out'
         }}
       >
-        <div 
-          className="prefixe-modal-content" 
+        <div
+          className="prefixe-modal-content"
           onClick={(e) => e.stopPropagation()}
           style={{
             background: '#ffffff',
@@ -342,9 +357,9 @@ const VerificationUsager = () => {
               gap: '10px'
             }}>
               <Eye size={22} />
-              Liste des préfixes et leurs significations
+              {t('Liste des préfixes et leurs significations', 'Lisitry ny prefixes sy ny dikany', 'List of prefixes and their meanings')}
             </h3>
-            <button 
+            <button
               onClick={togglePrefixeList}
               style={{
                 background: 'rgba(255, 255, 255, 0.2)',
@@ -363,7 +378,7 @@ const VerificationUsager = () => {
               }}
               onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.35)'}
               onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)'}
-              title="Fermer"
+              title={t('Fermer', 'Hidio', 'Close')}
             >
               ×
             </button>
@@ -381,8 +396,8 @@ const VerificationUsager = () => {
               gap: '12px'
             }}>
               {Object.entries(prefixeDetails).map(([key, value]) => (
-                <div 
-                  key={key} 
+                <div
+                  key={key}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -439,7 +454,9 @@ const VerificationUsager = () => {
                 gap: '12px'
               }}>
                 <AlertCircle size={40} />
-                <p style={{ margin: 0, fontSize: '15px' }}>Aucun préfixe disponible</p>
+                <p style={{ margin: 0, fontSize: '15px' }}>
+                  {t('Aucun préfixe disponible', 'Tsy misy prefix hita', 'No prefix available')}
+                </p>
               </div>
             )}
           </div>
@@ -465,7 +482,7 @@ const VerificationUsager = () => {
       <div className="verification-container">
         <div className="loading-state">
           <div className="spinner"></div>
-          <p>Chargement des usagers...</p>
+          <p>{t('Chargement des usagers...', 'Maka ny mpampiasa...', 'Loading users...')}</p>
         </div>
       </div>
     );
@@ -478,19 +495,23 @@ const VerificationUsager = () => {
         <div className="header-left">
           <h1>
             <FileText size={28} />
-            Vérification des usagers
+            {t('Vérification des usagers', 'Fanamarinana ny mpampiasa', 'User verification')}
           </h1>
           <p className="header-subtitle">
-            Recherchez un usager par son numéro de dossier
+            {t(
+              'Recherchez un usager par son numéro de dossier',
+              'Hikaroka mpampiasa amin\'ny laharana rakitra',
+              'Search for a user by file number'
+            )}
           </p>
         </div>
         <div className="header-actions">
-          <button className="btn-refreshs" onClick={fetchAllUsagers} title="Actualiser">
+          <button className="btn-refreshs" onClick={fetchAllUsagers} title={t('Actualiser', 'Havaozy', 'Refresh')}>
             <RefreshCw size={18} />
           </button>
           <button className="btn-new" onClick={() => navigate('/dashboard')}>
             <PlusCircle size={18} />
-            Acceuille
+            {t('Accueil', 'Fandraisana', 'Home')}
           </button>
         </div>
       </div>
@@ -501,19 +522,18 @@ const VerificationUsager = () => {
           <div className="search-field" ref={suggestionRef}>
             <label>
               <Tag size={14} />
-              Préfixe
-              {/* ✅ Un seul bouton : Info (i) qui affiche la liste */}
-              <button 
-                className="btn-prefixe-info" 
+              {t('Préfixe', 'Prefix', 'Prefix')}
+              <button
+                className="btn-prefixe-info"
                 onClick={togglePrefixeList}
-                title="Voir la liste des préfixes"
+                title={t('Voir la liste des préfixes', 'Hijery ny lisitry ny prefixes', 'View prefix list')}
               >
                 <Info size={14} />
               </button>
             </label>
             <input
               type="text"
-              placeholder="Ex: AND, FIT, RAT..."
+              placeholder={t('Ex: AND, FIT, RAT...', 'Ohatra: AND, FIT, RAT...', 'Ex: AND, FIT, RAT...')}
               value={prefixe}
               onChange={handlePrefixeChange}
               onFocus={() => {
@@ -545,11 +565,11 @@ const VerificationUsager = () => {
           <div className="search-field">
             <label>
               <Hash size={14} />
-              Numéro
+              {t('Numéro', 'Laharana', 'Number')}
             </label>
             <input
               type="number"
-              placeholder="Ex: 49"
+              placeholder={t('Ex: 49', 'Ohatra: 49', 'Ex: 49')}
               value={numero}
               onChange={(e) => setNumero(e.target.value)}
               className="search-input"
@@ -560,14 +580,14 @@ const VerificationUsager = () => {
           <div className="search-field">
             <label>
               <CalendarIcon size={14} />
-              Semestre
+              {t('Semestre', 'Semestre', 'Semester')}
             </label>
             <select
               value={semestre}
               onChange={(e) => setSemestre(e.target.value)}
               className="search-select"
             >
-              <option value="">Semestre</option>
+              <option value="">{t('Semestre', 'Semestre', 'Semester')}</option>
               <option value="1">1</option>
               <option value="2">2</option>
               <option value="3">3</option>
@@ -577,14 +597,14 @@ const VerificationUsager = () => {
           <div className="search-field">
             <label>
               <Calendar size={14} />
-              Année
+              {t('Année', 'Taona', 'Year')}
             </label>
             <select
               value={annee}
               onChange={(e) => setAnnee(e.target.value)}
               className="search-select"
             >
-              <option value="">Année</option>
+              <option value="">{t('Année', 'Taona', 'Year')}</option>
               {anneesDisponibles.map((a) => (
                 <option key={a} value={a}>{a}</option>
               ))}
@@ -592,19 +612,21 @@ const VerificationUsager = () => {
           </div>
 
           <div className="search-actions">
-            <button 
+            <button
               className="btn-search"
               onClick={rechercherUsager}
               disabled={isSearching}
             >
               <Search size={18} />
-              {isSearching ? 'Recherche...' : 'Rechercher'}
+              {isSearching
+                ? t('Recherche...', 'Mikaroka...', 'Searching...')
+                : t('Rechercher', 'Hikaroka', 'Search')}
             </button>
-            <button 
+            <button
               className="btn-reset"
               onClick={resetSearch}
             >
-              Réinitialiser
+              {t('Réinitialiser', 'Averina', 'Reset')}
             </button>
           </div>
         </div>
@@ -614,32 +636,32 @@ const VerificationUsager = () => {
 
       {/* Cartes d'information */}
       <div className="info-cards-grid">
-        <InfoCard 
+        <InfoCard
           icon={Users}
-          title="Total usagers"
+          title={t('Total usagers', 'Isan\'ny mpampiasa', 'Total users')}
           value={filteredUsagers.length}
-          subtitle="Tous types confondus"
+          subtitle={t('Tous types confondus', 'Karazana rehetra', 'All types combined')}
           color="#4f46e5"
         />
-        <InfoCard 
+        <InfoCard
           icon={UserCheck}
-          title="Validés"
+          title={t('Validés', 'Voamarina', 'Validated')}
           value={filteredUsagers.filter(u => u.statut === 'validee' || u.statut === 'approved').length}
-          subtitle="Dossiers approuvés"
+          subtitle={t('Dossiers approuvés', 'Rakitra nekena', 'Approved files')}
           color="#059669"
         />
-        <InfoCard 
+        <InfoCard
           icon={Clock}
-          title="En attente"
+          title={t('En attente', 'Miandry', 'Pending')}
           value={filteredUsagers.filter(u => u.statut === 'en_attente' || u.statut === 'pending').length}
-          subtitle="Dossiers à vérifier"
+          subtitle={t('Dossiers à vérifier', 'Rakitra hojerena', 'Files to verify')}
           color="#d97706"
         />
-        <InfoCard 
+        <InfoCard
           icon={DollarSign}
-          title="Montant total"
+          title={t('Montant total', 'Vola total', 'Total amount')}
           value={formatMontant(filteredUsagers.reduce((sum, u) => sum + (u.soit_total || 0), 0))}
-          subtitle="Cumul des montants"
+          subtitle={t('Cumul des montants', 'Fitambaran\'ny vola', 'Sum of amounts')}
           color="#7c3aed"
         />
       </div>
@@ -650,13 +672,15 @@ const VerificationUsager = () => {
           <div className="results-info">
             <h2>
               <FolderOpen size={20} />
-              Résultats de la recherche
+              {t('Résultats de la recherche', 'Vokatry ny fikarohana', 'Search results')}
             </h2>
             <span className="results-count">
-              {filteredUsagers.length} usager{filteredUsagers.length > 1 ? 's' : ''} trouvé{filteredUsagers.length > 1 ? 's' : ''}
+              {filteredUsagers.length}{' '}
+              {filteredUsagers.length > 1
+                ? t('usagers trouvés', 'mpampiasa hita', 'users found')
+                : t('usager trouvé', 'mpampiasa hita', 'user found')}
             </span>
           </div>
-
         </div>
 
         {/* Tableau */}
@@ -664,14 +688,14 @@ const VerificationUsager = () => {
           <table className="usagers-table">
             <thead>
               <tr>
-                <th>N° Dossier</th>
-                <th>Dénomination / Événement</th>
-                <th>Type</th>
-                <th>Demandeur / Représentant</th>
-                <th>Montant Total</th>
-                <th>Statut</th>
-                <th>Date création</th>
-                <th>Actions</th>
+                <th>{t('N° Dossier', 'N° Rakitra', 'File N°')}</th>
+                <th>{t('Dénomination / Événement', 'Anarana / Hetsika', 'Name / Event')}</th>
+                <th>{t('Type', 'Karazana', 'Type')}</th>
+                <th>{t('Demandeur / Représentant', 'Mpangataka / Mpisolo tena', 'Applicant / Representative')}</th>
+                <th>{t('Montant Total', 'Vola total', 'Total amount')}</th>
+                <th>{t('Statut', 'Toe-javatra', 'Status')}</th>
+                <th>{t('Date création', 'Daty famoronana', 'Creation date')}</th>
+                <th>{t('Actions', 'Hetsika', 'Actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -688,7 +712,7 @@ const VerificationUsager = () => {
                       </span>
                       {usager.quittance && (
                         <span className="quittance-number">
-                          Quittance: {String(usager.quittance).padStart(7, '0')}
+                          {t('Quittance', 'Taratasy', 'Receipt')}: {String(usager.quittance).padStart(7, '0')}
                         </span>
                       )}
                       {usager.ref_omda && (
@@ -699,13 +723,13 @@ const VerificationUsager = () => {
                     </td>
                     <td className="denomination-cell">
                       <div className="denomination-name">
-                        {usager.denomination || usager.genre_manifestation || 'Sans nom'}
+                        {usager.denomination || usager.genre_manifestation || t('Sans nom', 'Tsy misy anarana', 'No name')}
                       </div>
                       <div className="denomination-details">
                         {usager.artistes && typeof usager.artistes === 'string' && (
                           <span className="artistes-count">
                             <Music size={12} />
-                            {usager.artistes.split(',').length} artistes
+                            {usager.artistes.split(',').length} {t('artistes', 'mpanakanto', 'artists')}
                           </span>
                         )}
                         {usager.lieu_evenement && (
@@ -742,7 +766,7 @@ const VerificationUsager = () => {
                       </div>
                       {usager.montant_mensuel > 0 && (
                         <div className="montant-mensuel">
-                          × {usager.uniter || 1} mois
+                          × {usager.uniter || 1} {t('mois', 'volana', 'months')}
                         </div>
                       )}
                     </td>
@@ -755,7 +779,7 @@ const VerificationUsager = () => {
                       </div>
                       {usager.createur_nom && (
                         <div className="createur">
-                          par {usager.createur_nom}
+                          {t('par', 'avy amin\'ny', 'by')} {usager.createur_nom}
                         </div>
                       )}
                     </td>
@@ -766,7 +790,7 @@ const VerificationUsager = () => {
                           e.stopPropagation();
                           setSelectedUsager(usager);
                         }}
-                        title="Voir détails"
+                        title={t('Voir détails', 'Hijery antsipiriany', 'View details')}
                       >
                         <Eye size={16} />
                       </button>
@@ -777,8 +801,8 @@ const VerificationUsager = () => {
                 <tr>
                   <td colSpan="8" className="empty-state">
                     <AlertCircle size={32} />
-                    <p>Aucun usager trouvé</p>
-                    <span>Modifiez vos critères de recherche</span>
+                    <p>{t('Aucun usager trouvé', 'Tsy misy mpampiasa hita', 'No user found')}</p>
+                    <span>{t('Modifiez vos critères de recherche', 'Ovay ny fepetra fikarohana', 'Change your search criteria')}</span>
                   </td>
                 </tr>
               )}
@@ -823,14 +847,14 @@ const VerificationUsager = () => {
             <div className="detail-header-left">
               <h2>
                 <User size={20} />
-                Fiche détaillée
+                {t('Fiche détaillée', 'Taratasy antsipiriany', 'Detailed sheet')}
               </h2>
               <span className="detail-dossier">
-                Dossier: {selectedUsager.numero_dossier || 'N/A'}
+                {t('Dossier', 'Rakitra', 'File')}: {selectedUsager.numero_dossier || 'N/A'}
               </span>
               {selectedUsager.quittance && (
                 <span className="detail-quittance">
-                  Quittance: {String(selectedUsager.quittance).padStart(7, '0')}
+                  {t('Quittance', 'Taratasy', 'Receipt')}: {String(selectedUsager.quittance).padStart(7, '0')}
                 </span>
               )}
             </div>
@@ -844,9 +868,9 @@ const VerificationUsager = () => {
           <div className="detail-content">
             {/* En-tête profil */}
             <div className="profile-header">
-              <div 
+              <div
                 className="profile-avatar"
-                style={{ 
+                style={{
                   background: selectedUsager.ref_client_type === 'HTL' ? '#2196F3' :
                              selectedUsager.ref_client_type === 'MGS' ? '#FF9800' :
                              selectedUsager.ref_client_type === 'RDP' ? '#9C27B0' :
@@ -859,7 +883,7 @@ const VerificationUsager = () => {
               </div>
               <div className="profile-info">
                 <h3 className="profile-name">
-                  {selectedUsager.denomination || selectedUsager.genre_manifestation || 'Sans nom'}
+                  {selectedUsager.denomination || selectedUsager.genre_manifestation || t('Sans nom', 'Tsy misy anarana', 'No name')}
                 </h3>
                 <div className="profile-meta">
                   {getTypeBadge(selectedUsager.ref_client_type)}
@@ -895,72 +919,71 @@ const VerificationUsager = () => {
                 <div className="detail-section">
                   <h4>
                     <Building size={16} />
-                    Informations générales
+                    {t('Informations générales', 'Fampahalalana ankapobeny', 'General information')}
                   </h4>
                   <div className="detail-row">
-                    <span className="label">Dénomination :</span>
+                    <span className="label">{t('Dénomination', 'Anarana', 'Name')} :</span>
                     <span className="value">{selectedUsager.denomination || 'N/A'}</span>
                   </div>
                   <div className="detail-row">
-                    <span className="label">Demandeur :</span>
+                    <span className="label">{t('Demandeur', 'Mpangataka', 'Applicant')} :</span>
                     <span className="value">{selectedUsager.demandeur || 'N/A'}</span>
                   </div>
                   <div className="detail-row">
-                    <span className="label">Organisateurs :</span>
+                    <span className="label">{t('Organisateurs', 'Mpikarakara', 'Organizers')} :</span>
                     <span className="value">{selectedUsager.organisateurs || 'N/A'}</span>
                   </div>
                   <div className="detail-row">
-                    <span className="label">Représentant :</span>
+                    <span className="label">{t('Représentant', 'Mpisolo tena', 'Representative')} :</span>
                     <span className="value">{selectedUsager.representant_par || selectedUsager.representant_nom || 'N/A'}</span>
                   </div>
                   <div className="detail-row">
-                    <span className="label">Personne reçue :</span>
+                    <span className="label">{t('Personne reçue', 'Mpandray', 'Person received')} :</span>
                     <span className="value">{selectedUsager.personne_recu || 'N/A'}</span>
                   </div>
                   <div className="detail-row">
-                    <span className="label">Genre manifestation :</span>
+                    <span className="label">{t('Genre manifestation', 'Karazana hetsika', 'Event type')} :</span>
                     <span className="value">{selectedUsager.genre_manifestation || 'N/A'}</span>
                   </div>
                   <div className="detail-row">
-                    <span className="label">Lieu événement :</span>
+                    <span className="label">{t('Lieu événement', 'Toerana hetsika', 'Event location')} :</span>
                     <span className="value">{selectedUsager.lieu_evenement || 'N/A'}</span>
                   </div>
                   <div className="detail-row">
-                    <span className="label">Date événement :</span>
+                    <span className="label">{t('Date événement', 'Daty hetsika', 'Event date')} :</span>
                     <span className="value">{formatDate(selectedUsager.date_evenement)}</span>
                   </div>
                   <div className="detail-row">
-                    <span className="label">Région :</span>
+                    <span className="label">{t('Région', 'Faritra', 'Region')} :</span>
                     <span className="value">{selectedUsager.region_usager || 'N/A'}</span>
                   </div>
                   <div className="detail-row">
-                    <span className="label">Date d'ajout :</span>
+                    <span className="label">{t('Date d\'ajout', 'Daty nanampiana', 'Date added')} :</span>
                     <span className="value">{formatDate(selectedUsager.date_ajout)}</span>
                   </div>
                   <div className="detail-row">
-                    <span className="label">Lieu d'ajout :</span>
+                    <span className="label">{t('Lieu d\'ajout', 'Toerana nanampiana', 'Place added')} :</span>
                     <span className="value">{selectedUsager.lieu_ajout || 'N/A'}</span>
                   </div>
                   <div className="detail-row">
-                    <span className="label">Date signature :</span>
+                    <span className="label">{t('Date signature', 'Daty sonia', 'Signature date')} :</span>
                     <span className="value">{formatDate(selectedUsager.date_signature)}</span>
                   </div>
                   <div className="detail-row">
-                    <span className="label">Confirmation nom :</span>
+                    <span className="label">{t('Confirmation nom', 'Fanamarinana anarana', 'Name confirmation')} :</span>
                     <span className="value">{selectedUsager.confirmation_nom || 'N/A'}</span>
                   </div>
-                  {/* ✅ Type facture ENLEVÉ */}
                 </div>
 
                 {/* Colonne milieu - Coordonnées et Montants */}
                 <div className="detail-section">
                   <h4>
                     <MapPin size={16} />
-                    Coordonnées
+                    {t('Coordonnées', 'Fifandraisana', 'Contact details')}
                   </h4>
                   <div className="detail-row">
                     <span className="label">
-                      <Smartphone size={14} /> Téléphone :
+                      <Smartphone size={14} /> {t('Téléphone', 'Finday', 'Phone')} :
                     </span>
                     <span className="value">{selectedUsager.telephone || 'N/A'}</span>
                   </div>
@@ -972,80 +995,80 @@ const VerificationUsager = () => {
                   </div>
                   <div className="detail-row">
                     <span className="label">
-                      <HomeIcon size={14} /> Adresse :
+                      <HomeIcon size={14} /> {t('Adresse', 'Adiresy', 'Address')} :
                     </span>
                     <span className="value">{selectedUsager.adresse || 'N/A'}</span>
                   </div>
                   {selectedUsager.domicile && (
                     <div className="detail-row">
-                      <span className="label">Domicile :</span>
+                      <span className="label">{t('Domicile', 'Trano', 'Home')} :</span>
                       <span className="value">{selectedUsager.domicile}</span>
                     </div>
                   )}
                   {selectedUsager.representant_adresse && (
                     <div className="detail-row">
-                      <span className="label">Adresse représentant :</span>
+                      <span className="label">{t('Adresse représentant', 'Adiresin\'ny mpisolo tena', 'Representative address')} :</span>
                       <span className="value">{selectedUsager.representant_adresse}</span>
                     </div>
                   )}
                   {selectedUsager.representant_tel && (
                     <div className="detail-row">
-                      <span className="label">Tél représentant :</span>
+                      <span className="label">{t('Tél représentant', 'Finday mpisolo tena', 'Representative phone')} :</span>
                       <span className="value">{selectedUsager.representant_tel}</span>
                     </div>
                   )}
                   {selectedUsager.representant_cin && (
                     <div className="detail-row">
-                      <span className="label">CIN représentant :</span>
+                      <span className="label">{t('CIN représentant', 'CIN mpisolo tena', 'Representative CIN')} :</span>
                       <span className="value">{selectedUsager.representant_cin}</span>
                     </div>
                   )}
                   {selectedUsager.representant_cin_delivree && (
                     <div className="detail-row">
-                      <span className="label">CIN délivrée le :</span>
+                      <span className="label">{t('CIN délivrée le', 'CIN nomena ny', 'CIN issued on')} :</span>
                       <span className="value">{formatDate(selectedUsager.representant_cin_delivree)}</span>
                     </div>
                   )}
                   {selectedUsager.representant_cin_lieu && (
                     <div className="detail-row">
-                      <span className="label">CIN délivrée à :</span>
+                      <span className="label">{t('CIN délivrée à', 'CIN nomena tao', 'CIN issued at')} :</span>
                       <span className="value">{selectedUsager.representant_cin_lieu}</span>
                     </div>
                   )}
                   {selectedUsager.representant_fonction && (
                     <div className="detail-row">
-                      <span className="label">Fonction représentant :</span>
+                      <span className="label">{t('Fonction représentant', 'Asan\'ny mpisolo tena', 'Representative position')} :</span>
                       <span className="value">{selectedUsager.representant_fonction}</span>
                     </div>
                   )}
 
                   <h4 style={{ marginTop: '16px' }}>
                     <DollarSign size={16} />
-                    Montants
+                    {t('Montants', 'Vola', 'Amounts')}
                   </h4>
                   <div className="detail-row">
-                    <span className="label">Montant mensuel :</span>
+                    <span className="label">{t('Montant mensuel', 'Vola isam-bolana', 'Monthly amount')} :</span>
                     <span className="value">{formatMontant(selectedUsager.montant_mensuel)}</span>
                   </div>
                   <div className="detail-row">
-                    <span className="label">Frais dossier :</span>
+                    <span className="label">{t('Frais dossier', 'Saram-pandraharahana', 'File fees')} :</span>
                     <span className="value">{formatMontant(selectedUsager.frais_dossier)}</span>
                   </div>
                   <div className="detail-row">
-                    <span className="label">Montant retard :</span>
+                    <span className="label">{t('Montant retard', 'Vola tara', 'Late amount')} :</span>
                     <span className="value">{formatMontant(selectedUsager.montant_retard)}</span>
                   </div>
                   <div className="detail-row total-row">
-                    <span className="label">Total :</span>
+                    <span className="label">{t('Total', 'Totaly', 'Total')} :</span>
                     <span className="value">{formatMontant(selectedUsager.soit_total)}</span>
                   </div>
                   <div className="detail-row">
-                    <span className="label">Unité :</span>
+                    <span className="label">{t('Unité', 'Isan\'ny', 'Unit')} :</span>
                     <span className="value">{selectedUsager.uniter || 1}</span>
                   </div>
                   {selectedUsager.mois_facture && selectedUsager.annee_facture && (
                     <div className="detail-row">
-                      <span className="label">Période :</span>
+                      <span className="label">{t('Période', 'Fe-potoana', 'Period')} :</span>
                       <span className="value">{selectedUsager.mois_facture}/{selectedUsager.annee_facture}</span>
                     </div>
                   )}
@@ -1055,10 +1078,10 @@ const VerificationUsager = () => {
                 <div className="detail-section">
                   <h4>
                     <FileText size={16} />
-                    Références
+                    {t('Références', 'Fanondroana', 'References')}
                   </h4>
                   <div className="detail-row">
-                    <span className="label">N° Dossier :</span>
+                    <span className="label">{t('N° Dossier', 'N° Rakitra', 'File N°')} :</span>
                     <span className="value">{selectedUsager.numero_dossier || 'N/A'}</span>
                   </div>
                   <div className="detail-row">
@@ -1066,29 +1089,29 @@ const VerificationUsager = () => {
                     <span className="value">{selectedUsager.ref_omda || 'N/A'}</span>
                   </div>
                   <div className="detail-row">
-                    <span className="label">N° Facture :</span>
+                    <span className="label">{t('N° Facture', 'N° Faktiora', 'Invoice N°')} :</span>
                     <span className="value">{selectedUsager.num_facture || 'N/A'}</span>
                   </div>
                   <div className="detail-row">
-                    <span className="label">Type facture :</span>
+                    <span className="label">{t('Type facture', 'Karazana faktiora', 'Invoice type')} :</span>
                     <span className="value">{selectedUsager.num_facture_type || 'N/A'}</span>
                   </div>
                   <div className="detail-row">
-                    <span className="label">Quittance :</span>
+                    <span className="label">{t('Quittance', 'Taratasy', 'Receipt')} :</span>
                     <span className="value">
                       {selectedUsager.quittance ? String(selectedUsager.quittance).padStart(7, '0') : 'N/A'}
                     </span>
                   </div>
                   <div className="detail-row">
-                    <span className="label">Créé par :</span>
-                    <span className="value">{selectedUsager.createur_nom || 'Système'}</span>
+                    <span className="label">{t('Créé par', 'Noforonin\'ny', 'Created by')} :</span>
+                    <span className="value">{selectedUsager.createur_nom || t('Système', 'Rafitra', 'System')}</span>
                   </div>
 
                   {selectedUsager.artistes && typeof selectedUsager.artistes === 'string' && (
                     <>
                       <h4 style={{ marginTop: '16px' }}>
                         <Music size={16} />
-                        Artistes participants
+                        {t('Artistes participants', 'Mpanakanto mpandray anjara', 'Participating artists')}
                       </h4>
                       <div className="artistes-list">
                         {selectedUsager.artistes.split(',').map((artiste, index) => (
@@ -1105,12 +1128,12 @@ const VerificationUsager = () => {
 
             {/* Actions */}
             <div className="detail-actions">
-              <button 
+              <button
                 className="btn-back"
                 onClick={() => navigate('/dashboard')}
               >
                 <ArrowLeft size={18} />
-                Retour au tableau de bord
+                {t('Retour au tableau de bord', 'Hiverina amin\'ny tabilao', 'Back to dashboard')}
               </button>
             </div>
           </div>

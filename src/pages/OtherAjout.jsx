@@ -1,5 +1,5 @@
 // src/pages/OtherAjout.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, ArrowRight, Save, X, Users, User, Phone, Mail,
@@ -9,21 +9,23 @@ import {
   PlusCircle, ListOrdered, FileCheck, UserPlus
 } from 'lucide-react';
 import '../styles/other-ajout.css';
+// ✅ Hook unique de traduction
+import { useT } from '../hooks/useT';
 
-// ✅ 6 types d'usagers événementiels
-const TYPES_USAGERS = [
-  { id: 'cd', label: 'CD', icon: Disc, color: '#3498db' },
-  { id: 'mp3', label: 'MP3', icon: Music, color: '#9b59b6' },
-  { id: 'oeuvre-web', label: 'Œuvre Web', icon: Globe, color: '#2ecc71' },
-  { id: 'hologramme', label: 'Hologramme', icon: Sparkles, color: '#e67e22' },
-  { id: 'video', label: 'Vidéo', icon: Video, color: '#e74c3c' },
-  { id: 'autre', label: 'Autre', icon: Package, color: '#7f8c8d' }
+// ✅ 6 types d'usagers événementiels (icônes + couleurs uniquement)
+const TYPES_USAGERS_META = [
+  { id: 'cd',         icon: Disc,     color: '#3498db' },
+  { id: 'mp3',        icon: Music,    color: '#9b59b6' },
+  { id: 'oeuvre-web', icon: Globe,    color: '#2ecc71' },
+  { id: 'hologramme', icon: Sparkles, color: '#e67e22' },
+  { id: 'video',      icon: Video,    color: '#e74c3c' },
+  { id: 'autre',      icon: Package,  color: '#7f8c8d' }
 ];
 
-// ✅ 2 modes de paiement
-const MODES_PAIEMENT = [
-  { id: 'mensuel', label: 'Paiement mensuel', icon: Repeat },
-  { id: 'unique', label: 'Paiement unique', icon: CalendarCheck }
+// ✅ 2 modes de paiement (icônes uniquement)
+const MODES_PAIEMENT_META = [
+  { id: 'mensuel', icon: Repeat },
+  { id: 'unique',  icon: CalendarCheck }
 ];
 
 const emptyLigne = () => ({
@@ -34,6 +36,32 @@ const emptyLigne = () => ({
 
 const OtherAjout = () => {
   const navigate = useNavigate();
+
+  // ✅ LANGUE UNIQUE
+  const { t, langue } = useT();
+
+  // ✅ Locale pour formatage
+  const locale = useMemo(() => {
+    if (langue === 'en') return 'en-US';
+    if (langue === 'mg') return 'fr-MG';
+    return 'fr-FR';
+  }, [langue]);
+
+  // ✅ Constantes traduites (recalculées quand la langue change)
+  const TYPES_USAGERS = useMemo(() => [
+    { id: 'cd',         label: t('CD', 'CD', 'CD'),                                              icon: Disc,     color: '#3498db' },
+    { id: 'mp3',        label: 'MP3',                                                            icon: Music,    color: '#9b59b6' },
+    { id: 'oeuvre-web', label: t('Œuvre Web', 'Asa an-tserasera', 'Web Work'),                   icon: Globe,    color: '#2ecc71' },
+    { id: 'hologramme', label: t('Hologramme', 'Holograma', 'Hologram'),                         icon: Sparkles, color: '#e67e22' },
+    { id: 'video',      label: t('Vidéo', 'Horonan-tsary', 'Video'),                             icon: Video,    color: '#e74c3c' },
+    { id: 'autre',      label: t('Autre', 'Hafa', 'Other'),                                      icon: Package,  color: '#7f8c8d' }
+  ], [t]);
+
+  const MODES_PAIEMENT = useMemo(() => [
+    { id: 'mensuel', label: t('Paiement mensuel', 'Fandoavana isam-bolana', 'Monthly payment'),  icon: Repeat },
+    { id: 'unique',  label: t('Paiement unique', 'Fandoavana indray mandeha', 'One-time payment'), icon: CalendarCheck }
+  ], [t]);
+
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -173,7 +201,6 @@ const OtherAjout = () => {
     }
   };
 
-  // ✅ Charger la prochaine quittance
   const loadQuittance = async () => {
     try {
       const res = await fetch('http://localhost:3001/api/other-usagers/quittance/last');
@@ -197,11 +224,20 @@ const OtherAjout = () => {
 
   const handleAddRegion = async () => {
     const trimmed = newRegion.trim();
-    if (!trimmed) { alert('Veuillez saisir un nom de région'); return; }
-    if (regionsList.some(r => r.nom === trimmed)) { alert('Cette région existe déjà'); return; }
+    if (!trimmed) {
+      alert(t('Veuillez saisir un nom de région', 'Ampidiro ny anaran\'ny faritra', 'Please enter a region name'));
+      return;
+    }
+    if (regionsList.some(r => r.nom === trimmed)) {
+      alert(t('Cette région existe déjà', 'Efa misy io faritra io', 'This region already exists'));
+      return;
+    }
 
     const adminToken = localStorage.getItem('adminToken');
-    if (!adminToken) { alert('Token administrateur manquant'); return; }
+    if (!adminToken) {
+      alert(t('Token administrateur manquant', 'Tsy misy ny token admin', 'Missing admin token'));
+      return;
+    }
 
     try {
       const response = await fetch('http://localhost:3001/api/regions', {
@@ -215,12 +251,12 @@ const OtherAjout = () => {
         setNewRegion('');
         setNewRegionPhone('');
         setShowAddRegion(false);
-        alert(`✅ Région "${trimmed}" ajoutée !`);
+        alert(t(`✅ Région "${trimmed}" ajoutée !`, `✅ Voapetraka ny faritra "${trimmed}" !`, `✅ Region "${trimmed}" added!`));
       } else {
         alert(`❌ ${result.message}`);
       }
     } catch (error) {
-      alert('❌ Erreur de connexion');
+      alert(t('❌ Erreur de connexion', '❌ Nisy olana tamin\'ny fifandraisana', '❌ Connection error'));
     }
   };
 
@@ -249,26 +285,43 @@ const OtherAjout = () => {
   // ============================================================
   const handleNext = () => {
     if (currentStep === 1) {
-      if (!typeUsager) { alert("Veuillez sélectionner un type d'usager"); return; }
-      if (!identification.denomination) { alert('Veuillez saisir la dénomination'); return; }
+      if (!typeUsager) {
+        alert(t("Veuillez sélectionner un type d'usager", 'Misafidiana karazana mpanjifa', 'Please select a user type'));
+        return;
+      }
+      if (!identification.denomination) {
+        alert(t('Veuillez saisir la dénomination', 'Ampidiro ny anarana', 'Please enter the name'));
+        return;
+      }
       setCurrentStep(2);
       return;
     }
     if (currentStep === 2) {
-      if (!representant.representantPar) { alert('Veuillez saisir le nom du représentant'); return; }
+      if (!representant.representantPar) {
+        alert(t('Veuillez saisir le nom du représentant', 'Ampidiro ny anaran\'ny mpisolo tena', 'Please enter the representative name'));
+        return;
+      }
       setCurrentStep(3);
       return;
     }
     if (currentStep === 3) {
-      if (!modePaiement) { alert('Veuillez choisir un mode de paiement'); return; }
-      if (lignes.length === 0) { alert('Ajoutez au moins une ligne'); return; }
-      const allFilled = lignes.every(l => l.description.trim() !== '' && l.pu !== '');
-      if (!allFilled) { alert('Veuillez remplir toutes les lignes (description et P.U.)'); return; }
-      if (!personneRecu || personneRecu.trim() === '') {
-        alert('⚠️ OBLIGATOIRE : Saisissez le nom de la personne qui reçoit');
+      if (!modePaiement) {
+        alert(t('Veuillez choisir un mode de paiement', 'Misafidiana fomba fandoavana', 'Please choose a payment method'));
         return;
       }
-      // ✅ Ouvrir la modal de confirmation
+      if (lignes.length === 0) {
+        alert(t('Ajoutez au moins une ligne', 'Ampio tsipika iray farafahakeliny', 'Add at least one line'));
+        return;
+      }
+      const allFilled = lignes.every(l => l.description.trim() !== '' && l.pu !== '');
+      if (!allFilled) {
+        alert(t('Veuillez remplir toutes les lignes (description et P.U.)', 'Fenoy ny tsipika rehetra (fanazavana sy P.U.)', 'Please fill all lines (description and unit price)'));
+        return;
+      }
+      if (!personneRecu || personneRecu.trim() === '') {
+        alert(t('⚠️ OBLIGATOIRE : Saisissez le nom de la personne qui reçoit', '⚠️ TSY AZO IHODIVIRANA : Ampidiro ny anaran\'ny mpandray', '⚠️ MANDATORY: Enter the receiver name'));
+        return;
+      }
       setSavingResult(null);
       setShowConfirmModal(true);
       return;
@@ -280,7 +333,7 @@ const OtherAjout = () => {
   };
 
   // ============================================================
-  // ✅ CONFIRMATION + ENREGISTREMENT COMPLET (usager + paiement + facture + PDF)
+  // CONFIRMATION + ENREGISTREMENT COMPLET
   // ============================================================
   const handleConfirmSave = async () => {
     setIsSaving(true);
@@ -321,10 +374,8 @@ const OtherAjout = () => {
       setSavingResult(data);
 
       if (data.success) {
-        // ✅ Recharger la quittance pour la prochaine fois
         await loadQuittance();
 
-        // ✅ Générer le PDF automatiquement
         try {
           const { generateFactureOtherPDF } = await import('./pdf/facture_other');
           await generateFactureOtherPDF({
@@ -355,7 +406,10 @@ const OtherAjout = () => {
       }
     } catch (error) {
       console.error('Erreur:', error);
-      setSavingResult({ success: false, message: 'Erreur de connexion au serveur' });
+      setSavingResult({
+        success: false,
+        message: t('Erreur de connexion au serveur', 'Nisy olana tamin\'ny fifandraisana tamin\'ny serveur', 'Server connection error')
+      });
     } finally {
       setIsSaving(false);
     }
@@ -367,7 +421,9 @@ const OtherAjout = () => {
   const renderStep1 = () => (
     <div className="oa-step-content">
       <div className="oa-section">
-        <h3 className="oa-section-title"><Package size={18} /> Type d'usager événementiel</h3>
+        <h3 className="oa-section-title">
+          <Package size={18} /> {t("Type d'usager événementiel", 'Karazana mpanjifa hetsika', 'Event user type')}
+        </h3>
         <div className="oa-types-grid">
           {TYPES_USAGERS.map(type => {
             const Icon = type.icon;
@@ -392,37 +448,39 @@ const OtherAjout = () => {
       </div>
 
       <div className="oa-section">
-        <h3 className="oa-section-title"><Building2 size={18} /> Identification</h3>
+        <h3 className="oa-section-title">
+          <Building2 size={18} /> {t('Identification', 'Famantarana', 'Identification')}
+        </h3>
         <div className="oa-form-grid">
           <div className="oa-form-group oa-full">
-            <label><FileText size={14} /> Dénomination *</label>
+            <label><FileText size={14} /> {t('Dénomination', 'Anarana', 'Name')} *</label>
             <input
               type="text"
               value={identification.denomination}
               onChange={(e) => handleIdentificationChange('denomination', e.target.value)}
-              placeholder="Nom de l'entreprise / structure"
+              placeholder={t("Nom de l'entreprise / structure", "Anaran'ny orinasa / fikambanana", 'Company / organization name')}
             />
           </div>
           <div className="oa-form-group">
-            <label><User size={14} /> Nom</label>
+            <label><User size={14} /> {t('Nom', 'Anarana', 'Last name')}</label>
             <input
               type="text"
               value={identification.nom}
               onChange={(e) => handleIdentificationChange('nom', e.target.value)}
-              placeholder="Nom"
+              placeholder={t('Nom', 'Anarana', 'Last name')}
             />
           </div>
           <div className="oa-form-group">
-            <label><User size={14} /> Prénom</label>
+            <label><User size={14} /> {t('Prénom', 'Fanampin\'anarana', 'First name')}</label>
             <input
               type="text"
               value={identification.prenom}
               onChange={(e) => handleIdentificationChange('prenom', e.target.value)}
-              placeholder="Prénom"
+              placeholder={t('Prénom', 'Fanampin\'anarana', 'First name')}
             />
           </div>
           <div className="oa-form-group">
-            <label><Phone size={14} /> Téléphone</label>
+            <label><Phone size={14} /> {t('Téléphone', 'Finday', 'Phone')}</label>
             <input
               type="tel"
               value={identification.telephone}
@@ -440,24 +498,24 @@ const OtherAjout = () => {
             />
           </div>
           <div className="oa-form-group oa-full">
-            <label><MapPin size={14} /> Adresse</label>
+            <label><MapPin size={14} /> {t('Adresse', 'Adiresy', 'Address')}</label>
             <input
               type="text"
               value={identification.adresse}
               onChange={(e) => handleIdentificationChange('adresse', e.target.value)}
-              placeholder="Adresse complète"
+              placeholder={t('Adresse complète', 'Adiresy feno', 'Full address')}
             />
           </div>
 
           <div className="oa-form-group oa-full">
-            <label><MapPin size={14} /> Région</label>
+            <label><MapPin size={14} /> {t('Région', 'Faritra', 'Region')}</label>
             <div className="oa-region-row">
               <select
                 value={identification.region}
                 onChange={(e) => handleIdentificationChange('region', e.target.value)}
                 className="oa-region-select"
               >
-                <option value="">Sélectionner une région</option>
+                <option value="">{t('Sélectionner une région', 'Misafidiana faritra', 'Select a region')}</option>
                 {regionsList.map((region) => {
                   const phone = region.telephone && region.telephone.trim() !== ''
                     ? formatPhoneNumber(region.telephone)
@@ -473,7 +531,7 @@ const OtherAjout = () => {
                 type="button"
                 onClick={() => setShowAddRegion(!showAddRegion)}
                 className="oa-btn-add-region"
-                title="Ajouter une région"
+                title={t('Ajouter une région', 'Manampy faritra', 'Add a region')}
               >
                 <Plus size={18} />
               </button>
@@ -487,16 +545,16 @@ const OtherAjout = () => {
                   type="text"
                   value={newRegion}
                   onChange={(e) => setNewRegion(e.target.value)}
-                  placeholder="Nom de la région"
+                  placeholder={t('Nom de la région', 'Anaran\'ny faritra', 'Region name')}
                 />
                 <input
                   type="text"
                   value={newRegionPhone}
                   onChange={(e) => setNewRegionPhone(e.target.value)}
-                  placeholder="Téléphone (optionnel)"
+                  placeholder={t('Téléphone (optionnel)', 'Finday (tsy voatery)', 'Phone (optional)')}
                 />
                 <button type="button" onClick={handleAddRegion} className="oa-btn-confirm-region">
-                  Ajouter
+                  {t('Ajouter', 'Ampio', 'Add')}
                 </button>
               </div>
             </div>
@@ -513,32 +571,36 @@ const OtherAjout = () => {
     <div className="oa-step-content">
       <div className="oa-info-banner">
         <Info size={16} />
-        <span>Usager : <strong>{identification.denomination || 'Non renseigné'}</strong></span>
+        <span>
+          {t('Usager', 'Mpanjifa', 'User')} : <strong>{identification.denomination || t('Non renseigné', 'Tsy voafaritra', 'Not specified')}</strong>
+        </span>
       </div>
 
       <div className="oa-section">
-        <h3 className="oa-section-title"><User size={18} /> Représentant légal</h3>
+        <h3 className="oa-section-title">
+          <User size={18} /> {t('Représentant légal', 'Mpisolo tena ara-dalàna', 'Legal representative')}
+        </h3>
         <div className="oa-form-grid">
           <div className="oa-form-group oa-full">
-            <label><User size={14} /> Représenté par *</label>
+            <label><User size={14} /> {t('Représenté par', 'Mpisolo tena', 'Represented by')} *</label>
             <input
               type="text"
               value={representant.representantPar}
               onChange={(e) => handleRepresentantChange('representantPar', e.target.value)}
-              placeholder="Nom complet du représentant"
+              placeholder={t('Nom complet du représentant', 'Anarana feno ny mpisolo tena', 'Full name of representative')}
             />
           </div>
           <div className="oa-form-group">
-            <label><CreditCard size={14} /> Numéro CIN</label>
+            <label><CreditCard size={14} /> {t('Numéro CIN', 'Laharana CIN', 'CIN number')}</label>
             <input
               type="text"
               value={representant.cin}
               onChange={(e) => handleRepresentantChange('cin', e.target.value)}
-              placeholder="Numéro de CIN"
+              placeholder={t('Numéro de CIN', 'Laharana CIN', 'CIN number')}
             />
           </div>
           <div className="oa-form-group">
-            <label><Calendar size={14} /> Délivrée le</label>
+            <label><Calendar size={14} /> {t('Délivrée le', 'Nomena ny', 'Issued on')}</label>
             <input
               type="date"
               value={representant.cinDelivree}
@@ -546,16 +608,16 @@ const OtherAjout = () => {
             />
           </div>
           <div className="oa-form-group">
-            <label><MapPin size={14} /> Lieu de délivrance</label>
+            <label><MapPin size={14} /> {t('Lieu de délivrance', 'Toerana nanomezana', 'Place of issue')}</label>
             <input
               type="text"
               value={representant.cinLieu}
               onChange={(e) => handleRepresentantChange('cinLieu', e.target.value)}
-              placeholder="Lieu"
+              placeholder={t('Lieu', 'Toerana', 'Place')}
             />
           </div>
           <div className="oa-form-group">
-            <label><Phone size={14} /> Contact</label>
+            <label><Phone size={14} /> {t('Contact', 'Fifandraisana', 'Contact')}</label>
             <input
               type="tel"
               value={representant.contact}
@@ -578,7 +640,9 @@ const OtherAjout = () => {
       <div className="oa-step-content">
         {/* Mode de paiement */}
         <div className="oa-section">
-          <h3 className="oa-section-title"><DollarSign size={18} /> Mode de paiement</h3>
+          <h3 className="oa-section-title">
+            <DollarSign size={18} /> {t('Mode de paiement', 'Fomba fandoavana', 'Payment method')}
+          </h3>
           <div className="oa-modes-grid">
             {MODES_PAIEMENT.map(mode => {
               const Icon = mode.icon;
@@ -604,10 +668,10 @@ const OtherAjout = () => {
             {/* Contrôle du nombre de lignes */}
             <div className="oa-section">
               <h3 className="oa-section-title">
-                <ListOrdered size={18} /> Nombre de lignes de facture
+                <ListOrdered size={18} /> {t('Nombre de lignes de facture', 'Isan\'ny tsipika faktiora', 'Number of invoice lines')}
               </h3>
               <div className="oa-lines-control">
-                <label>Nombre de lignes :</label>
+                <label>{t('Nombre de lignes', 'Isan\'ny tsipika', 'Number of lines')} :</label>
                 <input
                   type="number"
                   min="1"
@@ -617,10 +681,14 @@ const OtherAjout = () => {
                   className="oa-input-lines-count"
                 />
                 <button type="button" className="oa-btn-add-line" onClick={addLigne}>
-                  <Plus size={14} /> Ajouter une ligne
+                  <Plus size={14} /> {t('Ajouter une ligne', 'Manampy tsipika', 'Add a line')}
                 </button>
                 <span className="oa-lines-hint">
-                  (Ajoutez autant de descriptions que nécessaire : WEB, CD, USB, MANOVA...)
+                  {t(
+                    '(Ajoutez autant de descriptions que nécessaire : WEB, CD, USB, MANOVA...)',
+                    '(Ampio fanazavana araka izay ilaina : WEB, CD, USB, MANOVA...)',
+                    '(Add as many descriptions as needed: WEB, CD, USB, MANOVA...)'
+                  )}
                 </span>
               </div>
             </div>
@@ -628,17 +696,17 @@ const OtherAjout = () => {
             {/* TABLEAU FACTURE */}
             <div className="oa-section">
               <h3 className="oa-section-title">
-                <FileText size={18} /> Détail de la facture
+                <FileText size={18} /> {t('Détail de la facture', 'Antsipirian\'ny faktiora', 'Invoice details')}
               </h3>
 
               <div className="oa-facture-table-wrapper">
                 <table className="oa-facture-table">
                   <thead>
                     <tr>
-                      <th>DESCRIPTIONS</th>
+                      <th>{t('DESCRIPTIONS', 'FANAZAVANA', 'DESCRIPTIONS')}</th>
                       <th>U.</th>
                       <th>P.U. (Ar)</th>
-                      <th>MONTANT (Ar)</th>
+                      <th>{t('MONTANT (Ar)', 'VOLA (Ar)', 'AMOUNT (Ar)')}</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -652,7 +720,7 @@ const OtherAjout = () => {
                               type="text"
                               value={ligne.description}
                               onChange={(e) => handleLigneChange(index, 'description', e.target.value)}
-                              placeholder="Ex: RAKOTONAIVO, WEB, CD, USB..."
+                              placeholder={t('Ex: RAKOTONAIVO, WEB, CD, USB...', 'Ohatra: RAKOTONAIVO, WEB, CD, USB...', 'Ex: RAKOTONAIVO, WEB, CD, USB...')}
                               className="oa-input-cell"
                             />
                           </td>
@@ -683,7 +751,7 @@ const OtherAjout = () => {
                               className="oa-btn-remove-line"
                               onClick={() => removeLigne(index)}
                               disabled={lignes.length <= 1}
-                              title="Supprimer cette ligne"
+                              title={t('Supprimer cette ligne', 'Esory io tsipika io', 'Delete this line')}
                             >
                               <Trash2 size={14} />
                             </button>
@@ -704,7 +772,7 @@ const OtherAjout = () => {
                               if (!e.target.checked) setFraisDossierMontant('');
                             }}
                           />
-                          <span>Frais de dossier</span>
+                          <span>{t('Frais de dossier', 'Saram-pandraharahana', 'File fees')}</span>
                         </label>
                       </td>
                       <td>
@@ -742,7 +810,7 @@ const OtherAjout = () => {
                         <td>
                           <input
                             type="text"
-                            value="Pénalité de retard"
+                            value={t('Pénalité de retard', 'Sazy noho ny fahatarana', 'Late penalty')}
                             readOnly
                             className="oa-input-cell oa-input-readonly"
                           />
@@ -776,7 +844,7 @@ const OtherAjout = () => {
 
                     {/* TOTAL */}
                     <tr className="oa-row-total">
-                      <td colSpan={3}>TOTAL</td>
+                      <td colSpan={3}>{t('TOTAL', 'TOTAL', 'TOTAL')}</td>
                       <td className="oa-cell-montant oa-total-value">
                         {formatNumber(total)} Ar
                       </td>
@@ -794,7 +862,7 @@ const OtherAjout = () => {
                     checked={isRetard}
                     onChange={(e) => setIsRetard(e.target.checked)}
                   />
-                  <Clock size={14} /> Appliquer une pénalité de retard
+                  <Clock size={14} /> {t('Appliquer une pénalité de retard', 'Mampihatra sazy noho ny fahatarana', 'Apply a late penalty')}
                 </label>
               </div>
             </div>
@@ -802,41 +870,47 @@ const OtherAjout = () => {
             {/* Récap total */}
             <div className="oa-total-box">
               <div className="oa-total-row">
-                <span><Hash size={14} /> Total à payer</span>
+                <span><Hash size={14} /> {t('Total à payer', 'Vola haloa', 'Total to pay')}</span>
                 <strong>{formatNumber(total)} Ar</strong>
               </div>
               <div className="oa-total-detail">
-                {lignes.length} ligne{lignes.length > 1 ? 's' : ''}
+                {lignes.length} {t('ligne', 'tsipika', 'line')}{lignes.length > 1 ? 's' : ''}
                 {fraisDossierActif && parseNumber(fraisDossierMontant) > 0 &&
-                  ` + ${formatNumber(parseNumber(fraisDossierMontant))} Ar frais`}
-                {isRetard && ` + ${formatNumber(parseNumber(montantRetard))} Ar retard`}
+                  ` + ${formatNumber(parseNumber(fraisDossierMontant))} Ar ${t('frais', 'sara', 'fees')}`}
+                {isRetard && ` + ${formatNumber(parseNumber(montantRetard))} Ar ${t('retard', 'tara', 'late')}`}
               </div>
             </div>
 
-            {/* ✅ QUITTANCE */}
+            {/* QUITTANCE */}
             <div className="oa-section quittance-section">
               <h3 className="oa-section-title">
-                <FileCheck size={18} /> Quittance <span style={{ color: 'red' }}>*</span>
+                <FileCheck size={18} /> {t('Quittance', 'Taratasy', 'Receipt')} <span style={{ color: 'red' }}>*</span>
               </h3>
               <div className="oa-quittance-box">
                 <div className="oa-quittance-display">
-                  <span className="oa-quittance-label">N° Quittance :</span>
+                  <span className="oa-quittance-label">{t('N° Quittance', 'Laharana taratasy', 'Receipt N°')} :</span>
                   <span className="oa-quittance-value">{quittanceInfo.next}</span>
-                  <span className="oa-quittance-hint">(dernier utilisé : {quittanceInfo.last})</span>
+                  <span className="oa-quittance-hint">
+                    ({t('dernier utilisé', 'farany nampiasaina', 'last used')} : {quittanceInfo.last})
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* ✅ PERSONNE QUI REÇOIT */}
+            {/* PERSONNE QUI REÇOIT */}
             <div className="oa-section personne-recu-section">
               <h3 className="oa-section-title">
-                <UserPlus size={18} /> Personne qui reçoit <span style={{ color: 'red' }}>*</span>
+                <UserPlus size={18} /> {t('Personne qui reçoit', 'Mpandray', 'Receiver')} <span style={{ color: 'red' }}>*</span>
               </h3>
               <input
                 type="text"
                 value={personneRecu}
                 onChange={(e) => setPersonneRecu(e.target.value)}
-                placeholder="Saisir le nom de la personne qui reçoit (obligatoire)"
+                placeholder={t(
+                  'Saisir le nom de la personne qui reçoit (obligatoire)',
+                  'Ampidiro ny anaran\'ny mpandray (tsy azo ihodivirana)',
+                  'Enter the receiver name (mandatory)'
+                )}
                 className="oa-personne-recu-input"
                 style={{
                   borderColor: personneRecu.trim() ? '#27ae60' : '#ddd',
@@ -845,7 +919,7 @@ const OtherAjout = () => {
               />
               {personneRecu.trim() && (
                 <div className="oa-personne-recu-ok">
-                  <CheckCircle size={14} /> <strong>{personneRecu}</strong> - Enregistré
+                  <CheckCircle size={14} /> <strong>{personneRecu}</strong> - {t('Enregistré', 'Voatahiry', 'Recorded')}
                 </div>
               )}
             </div>
@@ -865,10 +939,10 @@ const OtherAjout = () => {
   };
 
   const getStepTitle = () => ({
-    1: 'Étape 1 — Identification',
-    2: 'Étape 2 — Représentant',
-    3: 'Étape 3 — Paiement & Facture'
-  }[currentStep] || `Étape ${currentStep}`);
+    1: t('Étape 1 — Identification', 'Dingana 1 — Famantarana', 'Step 1 — Identification'),
+    2: t('Étape 2 — Représentant', 'Dingana 2 — Mpisolo tena', 'Step 2 — Representative'),
+    3: t('Étape 3 — Paiement & Facture', 'Dingana 3 — Fandoavana & Faktiora', 'Step 3 — Payment & Invoice')
+  }[currentStep] || `${t('Étape', 'Dingana', 'Step')} ${currentStep}`);
 
   // ============================================================
   // RENDU PRINCIPAL
@@ -878,13 +952,17 @@ const OtherAjout = () => {
       <div className="oa-wrapper">
         <header className="oa-header">
           <button className="oa-btn-back" onClick={() => navigate('/gere-payer')}>
-            <ArrowLeft size={18} /> Retour
+            <ArrowLeft size={18} /> {t('Retour', 'Hiverina', 'Back')}
           </button>
           <div className="oa-header-title">
             <Package size={24} />
             <div>
-              <h1>Ajout d'usager événementiel</h1>
-              <p>CD, MP3, œuvres web, hologrammes et autres supports</p>
+              <h1>{t("Ajout d'usager événementiel", 'Fanampiana mpanjifa hetsika', 'Add event user')}</h1>
+              <p>{t(
+                'CD, MP3, œuvres web, hologrammes et autres supports',
+                'CD, MP3, asa an-tserasera, holograma sy hafa',
+                'CD, MP3, web works, holograms and other media'
+              )}</p>
             </div>
           </div>
           <div className="oa-header-steps">
@@ -910,35 +988,37 @@ const OtherAjout = () => {
 
         <div className="oa-footer">
           <button type="button" className="oa-btn-secondary" onClick={() => navigate('/gere-payer')}>
-            <X size={16} /> Annuler
+            <X size={16} /> {t('Annuler', 'Foanana', 'Cancel')}
           </button>
           <div className="oa-footer-right">
             {currentStep > 1 && (
               <button type="button" className="oa-btn-secondary" onClick={handlePrev}>
-                <ArrowLeft size={16} /> Précédent
+                <ArrowLeft size={16} /> {t('Précédent', 'Teo aloha', 'Previous')}
               </button>
             )}
             <button type="button" className="oa-btn-primary" onClick={handleNext} disabled={isSubmitting}>
               {currentStep === 3 ? (
-                <><Save size={16} /> Valider</>
+                <><Save size={16} /> {t('Valider', 'Manamarina', 'Validate')}</>
               ) : (
-                <>Suivant <ArrowRight size={16} /></>
+                <>{t('Suivant', 'Manaraka', 'Next')} <ArrowRight size={16} /></>
               )}
             </button>
           </div>
         </div>
       </div>
 
-      {/* ✅ MODAL DE CONFIRMATION */}
+      {/* MODAL DE CONFIRMATION */}
       {showConfirmModal && (
         <div className="oa-modal-overlay" onClick={() => !isSaving && setShowConfirmModal(false)}>
           <div className="oa-modal-confirm" onClick={(e) => e.stopPropagation()}>
             <div className="oa-modal-header">
               <h2>
                 {savingResult ? (
-                  savingResult.success ? <><CheckCircle size={22} /> Succès</> : <><X size={22} /> Erreur</>
+                  savingResult.success
+                    ? <><CheckCircle size={22} /> {t('Succès', 'Fahombiazana', 'Success')}</>
+                    : <><X size={22} /> {t('Erreur', 'Olana', 'Error')}</>
                 ) : (
-                  <><Info size={22} /> Confirmation</>
+                  <><Info size={22} /> {t('Confirmation', 'Fanamarinana', 'Confirmation')}</>
                 )}
               </h2>
               {!isSaving && (
@@ -951,18 +1031,32 @@ const OtherAjout = () => {
             <div className="oa-modal-body">
               {!savingResult && !isSaving && (
                 <>
-                  <p className="oa-confirm-text">Confirmez-vous les actions suivantes ?</p>
+                  <p className="oa-confirm-text">
+                    {t('Confirmez-vous les actions suivantes ?', 'Manamarina ireto hetsika manaraka ireto ve ianao ?', 'Do you confirm the following actions?')}
+                  </p>
                   <ul className="oa-confirm-list">
-                    <li><CheckCircle size={16} color="#27ae60" /> <strong>Ajout d'un usager événementiel</strong> ({TYPES_USAGERS.find(t => t.id === typeUsager)?.label})</li>
-                    <li><CheckCircle size={16} color="#27ae60" /> <strong>Ajout d'un paiement</strong> ({modePaiement === 'mensuel' ? 'Mensuel' : 'Unique'})</li>
-                    <li><CheckCircle size={16} color="#27ae60" /> <strong>Génération d'une facture</strong> (quittance n° {quittanceInfo.next})</li>
+                    <li>
+                      <CheckCircle size={16} color="#27ae60" />{' '}
+                      <strong>{t("Ajout d'un usager événementiel", 'Fanampiana mpanjifa hetsika', 'Add an event user')}</strong>{' '}
+                      ({TYPES_USAGERS.find(tp => tp.id === typeUsager)?.label})
+                    </li>
+                    <li>
+                      <CheckCircle size={16} color="#27ae60" />{' '}
+                      <strong>{t("Ajout d'un paiement", 'Fanampiana fandoavana', 'Add a payment')}</strong>{' '}
+                      ({modePaiement === 'mensuel' ? t('Mensuel', 'Isam-bolana', 'Monthly') : t('Unique', 'Indray mandeha', 'One-time')})
+                    </li>
+                    <li>
+                      <CheckCircle size={16} color="#27ae60" />{' '}
+                      <strong>{t("Génération d'une facture", 'Famokarana faktiora', 'Generate an invoice')}</strong>{' '}
+                      ({t('quittance n°', 'taratasy n°', 'receipt n°')} {quittanceInfo.next})
+                    </li>
                   </ul>
                   <div className="oa-confirm-summary">
-                    <div><span>Usager :</span> <strong>{identification.denomination}</strong></div>
-                    <div><span>Type :</span> <strong>{TYPES_USAGERS.find(t => t.id === typeUsager)?.label}</strong></div>
-                    <div><span>Mode :</span> <strong>{modePaiement === 'mensuel' ? 'Mensuel' : 'Unique'}</strong></div>
-                    <div><span>Lignes :</span> <strong>{lignes.length}</strong></div>
-                    <div><span>Total :</span> <strong className="oa-total-strong">{formatNumber(getTotalGeneral())} Ar</strong></div>
+                    <div><span>{t('Usager', 'Mpanjifa', 'User')} :</span> <strong>{identification.denomination}</strong></div>
+                    <div><span>{t('Type', 'Karazana', 'Type')} :</span> <strong>{TYPES_USAGERS.find(tp => tp.id === typeUsager)?.label}</strong></div>
+                    <div><span>{t('Mode', 'Fomba', 'Mode')} :</span> <strong>{modePaiement === 'mensuel' ? t('Mensuel', 'Isam-bolana', 'Monthly') : t('Unique', 'Indray mandeha', 'One-time')}</strong></div>
+                    <div><span>{t('Lignes', 'Tsipika', 'Lines')} :</span> <strong>{lignes.length}</strong></div>
+                    <div><span>{t('Total', 'Total', 'Total')} :</span> <strong className="oa-total-strong">{formatNumber(getTotalGeneral())} Ar</strong></div>
                   </div>
                 </>
               )}
@@ -970,22 +1064,22 @@ const OtherAjout = () => {
               {isSaving && (
                 <div className="oa-saving">
                   <Clock size={48} className="oa-spin" />
-                  <p>Enregistrement en cours...</p>
+                  <p>{t('Enregistrement en cours...', 'Mitahiry...', 'Saving...')}</p>
                 </div>
               )}
 
               {savingResult && savingResult.success && (
                 <div className="oa-success">
                   <CheckCircle size={56} color="#27ae60" />
-                  <h3>Enregistrement réussi !</h3>
+                  <h3>{t('Enregistrement réussi !', 'Vita ny fitahirizana !', 'Save successful!')}</h3>
                   <ul className="oa-result-list">
-                    <li>✅ Usager événementiel créé (ID: {savingResult.usagerOtherId})</li>
-                    <li>✅ Paiement enregistré ({savingResult.modePaiement})</li>
-                    <li>✅ Facture n° {savingResult.numFacture} générée</li>
-                    <li>✅ Quittance n° {savingResult.quittance}</li>
+                    <li>✅ {t('Usager événementiel créé', 'Mpanjifa hetsika noforonina', 'Event user created')} (ID: {savingResult.usagerOtherId})</li>
+                    <li>✅ {t('Paiement enregistré', 'Voatahiry ny fandoavana', 'Payment recorded')} ({savingResult.modePaiement})</li>
+                    <li>✅ {t('Facture générée', 'Faktiora noforonina', 'Invoice generated')} n° {savingResult.numFacture}</li>
+                    <li>✅ {t('Quittance', 'Taratasy', 'Receipt')} n° {savingResult.quittance}</li>
                   </ul>
                   <p className="oa-result-total">
-                    Total : <strong>{formatNumber(savingResult.soitTotal)} Ar</strong>
+                    {t('Total', 'Total', 'Total')} : <strong>{formatNumber(savingResult.soitTotal)} Ar</strong>
                   </p>
                 </div>
               )}
@@ -993,7 +1087,7 @@ const OtherAjout = () => {
               {savingResult && !savingResult.success && (
                 <div className="oa-error">
                   <X size={56} color="#e74c3c" />
-                  <h3>Erreur</h3>
+                  <h3>{t('Erreur', 'Olana', 'Error')}</h3>
                   <p>{savingResult.message}</p>
                 </div>
               )}
@@ -1003,21 +1097,21 @@ const OtherAjout = () => {
               {!savingResult && !isSaving && (
                 <>
                   <button className="oa-btn-secondary" onClick={() => setShowConfirmModal(false)}>
-                    Annuler
+                    {t('Annuler', 'Foanana', 'Cancel')}
                   </button>
                   <button className="oa-btn-primary" onClick={handleConfirmSave}>
-                    <Save size={16} /> Confirmer
+                    <Save size={16} /> {t('Confirmer', 'Manamarina', 'Confirm')}
                   </button>
                 </>
               )}
               {savingResult && savingResult.success && (
                 <button className="oa-btn-primary" onClick={() => navigate('/gere-payer')}>
-                  <CheckCircle size={16} /> Terminer
+                  <CheckCircle size={16} /> {t('Terminer', 'Vita', 'Finish')}
                 </button>
               )}
               {savingResult && !savingResult.success && (
                 <button className="oa-btn-secondary" onClick={() => setSavingResult(null)}>
-                  Réessayer
+                  {t('Réessayer', 'Andramo indray', 'Retry')}
                 </button>
               )}
             </div>

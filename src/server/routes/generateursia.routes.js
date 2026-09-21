@@ -1,134 +1,254 @@
 // server/routes/generateursia.routes.js
 // ============================================================
-// MODULE IA OMDA - Version améliorée avec recherche profonde
+// MODULE IA OMDA — v12 (multilingue + conversations humaines + graphiques complets)
 // ============================================================
 const express = require('express');
 const router = express.Router();
 const pool = require('../database');
 
-console.log('✅ Routeur IA (generateursia) chargé');
+console.log('✅ Routeur IA (generateursia) chargé - v12');
 
 // ============================================================
-// MOTEUR DE SECOURS (régression manuelle)
+// 🌍 DICTIONNAIRE MULTILINGUE — avec variantes aléatoires
 // ============================================================
-function regressionManuelle(valeurs) {
-  const n = valeurs.length;
-  const xs = valeurs.map((_, i) => i);
-  const sommeX = xs.reduce((a, b) => a + b, 0);
-  const sommeY = valeurs.reduce((a, b) => a + b, 0);
-  const sommeXY = xs.reduce((s, x, i) => s + x * valeurs[i], 0);
-  const sommeX2 = xs.reduce((s, x) => s + x * x, 0);
-  const denom = (n * sommeX2 - sommeX * sommeX) || 1;
-  const slope = (n * sommeXY - sommeX * sommeY) / denom;
-  const intercept = (sommeY - slope * sommeX) / n;
-  return { slope, intercept };
-}
-
-function forecastManuel(valeurs, horizon) {
-  const { slope, intercept } = regressionManuelle(valeurs);
-  const n = valeurs.length;
-  const out = [];
-  for (let i = 0; i < horizon; i++) {
-    out.push(Math.max(0, intercept + slope * (n + i)));
+const LANG = {
+  fr: {
+    greeting_morning: [
+      "Bonjour ! Comment puis-je vous aider aujourd'hui ?",
+      "Bonjour ! Ravi de vous voir. Que puis-je faire pour vous ?",
+      "Salut ! Je suis là pour vous aider. Qu'est-ce qui vous amène ?",
+      "Bonjour ! Prêt à vous assister. Que souhaitez-vous savoir ?",
+      "Bonjour ! Une belle journée pour analyser vos données, non ?"
+    ],
+    greeting_afternoon: [
+      "Bon après-midi ! Que puis-je analyser pour vous ?",
+      "Bonjour ! Comment puis-je vous aider cet après-midi ?",
+      "Bon après-midi ! Prêt à vous aider. Que cherchez-vous ?",
+      "Bonjour ! Que puis-je faire pour vous aujourd'hui ?"
+    ],
+    greeting_evening: [
+      "Bonsoir ! Comment puis-je vous aider ce soir ?",
+      "Bonsoir ! Que puis-je analyser pour vous ?",
+      "Bonsoir ! Prêt à vous assister. Que voulez-vous savoir ?"
+    ],
+    thanks: [
+      "Avec plaisir ! N'hésitez pas si vous avez d'autres questions.",
+      "De rien ! Je suis là pour ça.",
+      "Je vous en prie ! C'était un plaisir de vous aider.",
+      "Avec grand plaisir ! Une autre question ?",
+      "Pas de souci ! N'hésitez pas à revenir."
+    ],
+    bye: [
+      "Au revoir ! Revenez quand vous voulez.",
+      "À bientôt ! Bonne continuation.",
+      "Au revoir ! Passez une excellente journée.",
+      "À la prochaine ! Je reste disponible.",
+      "Au revoir ! N'hésitez pas à revenir me voir."
+    ],
+    howAreYou: [
+      "Je vais très bien, merci ! Comment puis-je vous aider ?",
+      "Tout va bien, merci de demander ! Que puis-je faire pour vous ?",
+      "Excellent, merci ! Prêt à vous assister. Que cherchez-vous ?",
+      "Très bien, merci ! Dites-moi ce dont vous avez besoin.",
+      "Parfaitement bien ! Comment puis-je vous être utile ?"
+    ],
+    whoAreYou: [
+      "Je suis l'assistant intelligent d'OMDA. Je peux vous renseigner sur les usagers, les paiements, les factures, les quittances, les artistes et vous fournir des analyses et prévisions.",
+      "Je suis l'assistant OMDA. Mon rôle : vous aider à explorer les données de la plateforme.",
+      "Assistant OMDA à votre service. Je peux analyser les usagers, paiements, factures, quittances et bien plus.",
+      "Je suis votre assistant OMDA. Posez-moi vos questions sur les données : usagers, paiements, régions, artistes…"
+    ],
+    helpMe: [
+      "Bien sûr ! Voici comment je peux vous aider. Dites-moi ce que vous cherchez, ou choisissez une commande ci-dessous.",
+      "Avec plaisir ! Voici les commandes que je comprends.",
+      "Pas de problème ! Voici la liste de ce que je peux faire pour vous.",
+      "Bien entendu ! Choisissez ce qui vous intéresse dans la liste ci-dessous."
+    ],
+    ok: ["Parfait ! Que puis-je faire pour vous ?", "Très bien. Comment puis-je vous aider ?", "Entendu ! Dites-moi ce dont vous avez besoin."],
+    yes: ["Très bien. Comment puis-je vous aider ?", "Parfait ! Que puis-je faire pour vous ?", "D'accord. Dites-moi ce que vous cherchez."],
+    no: ["Pas de problème. Faites-moi signe si vous avez besoin.", "Très bien. Je reste disponible si besoin.", "Entendu. N'hésitez pas à revenir."],
+    notUnderstood: [
+      "Je n'ai pas bien compris votre demande. Essayez une commande ci-dessous.",
+      "Hmm, je n'ai pas saisi. Voici ce que je peux faire :",
+      "Je n'ai pas compris. Peut-être cherchez-vous l'une de ces commandes ?",
+      "Désolé, je n'ai pas bien saisi. Essayez une de ces options :"
+    ],
+    noResult: ["Aucun résultat trouvé pour", "Je n'ai rien trouvé pour", "Pas de correspondance pour"],
+    usagers: 'usagers', mois: 'mois', quittances: 'quittances', liste: 'Liste',
+    totalImpaye: 'Montant total impayé',
+    region: 'Région'
+  },
+  mg: {
+    greeting_morning: [
+      "Manao ahoana ! Ahoana no ahafahako manampy anao androany ?",
+      "Manao ahoana ! Faly mahita anao. Inona no azoko atao ho anao ?",
+      "Salama ! Eto aho hanampy anao. Inona no tadiavinao ?"
+    ],
+    greeting_afternoon: [
+      "Manao ahoana ! Inona no tianao hojerena ?",
+      "Manao ahoana ! Ahoana no ahafahako manampy anao ?"
+    ],
+    greeting_evening: [
+      "Manao ahoana ! Ahoana ny fanampiana anao anio hariva ?",
+      "Manao ahoana ! Eto aho hanampy anao."
+    ],
+    thanks: [
+      "Faly aho ! Aza misalasala mangataka fanazavana.",
+      "Tsy misy olana ! Eto aho hanampy anao.",
+      "Misaotra anao koa ! Misy fanontaniana hafa ve ?"
+    ],
+    bye: ["Veloma ! Miverena rehefa tianao.", "Mandrapihaona ! Mirary soa.", "Veloma ! Eto foana aho raha mila fanampiana."],
+    howAreYou: ["Manao ahoana tsara aho, misaotra !", "Salama tsara aho, misaotra !", "Tsara ny zava-drehetra !"],
+    whoAreYou: ["Izaho no mpanampy manan-tsaina an'ny OMDA.", "Mpanampy OMDA aho.", "Mpanampy OMDA eto."],
+    helpMe: ["Mazava ho azy ! Indro ny fomba ahafahako manampy.", "Faly aho ! Indro ny baiko azoko atao.", "Tsy misy olana ! Indro ny lisitra."],
+    ok: ["Tsara ! Inona no azoko atao ho anao ?", "Mazava ! Lazao ahy izay mila fanampiana.", "Eny ary ! Inona no tadiavinao ?"],
+    yes: ["Tsara. Ahoana no ahafahako manampy anao ?", "Mazava ! Inona no tadiavinao ?"],
+    no: ["Tsy maninona. Antsoy aho raha mila fanampiana.", "Mazava. Eto aho raha mila zavatra."],
+    notUnderstood: ["Tsy azoko tsara ny fangatahanao.", "Hmm, tsy azoko tsara. Indro izay azoko atao :"],
+    noResult: ["Tsy misy valiny ho an'ny", "Tsy nahita na inona na inona aho ho an'ny"],
+    usagers: 'mpampiasa', mois: 'volana', quittances: 'taratasy', liste: 'Lisitra',
+    totalImpaye: 'Vola tsy voaloa',
+    region: 'Faritra'
+  },
+  en: {
+    greeting_morning: [
+      "Good morning! How can I help you today?",
+      "Good morning! Glad to see you.",
+      "Hi there! I'm here to help."
+    ],
+    greeting_afternoon: ["Good afternoon! What would you like to analyze?", "Hello! How can I help you this afternoon?"],
+    greeting_evening: ["Good evening! How can I help you tonight?", "Good evening! Ready to assist."],
+    thanks: ["You're welcome! Feel free to ask more questions.", "My pleasure! I'm here for that.", "Anytime! Let me know if you need more."],
+    bye: ["Goodbye! Come back anytime.", "See you soon! Have a great day.", "Take care!"],
+    howAreYou: ["I'm doing very well, thanks! How can I help you?", "All good, thanks for asking!", "Doing great! What do you need?"],
+    whoAreYou: ["I'm the OMDA smart assistant.", "I'm the OMDA assistant. My job: help you explore the platform data.", "OMDA assistant at your service."],
+    helpMe: ["Of course! Here's how I can help.", "With pleasure! Here are the commands I understand.", "No problem! Here's what I can do for you."],
+    ok: ["Perfect! What can I do for you?", "Very well. How can I help you?", "Got it!"],
+    yes: ["Very well. How can I help you?", "Perfect! What can I do for you?"],
+    no: ["No problem. Let me know if you need anything.", "Alright. I'm here if needed."],
+    notUnderstood: ["I didn't quite understand your request.", "Hmm, I didn't catch that. Here's what I can do:"],
+    noResult: ["No results found for", "Nothing found for"],
+    usagers: 'users', mois: 'months', quittances: 'receipts', liste: 'List',
+    totalImpaye: 'Total unpaid amount',
+    region: 'Region'
   }
-  return out;
+};
+
+// ✅ Choix de variante aléatoire
+function t(lang, key) {
+  const valeur = (LANG[lang] && LANG[lang][key]) || LANG.fr[key] || key;
+  if (Array.isArray(valeur)) {
+    return valeur[Math.floor(Math.random() * valeur.length)];
+  }
+  return valeur;
 }
 
-const calculateStandardDeviation = (arr) => {
-  if (!arr || arr.length === 0) return 0;
-  const mean = arr.reduce((s, v) => s + v, 0) / arr.length;
-  const variance = arr.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / arr.length;
-  return Math.sqrt(variance);
-};
+// ============================================================
+// 🌍 DÉTECTION LANGUE
+// ============================================================
+function detecterLangue(message) {
+  if (!message) return 'fr';
+  const msg = message.toLowerCase().trim();
+  const motsMG = ['salama', 'manao ahoana', 'akory', 'misaotra', 'azafady',
+    'mpampiasa', 'tara', 'vola', 'faritra', 'sokajy', 'lisitra',
+    'fanadihadiana', 'fahombiazana', 'soso-kevitra', 'inona', 'ahoana',
+    'tsara', 'ratsy', 'ny', 'sy', 'voaloa', 'tsy voaloa', 'fitambarany',
+    'veloma', 'manampy', 'tianao', 'hitady', 'mitady', 'lazao', 'taham',
+    'sata', 'mpandoa', 'mpihira', 'hetsika', 'firy', 'isa', 'rehetra',
+    'vaovao', 'ankapobeny', 'fironana', 'vinavina', 'fampandrenesana',
+    'tetikasa', 'tantara', 'faktiora', 'taratasy', 'atahorana', 'mafy'];
+  const motsEN = ['hello', 'hi', 'hey', 'good morning', 'good evening',
+    'thanks', 'thank', 'please', 'users', 'late', 'payers', 'best', 'worst',
+    'top', 'region', 'category', 'list', 'show', 'give', 'performance',
+    'forecast', 'suggestions', 'plan', 'alerts', 'success', 'the', 'and',
+    'with', 'for', 'from', 'all', 'detail', 'status', 'invoice', 'receipt',
+    'search', 'find', 'artist', 'artists', 'payment', 'payments', 'amount',
+    'count', 'how', 'what', 'when', 'where', 'money', 'report', 'risk', 'critical'];
+  let scoreMG = 0, scoreEN = 0;
+  for (const m of motsMG) if (msg.includes(m)) scoreMG++;
+  for (const m of motsEN) if (msg.includes(m)) scoreEN++;
+  if (scoreMG > scoreEN && scoreMG > 0) return 'mg';
+  if (scoreEN > scoreMG && scoreEN > 0) return 'en';
+  return 'fr';
+}
 
 // ============================================================
-// CONSTANTES
+// 🧠 NORMALISATION
 // ============================================================
-const TYPE_LABELS = {
-  hotel: 'Hôtel',
-  'grand-surface': 'Grande Surface',
-  media: 'Télé/Radio',
-  occ: 'OCC',
-  bus: 'Bus',
-  nightclub: 'Night Club'
-};
-
-const USAGER_TABLES = {
-  hotel: 'usagers_hotel',
-  'grand-surface': 'usagers_magasin',
-  media: 'usagers_media',
-  occ: 'usagers_occasionnel',
-  bus: 'usagers_bus',
-  nightclub: 'usagers_nightclub'
-};
-
-const MOIS_LABELS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-
-const MOIS_LABELS_SHORT = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin',
-  'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+function normaliser(texte) {
+  if (!texte) return '';
+  return texte.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[?!.,;:'"()]/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+function normaliserRecherche(texte) {
+  if (!texte) return '';
+  return texte.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 // ============================================================
-// COLLECTE COMPLÈTE DES DONNÉES
+// 🎨 HELPERS
+// ============================================================
+const fmtN = (n) => Math.round(n || 0).toLocaleString('fr-FR');
+
+function listeUsagersTexte(usagers, langue, { max = 30 } = {}) {
+  if (!usagers || usagers.length === 0) {
+    return `   (${langue === 'mg' ? 'Tsy misy angona' : langue === 'en' ? 'No data' : 'Aucune donnée'})`;
+  }
+  return usagers.slice(0, max).map((u, i) => {
+    const statutTxt = u.statut === 'bon-payeur' ? 'Bon payeur'
+      : u.statut === 'payeur-moyen' ? 'Payeur moyen'
+      : u.statut === 'mauvais-payeur' ? 'Mauvais payeur'
+      : 'Non payeur';
+    return `${i + 1}) ${u.denomination}\n` +
+           `   Région : ${u.region} | ${u.typeLabel} | ${u.nbMoisPayes}/12 mois\n` +
+           `   Payé : ${fmtN(u.montantPaye)} Ar | Statut : ${statutTxt}${u.telephone ? ` | Tél : ${u.telephone}` : ''}`;
+  }).join('\n\n');
+}
+function listeGenerique(items, { max = 30 } = {}) {
+  if (!items || items.length === 0) return '   (aucun élément)';
+  return items.slice(0, max).map((it, i) => `${i + 1}) ${it}`).join('\n');
+}
+
+// ============================================================
+// 📥 COLLECTE
 // ============================================================
 async function collecterDonneesCompletes() {
-  const data = {
-    usagers: {},
-    paiements: [],
-    factures: [],
-    quittances: [],
-    regions: [],
-    artistesCount: 0,
-    utilisateursActifs: 0
+  const data = { usagers: {}, paiements: [], factures: [], quittances: [], regions: [], artistesCount: 0, utilisateursActifs: 0 };
+  const USAGER_TABLES = {
+    hotel: 'usagers_hotel', 'grand-surface': 'usagers_magasin',
+    media: 'usagers_media', occ: 'usagers_occasionnel',
+    bus: 'usagers_bus', nightclub: 'usagers_nightclub'
   };
-
   for (const [type, table] of Object.entries(USAGER_TABLES)) {
-    try {
-      const r = await pool.query(`SELECT * FROM ${table}`);
-      data.usagers[type] = r.rows;
-    } catch (e) {
-      data.usagers[type] = [];
-    }
+    try { data.usagers[type] = (await pool.query(`SELECT * FROM ${table}`)).rows; }
+    catch (e) { data.usagers[type] = []; }
   }
-
+  try { data.paiements = (await pool.query(`SELECT * FROM paiements ORDER BY created_at DESC`)).rows; } catch (e) {}
   try {
-    const r = await pool.query(`SELECT * FROM paiements ORDER BY created_at DESC`);
-    data.paiements = r.rows;
-  } catch (e) {
-    try {
-      const r2 = await pool.query(`SELECT * FROM omda_app.paiements ORDER BY created_at DESC`);
-      data.paiements = r2.rows;
-    } catch (e2) {
-      console.log('⚠️ Table paiements indisponible');
-    }
-  }
-
-  try {
-    const r = await pool.query(`SELECT * FROM facture_usager ORDER BY created_at DESC`);
-    data.factures = r.rows;
-    data.quittances = r.rows.filter(f => f.quittance);
-  } catch (e) {
-    console.log('⚠️ Table facture_usager indisponible');
-  }
-
-  try {
-    const r = await pool.query(`SELECT * FROM regions ORDER BY nom`);
-    data.regions = r.rows;
-  } catch (e) { /* ignore */ }
-
-  try {
-    const r = await pool.query(`SELECT COUNT(*) as total FROM artistes`);
-    data.artistesCount = parseInt(r.rows[0]?.total) || 0;
-  } catch (e) { /* ignore */ }
-
-  try {
-    const r = await pool.query(`SELECT COUNT(*) as total FROM utilisateurs WHERE statut = 'actif'`);
-    data.utilisateursActifs = parseInt(r.rows[0]?.total) || 0;
-  } catch (e) { /* ignore */ }
-
+    data.factures = (await pool.query(`SELECT * FROM facture_usager ORDER BY created_at DESC`)).rows;
+    data.quittances = data.factures.filter(f => f.quittance);
+  } catch (e) {}
+  try { data.regions = (await pool.query(`SELECT * FROM regions ORDER BY nom`)).rows; } catch (e) {}
+  try { data.artistesCount = parseInt((await pool.query(`SELECT COUNT(*) as total FROM artistes`)).rows[0]?.total) || 0; } catch (e) {}
+  try { data.utilisateursActifs = parseInt((await pool.query(`SELECT COUNT(*) AS total FROM utilisateurs WHERE statut = 'actif'`)).rows[0]?.total) || 0; } catch (e) {}
   return data;
 }
 
+const TYPE_LABELS = {
+  hotel: 'Hôtel', 'grand-surface': 'Grande Surface', media: 'Télé/Radio',
+  occ: 'OCC', bus: 'Bus', nightclub: 'Night Club'
+};
+
+const MOIS_SHORT = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+
+// ============================================================
+// 📅 EXTRAIRE LES DONNÉES MENSUELLES (crucial pour les graphiques)
+// ============================================================
 function extraireDonneesMensuelles(paiements) {
   const mois = {};
   paiements.forEach(p => {
@@ -147,151 +267,117 @@ function extraireDonneesMensuelles(paiements) {
 }
 
 // ============================================================
-// ✅ NOUVEAU : ANALYSE DÉTAILLÉE DES USAGERS
+// 📉 RÉGRESSION LINÉAIRE
 // ============================================================
+function regressionManuelle(valeurs) {
+  const n = valeurs.length;
+  if (n < 2) return { slope: 0, intercept: 0, r2: 0 };
+  const xs = valeurs.map((_, i) => i);
+  const sX = xs.reduce((a, b) => a + b, 0);
+  const sY = valeurs.reduce((a, b) => a + b, 0);
+  const sXY = xs.reduce((s, x, i) => s + x * valeurs[i], 0);
+  const sX2 = xs.reduce((s, x) => s + x * x, 0);
+  const denom = (n * sX2 - sX * sX) || 1;
+  const slope = (n * sXY - sX * sY) / denom;
+  const intercept = (sY - slope * sX) / n;
+  const moyY = sY / n;
+  let sst = 0, sse = 0;
+  for (let i = 0; i < n; i++) {
+    const p = intercept + slope * xs[i];
+    sst += Math.pow(valeurs[i] - moyY, 2);
+    sse += Math.pow(valeurs[i] - p, 2);
+  }
+  const r2 = sst === 0 ? 0 : 1 - sse / sst;
+  return { slope, intercept, r2 };
+}
+function forecastManuel(valeurs, horizon) {
+  const { slope, intercept } = regressionManuelle(valeurs);
+  const n = valeurs.length;
+  const out = [];
+  for (let i = 0; i < horizon; i++) {
+    out.push(Math.max(0, intercept + slope * (n + i)));
+  }
+  return out;
+}
+const calculateStandardDeviation = (arr) => {
+  if (!arr || arr.length === 0) return 0;
+  const mean = arr.reduce((s, v) => s + v, 0) / arr.length;
+  return Math.sqrt(arr.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / arr.length);
+};
 
-/**
- * Retourne tous les usagers avec leur statut de paiement pour une année donnée
- */
+// ============================================================
+// 🔎 ANALYSE
+// ============================================================
 async function analyserUsagersParAnnee(annee = null) {
   const anneeCible = annee || new Date().getFullYear();
   const data = await collecterDonneesCompletes();
-  const usagersAvecStatut = [];
+  const result = [];
 
   for (const [type, usagers] of Object.entries(data.usagers)) {
-    const paiementsType = data.paiements.filter(
-      p => p.usager_type === type && p.statut === 'paye' && p.annee === anneeCible
-    );
-
-    for (const usager of usagers) {
-      const paiementsUsager = paiementsType.filter(p => p.usager_id === usager.id);
-      const moisPayes = paiementsUsager.map(p => p.mois).sort((a, b) => a - b);
-      const montantPaye = paiementsUsager.reduce(
-        (s, p) => s + (parseFloat(p.montant) || 0), 0
-      );
-
+    const pType = data.paiements.filter(p => p.usager_type === type && p.statut === 'paye' && p.annee === anneeCible);
+    for (const u of usagers) {
+      const pU = pType.filter(p => p.usager_id === u.id);
+      const moisPayes = pU.map(p => p.mois).sort((a, b) => a - b);
+      const montantPaye = pU.reduce((s, p) => s + (parseFloat(p.montant) || 0), 0);
       const nbMois = moisPayes.length;
       let statut = 'non-payeur';
       if (nbMois >= 12) statut = 'bon-payeur';
       else if (nbMois >= 6) statut = 'payeur-moyen';
       else if (nbMois > 0) statut = 'mauvais-payeur';
 
-      usagersAvecStatut.push({
-        id: usager.id,
-        type,
-        typeLabel: TYPE_LABELS[type] || type,
-        denomination: usager.denomination || usager.nom_evenement || usager.genre_manifestation || 'Sans nom',
-        demandeur: usager.demandeur || usager.organisateurs || usager.representant_par || '',
-        telephone: usager.telephone || '',
-        email: usager.email || '',
-        region: usager.region || 'N/A',
-        adresse: usager.adresse_siege || usager.adresse || '',
-        montantMensuel: parseFloat(usager.montant_mensuel) || 0,
-        moisPayes,
-        nbMoisPayes: nbMois,
-        moisRestants: 12 - nbMois,
-        montantPaye,
-        statut,
-        annee: anneeCible,
+      result.push({
+        id: u.id, type, typeLabel: TYPE_LABELS[type] || type,
+        denomination: u.denomination || u.nom_evenement || u.genre_manifestation || 'Sans nom',
+        demandeur: u.demandeur || u.organisateurs || u.representant_par || '',
+        telephone: u.telephone || '', email: u.email || '',
+        region: u.region || 'N/A',
+        adresse: u.adresse_siege || u.adresse || '',
+        montantMensuel: parseFloat(u.montant_mensuel) || 0,
+        moisPayes, moisPayesLabels: moisPayes.map(m => MOIS_SHORT[m - 1]),
+        nbMoisPayes: nbMois, moisRestants: 12 - nbMois,
+        montantPaye, statut, annee: anneeCible,
         tauxPaiement: Math.round((nbMois / 12) * 100)
       });
     }
   }
-
-  return usagersAvecStatut;
+  return result;
 }
 
-/**
- * Retourne les usagers en retard pour une année
- */
-async function getUsagersEnRetard(annee = null, type = null) {
-  const usagers = await analyserUsagersParAnnee(annee);
-  let enRetard = usagers.filter(u => u.statut !== 'bon-payeur');
-  if (type) enRetard = enRetard.filter(u => u.type === type);
-  return enRetard.sort((a, b) => a.nbMoisPayes - b.nbMoisPayes);
+async function getUsagersEnRetard(annee = null) {
+  const u = await analyserUsagersParAnnee(annee);
+  return u.filter(x => x.statut !== 'bon-payeur' && x.nbMoisPayes < 12)
+    .sort((a, b) => a.nbMoisPayes - b.nbMoisPayes);
 }
-
-/**
- * Retourne les meilleurs payeurs
- */
-async function getMeilleursPayeurs(annee = null, limit = 10) {
-  const usagers = await analyserUsagersParAnnee(annee);
-  return usagers
+async function getMeilleursPayeurs(annee = null, limit = 20) {
+  return (await analyserUsagersParAnnee(annee))
     .filter(u => u.nbMoisPayes > 0)
     .sort((a, b) => b.nbMoisPayes - a.nbMoisPayes || b.montantPaye - a.montantPaye)
     .slice(0, limit);
 }
-
-/**
- * Retourne les pires payeurs
- */
-async function getPiresPayeurs(annee = null, limit = 10) {
-  const usagers = await analyserUsagersParAnnee(annee);
-  return usagers
-    .sort((a, b) => a.nbMoisPayes - b.nbMoisPayes || a.montantPaye - b.montantPaye)
-    .slice(0, limit);
-}
-
-/**
- * Recherche un usager par nom, téléphone, email
- */
-async function rechercherUsagers(critere) {
-  const usagers = await analyserUsagersParAnnee();
-  const terme = critere.toLowerCase().trim();
-
-  return usagers.filter(u =>
-    (u.denomination || '').toLowerCase().includes(terme) ||
-    (u.demandeur || '').toLowerCase().includes(terme) ||
-    (u.telephone || '').includes(terme) ||
-    (u.email || '').toLowerCase().includes(terme) ||
-    (u.region || '').toLowerCase().includes(terme)
-  ).slice(0, 20);
-}
-
-/**
- * Analyse d'un usager spécifique (par ID et type)
- */
-async function analyserUsagerSpecifique(usagerId, type) {
-  const usagers = await analyserUsagersParAnnee();
-  const usager = usagers.find(u => u.id === parseInt(usagerId) && u.type === type);
-  if (!usager) return null;
-
-  // Récupérer tous les paiements
-  const paiements = await pool.query(
-    `SELECT * FROM paiements WHERE usager_id = $1 AND usager_type = $2 ORDER BY annee, mois`,
-    [usagerId, type]
-  ).catch(() => ({ rows: [] }));
-
-  // Récupérer les factures
-  const factures = await pool.query(
-    `SELECT * FROM facture_usager WHERE ref_usager = $1 ORDER BY created_at DESC LIMIT 10`,
-    [usagerId]
-  ).catch(() => ({ rows: [] }));
-
-  return {
-    ...usager,
-    paiementsDetail: paiements.rows,
-    factures: factures.rows
-  };
-}
-
-/**
- * Top usagers par montant payé
- */
-async function getTopMontants(annee = null, limit = 10) {
-  const usagers = await analyserUsagersParAnnee(annee);
-  return usagers
+async function getTopMontants(annee = null, limit = 15) {
+  return (await analyserUsagersParAnnee(annee))
     .filter(u => u.montantPaye > 0)
     .sort((a, b) => b.montantPaye - a.montantPaye)
     .slice(0, limit);
 }
+async function rechercherUsagers(critere) {
+  const usagers = await analyserUsagersParAnnee();
+  const terme = normaliserRecherche(critere || '');
+  if (terme.length < 2) return [];
+  const mots = terme.split(' ').filter(m => m.length >= 2);
+  return usagers.filter(u => {
+    const haystack = normaliserRecherche(
+      `${u.denomination || ''} ${u.demandeur || ''} ${u.telephone || ''} ${u.email || ''} ${u.region || ''} ${u.typeLabel || ''}`
+    );
+    return mots.every(mot => haystack.includes(mot));
+  }).slice(0, 30);
+}
 
 // ============================================================
-// CONSTRUCTION DU DIAGNOSTIC (existant + enrichi)
+// 🧩 DIAGNOSTIC — VERSION COMPLÈTE (avec données mensuelles + forecast)
 // ============================================================
 async function construireDiagnostic() {
   const data = await collecterDonneesCompletes();
-
   const categories = {};
   let totalUsagers = 0;
   let totalUsagersPayes = 0;
@@ -306,42 +392,54 @@ async function construireDiagnostic() {
       total: usagers.length,
       payes: usagersPayesIds.size,
       nonPayes: Math.max(0, usagers.length - usagersPayesIds.size),
-      tauxPaiement: usagers.length > 0
-        ? Number(((usagersPayesIds.size / usagers.length) * 100).toFixed(1))
-        : 0,
-      montantTotal: Number(montantType.toFixed(2)),
-      nouveaux: usagers.filter(u => {
-        if (!u.created_at) return false;
-        const days = (Date.now() - new Date(u.created_at).getTime()) / 86400000;
-        return days <= 30;
-      }).length
+      tauxPaiement: usagers.length > 0 ? Number(((usagersPayesIds.size / usagers.length) * 100).toFixed(1)) : 0,
+      montantTotal: Number(montantType.toFixed(2))
     };
-
     totalUsagers += usagers.length;
     totalUsagersPayes += usagersPayesIds.size;
   }
 
-  const tauxGlobal = totalUsagers > 0
-    ? Number(((totalUsagersPayes / totalUsagers) * 100).toFixed(1))
-    : 0;
-  const montantGlobalPaye = data.paiements
-    .filter(p => p.statut === 'paye')
-    .reduce((s, p) => s + (parseFloat(p.montant) || 0), 0);
+  const tauxGlobal = totalUsagers > 0 ? Number(((totalUsagersPayes / totalUsagers) * 100).toFixed(1)) : 0;
+  const montantGlobalPaye = data.paiements.filter(p => p.statut === 'paye').reduce((s, p) => s + (parseFloat(p.montant) || 0), 0);
 
-  const donneesMensuelles = extraireDonneesMensuelles(data.paiements.filter(p => p.statut === 'paye'));
+  const regionsMap = {};
+  data.quittances.forEach(q => {
+    const r = q.region_usager || 'Non spécifié';
+    if (!regionsMap[r]) regionsMap[r] = { region: r, nbQuittances: 0, montant: 0 };
+    regionsMap[r].nbQuittances += 1;
+    regionsMap[r].montant += parseFloat(q.soit_total) || 0;
+  });
+  const parRegion = Object.values(regionsMap)
+    .map(r => ({ ...r, montant: Number(r.montant.toFixed(2)) }))
+    .sort((a, b) => b.montant - a.montant);
+
+  const quittancesNonValidees = data.factures.filter(f => f.quittance && f.quittance_validee === false).length;
+
+  // ─── STATS USAGERS ───
+  const usagersStatut = await analyserUsagersParAnnee();
+  const statsStatut = {
+    bonPayeur: usagersStatut.filter(u => u.statut === 'bon-payeur').length,
+    payeurMoyen: usagersStatut.filter(u => u.statut === 'payeur-moyen').length,
+    mauvaisPayeur: usagersStatut.filter(u => u.statut === 'mauvais-payeur').length,
+    nonPayeur: usagersStatut.filter(u => u.statut === 'non-payeur').length
+  };
+
+  // ✅ DONNÉES MENSUELLES (pour les graphiques)
+  const paiementsPayes = data.paiements.filter(p => p.statut === 'paye');
+  const donneesMensuelles = extraireDonneesMensuelles(paiementsPayes);
   let tendance = null;
   let forecast = [];
   let ecartType = 0;
 
   if (donneesMensuelles.length >= 3) {
     const montants = donneesMensuelles.map(d => d.montant);
-    const regression = regressionManuelle(montants);
+    const reg = regressionManuelle(montants);
     const base = montants[0] || 1;
     tendance = {
-      pente: regression.slope,
-      intercept: regression.intercept,
-      direction: regression.slope > 0 ? 'croissance' : (regression.slope < 0 ? 'décroissance' : 'stable'),
-      pourcentage: Number(((regression.slope / base) * 100).toFixed(1))
+      pente: reg.slope,
+      intercept: reg.intercept,
+      direction: reg.slope > 0 ? 'croissance' : (reg.slope < 0 ? 'décroissance' : 'stable'),
+      pourcentage: Number(((reg.slope / base) * 100).toFixed(1))
     };
     forecast = forecastManuel(montants, 6).map(v => Math.max(0, Math.round(v)));
     ecartType = Number(calculateStandardDeviation(montants).toFixed(2));
@@ -358,28 +456,11 @@ async function construireDiagnostic() {
   }
 
   const anneeActuelle = new Date().getFullYear();
-  const totalAnneeActuelle = donneesMensuelles
-    .filter(d => d.annee === anneeActuelle)
-    .reduce((s, d) => s + d.montant, 0);
-  const totalAnneePrecedente = donneesMensuelles
-    .filter(d => d.annee === anneeActuelle - 1)
-    .reduce((s, d) => s + d.montant, 0);
+  const totalAnneeActuelle = donneesMensuelles.filter(d => d.annee === anneeActuelle).reduce((s, d) => s + d.montant, 0);
+  const totalAnneePrecedente = donneesMensuelles.filter(d => d.annee === anneeActuelle - 1).reduce((s, d) => s + d.montant, 0);
   const croissanceAnnuelle = totalAnneePrecedente > 0
     ? Number((((totalAnneeActuelle - totalAnneePrecedente) / totalAnneePrecedente) * 100).toFixed(1))
     : null;
-
-  const regionsMap = {};
-  data.quittances.forEach(q => {
-    const region = q.region_usager || 'Non spécifié';
-    if (!regionsMap[region]) regionsMap[region] = { region, nbQuittances: 0, montant: 0 };
-    regionsMap[region].nbQuittances += 1;
-    regionsMap[region].montant += parseFloat(q.soit_total) || 0;
-  });
-  const parRegion = Object.values(regionsMap)
-    .map(r => ({ ...r, montant: Number(r.montant.toFixed(2)) }))
-    .sort((a, b) => b.montant - a.montant);
-
-  const quittancesNonValidees = data.factures.filter(f => f.quittance && f.quittance_validee === false).length;
 
   let objectifTaux;
   if (tauxGlobal < 50) objectifTaux = 50;
@@ -387,178 +468,96 @@ async function construireDiagnostic() {
   else if (tauxGlobal < 90) objectifTaux = 90;
   else objectifTaux = 100;
 
-  // ✅ NOUVEAU : Statistiques de performance par usager
-  const usagersStatut = await analyserUsagersParAnnee();
-  const statsStatut = {
-    bonPayeur: usagersStatut.filter(u => u.statut === 'bon-payeur').length,
-    payeurMoyen: usagersStatut.filter(u => u.statut === 'payeur-moyen').length,
-    mauvaisPayeur: usagersStatut.filter(u => u.statut === 'mauvais-payeur').length,
-    nonPayeur: usagersStatut.filter(u => u.statut === 'non-payeur').length
-  };
-
-  // ============================================================
-  // ALERTES
-  // ============================================================
+  // ─── ALERTES ───
   const alertes = [];
-
   if (tauxGlobal < 50 && totalUsagers > 0) {
     alertes.push({
-      id: 'taux-critique',
-      type: 'critique',
-      priorite: 1,
+      id: 'taux-critique', type: 'critique', priorite: 1,
       titre: 'Taux de paiement global critique',
-      message: `Seulement ${tauxGlobal}% des usagers (${totalUsagersPayes}/${totalUsagers}) sont à jour.`,
+      message: `Seulement ${tauxGlobal}% (${totalUsagersPayes}/${totalUsagers}) à jour.`,
       plan: [
-        { etape: 'Identifier les usagers en retard par catégorie et région', delai: 'Cette semaine' },
-        { etape: 'Envoyer des relances (SMS/email/courrier) aux usagers en retard', delai: '3 à 5 jours' },
-        { etape: 'Prioriser les visites terrain pour les gros montants impayés', delai: '2 semaines' },
-        { etape: 'Mettre en place un suivi hebdomadaire du taux de paiement', delai: 'Immédiat' }
-      ],
-      action: 'relance-globale'
+        { etape: 'Identifier les retardataires', delai: 'Cette semaine' },
+        { etape: 'Envoyer des relances', delai: '3-5 jours' }
+      ]
     });
   } else if (tauxGlobal < 70 && totalUsagers > 0) {
     alertes.push({
-      id: 'taux-moyen',
-      type: 'warning',
-      priorite: 2,
+      id: 'taux-moyen', type: 'warning', priorite: 2,
       titre: 'Taux de paiement à améliorer',
-      message: `${tauxGlobal}% de taux de paiement global — objectif : ${objectifTaux}%.`,
+      message: `${tauxGlobal}% — objectif ${objectifTaux}%.`,
       plan: [
-        { etape: 'Analyser les catégories les plus en retard', delai: '1 semaine' },
-        { etape: 'Automatiser les rappels de paiement', delai: '2 semaines' }
-      ],
-      action: 'relance-globale'
+        { etape: 'Analyser catégories en retard', delai: '1 semaine' },
+        { etape: 'Automatiser les rappels', delai: '2 semaines' }
+      ]
     });
   }
-
   Object.entries(categories).forEach(([type, c]) => {
     if (c.total > 0 && c.tauxPaiement < 40) {
       alertes.push({
-        id: `cat-${type}`,
-        type: 'warning',
-        priorite: 2,
+        id: `cat-${type}`, type: 'warning', priorite: 2,
         titre: `${c.label} : taux faible (${c.tauxPaiement}%)`,
-        message: `${c.payes}/${c.total} usagers à jour.`,
+        message: `${c.payes}/${c.total} à jour.`,
         plan: [
-          { etape: `Extraire la liste des usagers ${c.label} en retard`, delai: '2 jours' },
-          { etape: `Contacter individuellement les responsables ${c.label}`, delai: '1 semaine' },
-          { etape: 'Proposer un échéancier de paiement si nécessaire', delai: '2 semaines' }
-        ],
-        action: 'voir-usagers',
-        categorie: type
+          { etape: `Extraire ${c.label} en retard`, delai: '2 jours' },
+          { etape: `Contacter responsables`, delai: '1 semaine' }
+        ]
       });
     }
   });
-
-  parRegion.forEach(r => {
-    if (r.nbQuittances >= 5 && r.montant < 100000) {
-      alertes.push({
-        id: `region-${r.region}`,
-        type: 'info',
-        priorite: 3,
-        titre: `Région ${r.region} sous-performante`,
-        message: `${r.nbQuittances} quittances pour ${Math.round(r.montant).toLocaleString()} Ar.`,
-        plan: [
-          { etape: `Planifier une mission de prospection à ${r.region}`, delai: '1 mois' },
-          { etape: 'Vérifier la présence d\'un correspondant régional actif', delai: '1 semaine' }
-        ],
-        action: 'mission',
-        region: r.region
-      });
-    }
-  });
-
   if (tendance && tendance.pente < 0) {
     alertes.push({
-      id: 'tendance-baisse',
-      type: 'warning',
-      priorite: 1,
-      titre: 'Tendance des revenus à la baisse',
-      message: `Baisse estimée de ${Math.abs(tendance.pourcentage)}% sur la période.`,
+      id: 'tendance-baisse', type: 'warning', priorite: 1,
+      titre: 'Tendance revenus à la baisse',
+      message: `Baisse ${Math.abs(tendance.pourcentage)}%.`,
       plan: [
-        { etape: 'Comparer les revenus mois par mois pour isoler la cause', delai: '3 jours' },
-        { etape: 'Vérifier si la baisse est concentrée sur une région ou catégorie', delai: '1 semaine' },
-        { etape: 'Ajuster la stratégie de relance en conséquence', delai: '2 semaines' }
-      ],
-      action: 'analyser-tendance'
+        { etape: 'Comparer mois/mois', delai: '3 jours' },
+        { etape: 'Ajuster stratégie', delai: '2 semaines' }
+      ]
     });
   }
-
   if (quittancesNonValidees > 0) {
     alertes.push({
-      id: 'quittances-non-validees',
-      type: 'warning',
-      priorite: 2,
+      id: 'quittances-non-validees', type: 'warning', priorite: 2,
       titre: `${quittancesNonValidees} quittance(s) non validée(s)`,
-      message: 'Des quittances émises n\'ont pas encore été validées.',
+      message: 'À valider rapidement.',
       plan: [
-        { etape: 'Lister les quittances en attente de validation', delai: '1 jour' },
-        { etape: 'Valider ou corriger chaque quittance en attente', delai: '3 jours' }
-      ],
-      action: 'voir-quittances'
+        { etape: 'Lister', delai: '1 jour' },
+        { etape: 'Valider', delai: '3 jours' }
+      ]
     });
   }
-
   alertes.sort((a, b) => a.priorite - b.priorite);
 
-  // ============================================================
-  // SUCCÈS
-  // ============================================================
+  // ─── SUCCÈS ───
   const succes = [];
-  if (tauxGlobal >= 70) {
-    succes.push({
-      titre: 'Bon taux de paiement global',
-      message: `${tauxGlobal}% des usagers sont à jour.`
-    });
+  if (tauxGlobal >= 70) succes.push({ titre: 'Bon taux global', message: `${tauxGlobal}% à jour.` });
+  if (tendance && tendance.pente > 0) succes.push({ titre: 'Croissance', message: `+${tendance.pourcentage}%.` });
+  const meilleureCat = Object.entries(categories).filter(([, c]) => c.total > 0).sort((a, b) => b[1].tauxPaiement - a[1].tauxPaiement)[0];
+  if (meilleureCat && meilleureCat[1].tauxPaiement >= 60) {
+    succes.push({ titre: `${meilleureCat[1].label} performante`, message: `${meilleureCat[1].tauxPaiement}% de taux.` });
   }
-  if (tendance && tendance.pente > 0) {
-    succes.push({
-      titre: 'Croissance des revenus',
-      message: `Croissance estimée de ${tendance.pourcentage}% sur la période.`
-    });
-  }
-  const meilleureCategorie = Object.entries(categories)
-    .filter(([, c]) => c.total > 0)
-    .sort((a, b) => b[1].tauxPaiement - a[1].tauxPaiement)[0];
-  if (meilleureCategorie && meilleureCategorie[1].tauxPaiement >= 60) {
-    succes.push({
-      titre: `Catégorie ${meilleureCategorie[1].label} performante`,
-      message: `${meilleureCategorie[1].tauxPaiement}% de taux.`
-    });
-  }
-  if (data.artistesCount > 0) {
-    succes.push({
-      titre: 'Base d\'artistes enregistrée',
-      message: `${data.artistesCount} artiste(s) référencé(s).`
-    });
-  }
-  if (succes.length === 0) {
-    succes.push({
-      titre: 'Aucun point fort majeur détecté',
-      message: 'Concentrez les efforts sur les alertes ci-dessous.'
-    });
-  }
+  if (data.artistesCount > 0) succes.push({ titre: 'Base artistes', message: `${data.artistesCount} artiste(s).` });
+  if (succes.length === 0) succes.push({ titre: 'Aucun point fort majeur', message: 'Concentrez-vous sur les alertes.' });
 
-  // ============================================================
-  // SUGGESTIONS
-  // ============================================================
+  // ─── SUGGESTIONS ───
   const suggestions = [];
-  suggestions.push({ texte: `Atteindre ${objectifTaux}% de taux de paiement global`, priorite: 'haute' });
-  if (tauxGlobal < 60) suggestions.push({ texte: 'Lancer une campagne de relance urgente', priorite: 'haute' });
-  if (tendance && tendance.pente < 0) suggestions.push({ texte: 'Réviser la stratégie commerciale', priorite: 'haute' });
+  suggestions.push({ texte: `Atteindre ${objectifTaux}% de taux global`, priorite: 'haute' });
+  if (tauxGlobal < 60) suggestions.push({ texte: 'Lancer relance urgente', priorite: 'haute' });
+  if (tendance && tendance.pente < 0) suggestions.push({ texte: 'Réviser stratégie commerciale', priorite: 'haute' });
   Object.entries(categories).forEach(([type, c]) => {
     if (c.total > 0 && c.tauxPaiement < 40) {
-      suggestions.push({
-        texte: `Cibler la catégorie ${c.label} pour une relance`,
-        priorite: 'moyenne',
-        categorie: type
-      });
+      suggestions.push({ texte: `Relancer ${c.label}`, priorite: 'moyenne' });
     }
   });
-  if (parRegion.some(r => r.nbQuittances >= 5 && r.montant < 100000)) {
-    suggestions.push({ texte: 'Développer les régions sous-performantes', priorite: 'basse' });
-  }
-  suggestions.push({ texte: 'Automatiser les rappels de paiement par email/SMS', priorite: 'basse' });
+  suggestions.push({ texte: 'Automatiser rappels de paiement', priorite: 'basse' });
+
+  // ─── FORMATAGE FINAL DES DONNÉES MENSUELLES ───
+  const donneesMensuellesFormatees = donneesMensuelles.map(d => ({
+    annee: d.annee,
+    mois: d.mois,
+    montant: Math.round(d.montant),
+    nb: d.nb
+  }));
 
   return {
     genereLe: new Date().toISOString(),
@@ -579,206 +578,252 @@ async function construireDiagnostic() {
     tendance,
     forecast,
     ecartType,
-    historique: { meilleurMois, moyenneMensuelle, croissanceAnnuelle },
+    historique: {
+      meilleurMois,
+      moyenneMensuelle,
+      croissanceAnnuelle,
+      donneesMensuelles: donneesMensuellesFormatees   // ✅ CRUCIAL POUR LES GRAPHIQUES
+    },
     parRegion,
     alertes,
     succes,
     suggestions,
-    statsStatut   // ✅ NOUVEAU
+    statsStatut
   };
 }
 
 // ============================================================
-// GET /api/ia/diagnostic
+// 🧠 DÉTECTION INTENTION
 // ============================================================
-router.get('/ia/diagnostic', async (req, res) => {
-  try {
-    console.log('🤖 Génération du diagnostic IA...');
-    const diagnostic = await construireDiagnostic();
-    console.log('✅ Diagnostic IA généré');
-    res.json({ success: true, diagnostic });
-  } catch (error) {
-    console.error('❌ Erreur:', error);
-    res.status(500).json({ success: false, message: error.message });
+function detecterIntention(msg) {
+  // 1) STATUT USAGER (priorité absolue)
+  if (/\b(statut|status|situation|etat|state|sata|fiche|dossier)\b/.test(msg)) return 'statut_usager';
+
+  // 2) Salutations
+  if (/^(bonjour|salut|coucou|hello|hey|bonsoir|hi|bjr|slt|manao ahoana|salama|akory|mbon\s+tsara|good\s+morning|good\s+evening)\b/.test(msg)) return 'salutation';
+
+  // 3) Comment ça va
+  if (/(comment\s+(ca\s+)?va|comment\s+allez|how\s+are\s+you|ca\s+va|ahoana\s+ny\s+vao)/.test(msg)) return 'comment_ca_va';
+
+  // 4) Qui es-tu
+  if (/(qui\s+(es[- ]?tu|est[- ]?tu)|who\s+are\s+you|izao\s+iza\s+ianao|what\s+can\s+you\s+do|que\s+peux[- ]tu\s+faire)/.test(msg)) return 'qui_es_tu';
+
+  // 5) Aide-moi
+  if (/(aide[- ]?moi|help\s+me|besoin\s+d'aide|aidez[- ]moi|manampia\s+ahy)/.test(msg)) return 'aide_moi';
+
+  // 6) Remerciements
+  if (/\b(merci[e]?s?|mrc|mci|thanks?|thx|misaotra|super|parfait[e]?|nickel|bravo|génial|genial|top|impeccable)\b/.test(msg)) return 'merci';
+
+  // 7) OK
+  if (/^(ok|okay|d'accord|daccord|entendu|compris|tres\s+bien|très\s+bien|parfait|good|fine|dac|oki)\b/.test(msg)) return 'ok';
+
+  // 8) Oui / Non
+  if (/^(oui|ouais|yep|yes|yeah|yup)\b/.test(msg)) return 'oui';
+  if (/^(non|no|nope|nan)\b/.test(msg)) return 'non';
+
+  // 9) Au revoir
+  if (/\b(au\s+revoir|aurevoir|a\+\s*|a\s+plus|bye|goodbye|ciao|veloma|a\s+bientot|à\s+bient[oô]t)\b/.test(msg)) return 'aurevoir';
+
+  // 10) Critique
+  if (/(critique|critical|urgent|mafy)/.test(msg)) return 'usagers_critiques';
+
+  // Bons payeurs
+  if (/(bon[s]?\s*payeur|bonne\s*paiement|bon\s*paiement|meilleur[s]?\s*payeur|best\s*pay|good\s*payer|mpandoa\s*tsara|exemplaire|qui\s+paie\s+bien)/.test(msg)) return 'bons_payeurs';
+
+  // Mauvais payeurs
+  if (/(mauvais\s*payeur|pire[s]?\s*payeur|bad\s*payer|worst\s*payer|mpandoa\s*ratsy|qui\s+paie\s+mal)/.test(msg)) return 'mauvais_payeurs';
+
+  // Risque
+  if (/(risque|risk|atahorana|danger|perte|loss|menace)/.test(msg)) return 'usagers_risque';
+
+  // Retard
+  if (/(retard|en retard|pas paye|impaye|arriere|arrier|late|overdue|unpaid|tara|tsy voaloa|non paye|non-paye|dette)/.test(msg)) return 'usagers_retard';
+
+  // Non payeurs
+  if (/(non[\s-]?payeur|jamais paye|never paid|tsy mandoa|aucun paiement)/.test(msg)) return 'non_payeurs';
+
+  // Top montants
+  if (/(top\s*montant|plus gros|gros contributeur|gros payeur|top contributor|biggest|mpandoa be|be indrindra)/.test(msg)) return 'top_montants';
+
+  // Paiements par mois
+  if (/(paiement[s]?\s+par\s+mois|fandoavana\s+isam-bolana)/.test(msg)) return 'paiements_mois';
+
+  // Paiements par région
+  if (/(paiement[s]?\s+(par|de)\s+(region|faritra)|fandoavana\s+isaky\s+ny\s+faritra)/.test(msg)) return 'paiements_region';
+
+  // Paiements
+  if (/(paiement[s]?|fandoavana|liste\s+des\s+paiements|historique\s+paiement)/.test(msg)) return 'paiements';
+
+  // Factures
+  if (/(facture[s]?\s+(non|impay|en\s+attente)|faktiora\s+tsy\s+voaloa)/.test(msg)) return 'factures_impayees';
+  if (/(facture[s]?\s+(paye|regle)|faktiora\s+voaloa)/.test(msg)) return 'factures_payees';
+  if (/(facture[s]?|faktiora|invoice[s]?)/.test(msg)) return 'factures';
+
+  // Quittances
+  if (/(quittance[s]?\s+(non|pas)\s+valide|quittance[s]?\s+en\s+attente|taratasy\s+tsy\s+voamarina)/.test(msg)) return 'quittances_non_validees';
+  if (/(quittance[s]?|recu[s]?|receipt[s]?|taratasy)/.test(msg)) return 'quittances';
+
+  // Artistes
+  if (/(artiste[s]?|mpihira|mpilalao)/.test(msg)) {
+    if (/(top|meilleur|malaza|populaire)/.test(msg)) return 'top_artistes';
+    return 'artistes';
   }
-});
 
-// ============================================================
-// ✅ NOUVELLES ROUTES DE RECHERCHE PROFONDE
-// ============================================================
+  // Régions
+  if (/(bilan[s]?\s+(par\s+)?(region|faritra)|par\s+region|by\s+region|faritra)/.test(msg)) return 'regions';
 
-/**
- * GET /api/ia/usagers/retard?annee=2026&type=hotel
- * Liste des usagers en retard
- */
-router.get('/ia/usagers/retard', async (req, res) => {
-  try {
-    const annee = req.query.annee ? parseInt(req.query.annee) : new Date().getFullYear();
-    const type = req.query.type || null;
-    const usagers = await getUsagersEnRetard(annee, type);
-    res.json({
-      success: true,
-      annee,
-      type: type || 'tous',
-      total: usagers.length,
-      usagers
-    });
-  } catch (error) {
-    console.error('❌ Erreur usagers en retard:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
+  // Catégories
+  if (/(categorie[s]?|sokajy|hotel|hôtel|bus|night\s*club|media|grande\s*surface)/.test(msg)) return 'categories';
 
-/**
- * GET /api/ia/usagers/meilleurs?annee=2026&limit=10
- * Top des meilleurs payeurs
- */
-router.get('/ia/usagers/meilleurs', async (req, res) => {
-  try {
-    const annee = req.query.annee ? parseInt(req.query.annee) : new Date().getFullYear();
-    const limit = req.query.limit ? parseInt(req.query.limit) : 10;
-    const usagers = await getMeilleursPayeurs(annee, limit);
-    res.json({
-      success: true,
-      annee,
-      total: usagers.length,
-      usagers
-    });
-  } catch (error) {
-    console.error('❌ Erreur meilleurs payeurs:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
+  // Performance
+  if (/(performance|global|situation|bilan|resume|fahombiazana|overview)/.test(msg)) return 'performance';
 
-/**
- * GET /api/ia/usagers/pires?annee=2026&limit=10
- * Top des pires payeurs
- */
-router.get('/ia/usagers/pires', async (req, res) => {
-  try {
-    const annee = req.query.annee ? parseInt(req.query.annee) : new Date().getFullYear();
-    const limit = req.query.limit ? parseInt(req.query.limit) : 10;
-    const usagers = await getPiresPayeurs(annee, limit);
-    res.json({
-      success: true,
-      annee,
-      total: usagers.length,
-      usagers
-    });
-  } catch (error) {
-    console.error('❌ Erreur pires payeurs:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
+  // Statistiques
+  if (/(statistique|stat|donnee[s]?|chiffre|total\s+general)/.test(msg)) return 'statistiques';
 
-/**
- * GET /api/ia/usagers/recherche?q=terme
- * Recherche d'usagers par nom/tél/email/région
- */
-router.get('/ia/usagers/recherche', async (req, res) => {
-  try {
-    const q = req.query.q || '';
-    if (!q || q.trim().length < 2) {
-      return res.status(400).json({ success: false, message: 'Terme trop court (min 2 caractères)' });
-    }
-    const usagers = await rechercherUsagers(q);
-    res.json({
-      success: true,
-      terme: q,
-      total: usagers.length,
-      usagers
-    });
-  } catch (error) {
-    console.error('❌ Erreur recherche:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
+  // Alertes
+  if (/(alerte|alert|probleme|urgent|anomalie|fampandrenesana)/.test(msg)) return 'alertes';
 
-/**
- * GET /api/ia/usagers/:type/:id
- * Analyse détaillée d'un usager
- */
-router.get('/ia/usagers/:type/:id', async (req, res) => {
-  try {
-    const { type, id } = req.params;
-    const usager = await analyserUsagerSpecifique(id, type);
-    if (!usager) {
-      return res.status(404).json({ success: false, message: 'Usager non trouvé' });
-    }
-    res.json({ success: true, usager });
-  } catch (error) {
-    console.error('❌ Erreur analyse usager:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
+  // Plan d'action
+  if (/(plan|action|resoudre|solution|comment faire|etapes|tetikasa|how to)/.test(msg)) return 'plan_action';
 
-/**
- * GET /api/ia/top-montants?annee=2026&limit=10
- * Top usagers par montant payé
- */
-router.get('/ia/top-montants', async (req, res) => {
-  try {
-    const annee = req.query.annee ? parseInt(req.query.annee) : new Date().getFullYear();
-    const limit = req.query.limit ? parseInt(req.query.limit) : 10;
-    const usagers = await getTopMontants(annee, limit);
-    res.json({ success: true, annee, total: usagers.length, usagers });
-  } catch (error) {
-    console.error('❌ Erreur top montants:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
+  // Prévisions
+  if (/(prevision|previsions|avenir|projection|forecast|vinavina)/.test(msg)) return 'previsions';
 
-// ============================================================
-// DICTIONNAIRE DE RÉPONSES NATURELLES (inchangé)
-// ============================================================
-const dictionnaireReponses = {
-  salutations: {
-    matin: [
-      "Bonjour ! ☀️ Heureux de vous voir. Comment puis-je vous aider aujourd'hui ?",
-      "Bonjour ! 🌅 Belle journée en perspective. Que puis-je faire pour vous ?",
-      "Salut ! 👋 Je suis là pour vous assister. Qu'est-ce qui vous amène ?"
-    ],
-    apresmidi: [
-      "Bon après-midi ! ☀️ Comment puis-je vous aider ?",
-      "Bonjour ! 🌤️ Que puis-je analyser pour vous aujourd'hui ?"
-    ],
-    soir: [
-      "Bonsoir ! 🌙 Comment puis-je vous aider ce soir ?",
-      "Bonsoir ! 🌟 Une dernière analyse avant la fin de la journée ?"
-    ]
-  },
-  remerciements: [
-    "Avec plaisir ! 😊 N'hésitez pas si vous avez d'autres questions.",
-    "Je vous en prie ! 🌟 Je suis là pour vous aider à tout moment.",
-    "De rien ! 💪 C'était un plaisir de vous assister."
-  ],
-  auRevoir: [
-    "Au revoir ! 👋 N'hésitez pas à revenir quand vous voulez.",
-    "À bientôt ! 🌟 Je reste à votre disposition."
-  ],
-  nonCompris: [
-    "Désolée, je n'ai pas bien saisi votre demande 😊 Pouvez-vous reformuler plus clairement ?",
-    "Je ne suis pas sûre d'avoir compris 🤔 Pourriez-vous préciser votre question ?",
-    "Pouvez-vous reformuler ? 🤔 Je veux bien vous aider mais je n'ai pas bien compris."
-  ]
-};
+  // Tendance
+  if (/(tendance|trend|evolution|fironana)/.test(msg)) return 'tendance';
 
-function reponseNaturelle(categorie, sousCategorie = null) {
-  if (categorie && dictionnaireReponses[categorie]) {
-    if (sousCategorie && dictionnaireReponses[categorie][sousCategorie]) {
-      const items = dictionnaireReponses[categorie][sousCategorie];
-      return items[Math.floor(Math.random() * items.length)];
-    }
-    if (Array.isArray(dictionnaireReponses[categorie])) {
-      const items = dictionnaireReponses[categorie];
-      return items[Math.floor(Math.random() * items.length)];
-    }
-  }
-  return null;
+  // Succès
+  if (/(succes|positif|point fort|felicitation|zavatra tsara|success|good news)/.test(msg)) return 'succes';
+
+  // Suggestions
+  if (/(suggestion|conseil|recommandation|ameliorer|avis|soso-kevitra)/.test(msg)) return 'suggestions';
+
+  // Objectifs
+  if (/(objectif|target|but|goal|tanjona)/.test(msg)) return 'objectifs';
+
+  // Historique
+  if (/(historique|history|tantara)/.test(msg)) return 'historique';
+
+  // Total usagers
+  if (/(nombre|combien|total|firy|isa)\s+(d'?usager|d'?mpampiasa|de\s+client|users?|mpampiasa)/.test(msg)) return 'total_usagers';
+
+  // Total recettes
+  if (/(recette|revenu|chiffre\s+d'affaire|total\s+collecte|montant\s+total|revenue|vola\s+voaangona)/.test(msg)) return 'total_recettes';
+
+  // Montant impayé
+  if (/(impaye|dette|reste\s+a\s+payer|manquant|outstanding|vola\s+tsy\s+voaloa)/.test(msg)) return 'montant_impaye';
+
+  // Taux
+  if (/(taux|percentage|pourcentage|taham)/.test(msg)) return 'taux_paiement';
+
+  // Liste usagers
+  if (/(liste|list|lister|tous les usagers|all users|lisitra|mpampiasa\s+rehetra|show all|to\s+ny\s+mpampiasa)/.test(msg)) return 'liste_usagers';
+
+  // Nouveaux usagers
+  if (/(nouveau|nouveaux|recent|derniers?\s+ajout|new\s+users|vaovao)/.test(msg)) return 'usagers_nouveaux';
+
+  // Recherche
+  if (/(cherche|recherche|trouve|trouver|search|find|mitady|hitady|ou\s+est|where\s+is)\s+\w/.test(msg)) return 'recherche';
+
+  // Analyse
+  if (/(analyse|analyze|fanadihadiana)\s+(usager|client|mpampiasa)?\s*\w/.test(msg)) return 'analyse_usager';
+
+  return 'inconnu';
 }
 
 // ============================================================
-// POST /api/ia/chat
+// 🔍 EXTRACTION TERME
+// ============================================================
+function extraireTermeRecherche(messageOriginale) {
+  let terme = messageOriginale.trim();
+  terme = terme.replace(/^(cherche|recherche|trouve|trouver|search|find|mitady|hitady|analyse|analyze|detail|details|info|infos|fanadihadiana)\s+/i, '');
+  terme = terme.replace(/^(statut|status|situation|etat|state|sata|fiche|dossier)\s+(de\s+|du\s+|d'|la\s+|le\s+|les\s+|des\s+|ny\s+|an'ny\s+|pour\s+)?/i, '');
+  terme = terme.replace(/^(usager|client|mpampiasa|le\s+usager|la\s+usager)\s*/i, '');
+  return terme.replace(/["']/g, '').trim();
+}
+
+// ============================================================
+// 📄 FICHE USAGER
+// ============================================================
+function ficheUsagerTexte(u, langue) {
+  const statutTxt = u.statut === 'bon-payeur' ? 'Bon payeur'
+    : u.statut === 'payeur-moyen' ? 'Payeur moyen'
+    : u.statut === 'mauvais-payeur' ? 'Mauvais payeur'
+    : 'Non payeur';
+  const moisTxt = (u.moisPayesLabels && u.moisPayesLabels.length > 0)
+    ? u.moisPayesLabels.join(', ')
+    : 'Aucun';
+  const titre = langue === 'fr' ? 'FICHE USAGER' : langue === 'en' ? 'USER RECORD' : 'TAKELAKA MPAMPIASA';
+  return [
+    `${titre} — ${u.denomination}`,
+    '',
+    `Type ............. : ${u.typeLabel}`,
+    `ID ............... : #${String(u.id).padStart(3, '0')}`,
+    `Région ........... : ${u.region}`,
+    `Téléphone ........ : ${u.telephone || '-'}`,
+    `Email ............ : ${u.email || '-'}`,
+    `Adresse .......... : ${u.adresse || '-'}`,
+    `Montant mensuel .. : ${fmtN(u.montantMensuel)} Ar`,
+    '',
+    `Statut ........... : ${statutTxt}`,
+    `Mois payés ....... : ${u.nbMoisPayes}/12`,
+    `Détail ........... : ${moisTxt}`,
+    `Montant payé ..... : ${fmtN(u.montantPaye)} Ar`,
+    `Taux ............. : ${u.tauxPaiement}%`,
+    `Reste dû ......... : ${fmtN((12 - u.nbMoisPayes) * u.montantMensuel)} Ar`
+  ].join('\n');
+}
+
+// ============================================================
+// 📋 AIDE
+// ============================================================
+function texteAide(langue) {
+  return [
+    'COMMANDES DISPONIBLES',
+    '',
+    '   USAGERS :',
+    '   1) statut [nom] — fiche usager',
+    '   2) usagers bons payeurs',
+    '   3) usagers en retard',
+    '   4) usagers à risque',
+    '   5) usagers critiques',
+    '   6) mauvais payeurs',
+    '   7) non payeurs',
+    '   8) liste usagers',
+    '   9) usagers nouveaux',
+    "   10) combien d'usagers",
+    '',
+    '   PAIEMENTS :',
+    '   1) paiements',
+    '   2) paiements par mois',
+    '   3) paiements par région',
+    '   4) top contributeurs',
+    '   5) montant impayé',
+    '   6) taux de paiement',
+    '',
+    '   FACTURES & QUITTANCES :',
+    '   1) factures',
+    '   2) factures impayées',
+    '   3) factures payées',
+    '   4) quittances',
+    '   5) quittances non validées',
+    '',
+    '   ARTISTES :',
+    '   1) statut des artistes',
+    '   2) top artistes',
+    '',
+    '   ANALYSE :',
+    '   1) performance globale',
+    '   2) suggestions',
+    '   3) objectifs',
+    '   4) total recettes',
+    '   5) total usagers'
+  ].join('\n');
+}
+
+// ============================================================
+// 💬 POST /api/ia/chat
 // ============================================================
 router.post('/ia/chat', async (req, res) => {
   const { message } = req.body;
@@ -786,330 +831,414 @@ router.post('/ia/chat', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Message vide' });
   }
 
+  const langueParam = (req.body.langue || '').toLowerCase();
+  const langue = ['fr', 'mg', 'en'].includes(langueParam) ? langueParam : detecterLangue(message);
+  const L = (key) => t(langue, key);
+  const MSG = normaliser(message);
+  const intent = detecterIntention(MSG);
+  const annee = new Date().getFullYear();
+
+  console.log(`🧠 Intention: ${intent} | Langue: ${langue} | Msg: "${message}"`);
+
   try {
     const diagnostic = await construireDiagnostic();
-    const msg = message.toLowerCase().trim();
-    const formatNumber = (n) => Math.round(n).toLocaleString();
     let reponse = '';
 
-    // ============================================================
-    // 1. SALUTATIONS
-    // ============================================================
-    if (msg.match(/^(bonjour|salut|coucou|hello|hey|bonsoir|bon matin|bjr|slt|yo|wesh|salutation)/i)) {
-      const heure = new Date().getHours();
-      let rep = heure >= 18
-        ? reponseNaturelle('salutations', 'soir')
-        : heure < 12
-          ? reponseNaturelle('salutations', 'matin')
-          : reponseNaturelle('salutations', 'apresmidi');
-      if (!rep) rep = "Bonjour ! 🌟 Je suis ravi de vous voir. Comment puis-je vous aider aujourd'hui ?";
-      reponse = rep + " Que voulez-vous analyser ?";
-    }
-
-    // ============================================================
-    // 2. REMERCIEMENTS
-    // ============================================================
-    else if (msg.match(/(merci|thanks|thx|thank|grazie|danke)/i)) {
-      reponse = reponseNaturelle('remerciements') ||
-        "Avec plaisir ! 😊 Je suis là pour vous aider.";
-    }
-
-    // ============================================================
-    // 3. AU REVOIR
-    // ============================================================
-    else if (msg.match(/(au revoir|aurevoir|bye|goodbye|a bientot|a plus|ciao)/i)) {
-      reponse = reponseNaturelle('auRevoir') ||
-        "Au revoir ! 👋 N'hésitez pas à revenir.";
-    }
-
-    // ============================================================
-    // 4. ✅ RECHERCHE D'UN USAGER SPÉCIFIQUE
-    // ============================================================
-    else if (msg.match(/(cherche|recherche|trouve|trouver|usager|client)\s+(.+)/i)) {
-      const match = message.match(/(?:cherche|recherche|trouve|trouver|usager|client)\s+(.+)/i);
-      const terme = match ? match[1].replace(/["']/g, '').trim() : '';
-
-      if (terme.length >= 2) {
-        const resultats = await rechercherUsagers(terme);
-        if (resultats.length === 0) {
-          reponse = `🔍 **Aucun usager trouvé pour "${terme}"**\n\nEssayez avec un autre nom, un numéro de téléphone ou une région.`;
-        } else {
-          const liste = resultats.slice(0, 10).map(u =>
-            `▪️ **${u.denomination}** (${u.typeLabel}) — ${u.nbMoisPayes}/12 mois payés, ${formatNumber(u.montantPaye)} Ar${u.region && u.region !== 'N/A' ? ` — ${u.region}` : ''}`
-          ).join('\n');
-
-          reponse = `🔍 **${resultats.length} usager(s) trouvé(s) pour "${terme}"**\n\n${liste}\n\n` +
-            `💡 Pour plus de détails sur un usager, demandez "analyse usager [nom]"`;
-        }
+    // ── STATUT USAGER ──
+    if (intent === 'statut_usager' || intent === 'analyse_usager') {
+      const terme = extraireTermeRecherche(message);
+      if (terme.length < 2) {
+        reponse = langue === 'fr' ? "Précisez le nom de l'usager.\n\nExemple : \"statut usager Ilay Nosy Ambohimangakely\"" :
+                  langue === 'en' ? "Please specify the user name." :
+                  "Lazao ny anaran'ny mpampiasa.";
       } else {
-        reponse = `🔍 Précisez votre recherche (minimum 2 caractères) : nom, téléphone, email ou région.`;
-      }
-    }
-
-    // ============================================================
-    // 5. ✅ ANALYSE D'UN USAGER SPÉCIFIQUE
-    // ============================================================
-    else if (msg.match(/(analyse|détail|detail|info|infos?)\s+(?:usager|client)?\s*(.+)/i)) {
-      const match = message.match(/(?:analyse|détail|detail|info|infos?)\s+(?:usager|client)?\s*(.+)/i);
-      const terme = match ? match[1].replace(/["']/g, '').trim() : '';
-
-      if (terme.length >= 2) {
-        const resultats = await rechercherUsagers(terme);
-        if (resultats.length === 0) {
-          reponse = `❌ Aucun usager trouvé pour "${terme}".`;
-        } else if (resultats.length === 1) {
-          const u = resultats[0];
-          const moisTxt = u.moisPayes.length > 0
-            ? u.moisPayes.map(m => MOIS_LABELS_SHORT[m - 1]).join(', ')
-            : 'Aucun';
-
-          reponse = `📋 **Analyse détaillée - ${u.denomination}**\n\n` +
-            `▪️ **Type** : ${u.typeLabel}\n` +
-            `▪️ **ID** : #${String(u.id).padStart(3, '0')}\n` +
-            `▪️ **Région** : ${u.region}\n` +
-            `▪️ **Téléphone** : ${u.telephone || '-'}\n` +
-            `▪️ **Montant mensuel** : ${formatNumber(u.montantMensuel)} Ar\n\n` +
-            `📊 **Paiements ${u.annee}**\n` +
-            `▪️ **Mois payés** : ${u.nbMoisPayes}/12\n` +
-            `▪️ **Détail** : ${moisTxt}\n` +
-            `▪️ **Total payé** : ${formatNumber(u.montantPaye)} Ar\n` +
-            `▪️ **Statut** : ${
-              u.statut === 'bon-payeur' ? '✅ Bon payeur' :
-              u.statut === 'payeur-moyen' ? '⚠️ Payeur moyen' :
-              u.statut === 'mauvais-payeur' ? '🔴 Mauvais payeur' :
-              '❌ Non payeur'
-            }`;
+        const r = await rechercherUsagers(terme);
+        if (r.length === 0) {
+          reponse = `${L('noResult')} "${terme}".\n\n   Conseil : essayez "liste usagers" pour voir tous les usagers.`;
+        } else if (r.length === 1) {
+          reponse = ficheUsagerTexte(r[0], langue);
         } else {
-          const liste = resultats.slice(0, 5).map(u =>
-            `▪️ **${u.denomination}** (${u.typeLabel}) — ${u.nbMoisPayes}/12 mois`
-          ).join('\n');
-
-          reponse = `🔍 **${resultats.length} usagers trouvés**\n\n${liste}\n\n` +
-            `💡 Précisez le nom exact pour une analyse détaillée.`;
+          reponse = `${r.length} ${L('usagers')} trouvés pour "${terme}" :\n\n`;
+          reponse += listeUsagersTexte(r.slice(0, 10), langue);
         }
       }
     }
 
-    // ============================================================
-    // 6. ✅ USAGERS EN RETARD
-    // ============================================================
-    else if (msg.match(/(retard|en retard|pas paye|pas payé|impay|arriéré|arriere)/i)) {
-      const annee = new Date().getFullYear();
+    // ── CONVERSATIONS ──
+    else if (intent === 'salutation') {
+      const h = new Date().getHours();
+      reponse = h >= 18 ? L('greeting_evening') : h < 12 ? L('greeting_morning') : L('greeting_afternoon');
+    }
+    else if (intent === 'comment_ca_va') reponse = L('howAreYou');
+    else if (intent === 'qui_es_tu') reponse = L('whoAreYou');
+    else if (intent === 'aide_moi') reponse = L('helpMe') + '\n\n' + texteAide(langue);
+    else if (intent === 'merci') reponse = L('thanks');
+    else if (intent === 'ok') reponse = L('ok');
+    else if (intent === 'oui') reponse = L('yes');
+    else if (intent === 'non') reponse = L('no');
+    else if (intent === 'aurevoir') reponse = L('bye');
+
+    // ── USAGERS CRITIQUES ──
+    else if (intent === 'usagers_critiques') {
+      const tous = await analyserUsagersParAnnee(annee);
+      const critiques = tous
+        .filter(u => u.nbMoisPayes === 0 || (u.nbMoisPayes < 3 && u.montantMensuel > 0))
+        .sort((a, b) => (b.montantMensuel * (12 - b.nbMoisPayes)) - (a.montantMensuel * (12 - a.nbMoisPayes)))
+        .slice(0, 20);
+      const perte = critiques.reduce((s, u) => s + (12 - u.nbMoisPayes) * u.montantMensuel, 0);
+      reponse = `USAGERS CRITIQUES — ${annee} (${critiques.length})\n`;
+      reponse += `\n   Perte estimée : ${fmtN(perte)} Ar\n\n`;
+      reponse += listeUsagersTexte(critiques, langue);
+    }
+
+    // ── BONS PAYEURS ──
+    else if (intent === 'bons_payeurs') {
+      const bons = await getMeilleursPayeurs(annee, 20);
+      reponse = `BONS PAYEURS — ${annee} (${bons.length})\n\n`;
+      reponse += listeUsagersTexte(bons, langue);
+    }
+
+    // ── MAUVAIS PAYEURS ──
+    else if (intent === 'mauvais_payeurs') {
+      const m = (await analyserUsagersParAnnee(annee))
+        .filter(u => u.statut === 'mauvais-payeur' || u.statut === 'non-payeur')
+        .sort((a, b) => a.nbMoisPayes - b.nbMoisPayes).slice(0, 20);
+      reponse = `MAUVAIS / NON PAYEURS — ${annee} (${m.length})\n\n`;
+      reponse += listeUsagersTexte(m, langue);
+    }
+
+    // ── RISQUE ──
+    else if (intent === 'usagers_risque') {
+      const tous = await analyserUsagersParAnnee(annee);
+      const aRisque = tous
+        .filter(u => u.nbMoisPayes < 6 && u.montantMensuel > 0)
+        .sort((a, b) => (b.montantMensuel * (12 - b.nbMoisPayes)) - (a.montantMensuel * (12 - a.nbMoisPayes)))
+        .slice(0, 20);
+      const totalPerte = aRisque.reduce((s, u) => s + (12 - u.nbMoisPayes) * u.montantMensuel, 0);
+      reponse = `USAGERS À RISQUE — ${annee} (${aRisque.length})\n`;
+      reponse += `\n   ${L('totalImpaye')} : ${fmtN(totalPerte)} Ar\n\n`;
+      reponse += listeUsagersTexte(aRisque, langue);
+    }
+
+    // ── RETARD ──
+    else if (intent === 'usagers_retard') {
       const enRetard = await getUsagersEnRetard(annee);
+      const total = enRetard.reduce((s, u) => s + (12 - u.nbMoisPayes) * u.montantMensuel, 0);
+      reponse = `USAGERS EN RETARD — ${annee} (${enRetard.length})\n`;
+      reponse += `\n   ${L('totalImpaye')} : ${fmtN(total)} Ar\n\n`;
+      reponse += listeUsagersTexte(enRetard.slice(0, 30), langue);
+    }
 
-      if (enRetard.length === 0) {
-        reponse = `✅ **Aucun usager en retard pour ${annee}**\n\nTous les usagers sont à jour. Excellente performance !`;
+    // ── NON PAYEURS ──
+    else if (intent === 'non_payeurs') {
+      const np = (await analyserUsagersParAnnee(annee)).filter(u => u.statut === 'non-payeur').slice(0, 30);
+      reponse = `NON PAYEURS — ${annee} (${np.length})\n\n`;
+      reponse += listeUsagersTexte(np, langue);
+    }
+
+    // ── TOP MONTANTS ──
+    else if (intent === 'top_montants') {
+      const top = await getTopMontants(annee, 15);
+      reponse = `TOP 15 CONTRIBUTEURS — ${annee}\n\n`;
+      reponse += listeUsagersTexte(top, langue);
+    }
+
+    // ── PAIEMENTS ──
+    else if (intent === 'paiements') {
+      const data = await collecterDonneesCompletes();
+      const payes = data.paiements.filter(p => p.statut === 'paye');
+      const total = payes.reduce((s, p) => s + (parseFloat(p.montant) || 0), 0);
+      reponse = `PAIEMENTS — ${payes.length}\n`;
+      reponse += `\n   Total : ${fmtN(total)} Ar\n\n`;
+      reponse += listeGenerique(
+        payes.slice(0, 20).map(p => `${p.usager_type || '-'} — M${p.mois || '-'}/${p.annee || '-'} : ${fmtN(p.montant)} Ar`)
+      );
+    }
+
+    // ── PAIEMENTS PAR MOIS ──
+    else if (intent === 'paiements_mois') {
+      const data = await collecterDonneesCompletes();
+      const parMois = {};
+      data.paiements.filter(p => p.statut === 'paye').forEach(p => {
+        const k = `${p.annee}-${String(p.mois).padStart(2, '0')}`;
+        if (!parMois[k]) parMois[k] = { nb: 0, montant: 0 };
+        parMois[k].nb++;
+        parMois[k].montant += parseFloat(p.montant) || 0;
+      });
+      reponse = `PAIEMENTS PAR MOIS\n\n`;
+      reponse += listeGenerique(
+        Object.entries(parMois).sort().slice(-12).map(([k, v]) => `${k} : ${v.nb} paiements — ${fmtN(v.montant)} Ar`)
+      );
+    }
+
+    // ── RÉGIONS ──
+    else if (intent === 'paiements_region' || intent === 'regions') {
+      const total = diagnostic.parRegion.reduce((s, r) => s + r.montant, 0);
+      reponse = `BILAN PAR RÉGION\n`;
+      reponse += `\n   Total : ${fmtN(total)} Ar\n\n`;
+      reponse += listeGenerique(
+        diagnostic.parRegion.map(r => `${r.region} — ${r.nbQuittances} quittances : ${fmtN(r.montant)} Ar`)
+      );
+    }
+
+    // ── CATÉGORIES ──
+    else if (intent === 'categories') {
+      reponse = `CATÉGORIES D'USAGERS\n\n`;
+      reponse += listeGenerique(
+        Object.values(diagnostic.categories).map(c => `${c.label} — ${c.payes}/${c.total} payés (${c.tauxPaiement}%)`)
+      );
+    }
+
+    // ── FACTURES ──
+    else if (intent === 'factures' || intent === 'factures_payees' || intent === 'factures_impayees') {
+      const data = await collecterDonneesCompletes();
+      let factures = data.factures;
+      let titreTxt = 'Factures';
+      if (intent === 'factures_payees') { factures = factures.filter(f => f.quittance && f.quittance_validee !== false); titreTxt = 'Factures payées'; }
+      else if (intent === 'factures_impayees') { factures = factures.filter(f => !f.quittance || f.quittance_validee === false); titreTxt = 'Factures impayées'; }
+      reponse = `${titreTxt} — ${factures.length}\n\n`;
+      reponse += listeGenerique(
+        factures.slice(0, 20).map(f => `Réf ${f.ref_usager || '-'} — ${f.region_usager || '-'} : ${fmtN(f.soit_total)} Ar`)
+      );
+    }
+
+    // ── QUITTANCES ──
+    else if (intent === 'quittances' || intent === 'quittances_non_validees') {
+      const data = await collecterDonneesCompletes();
+      if (intent === 'quittances_non_validees') {
+        const nv = data.factures.filter(f => f.quittance && f.quittance_validee === false);
+        reponse = `QUITTANCES NON VALIDÉES — ${nv.length}\n\n`;
+        reponse += listeGenerique(
+          nv.slice(0, 20).map(f => `Réf ${f.ref_usager || '-'} — ${f.region_usager || '-'} : ${fmtN(f.soit_total)} Ar`)
+        );
       } else {
-        const top15 = enRetard.slice(0, 15);
-        const liste = top15.map((u, i) =>
-          `${i + 1}. **${u.denomination}** (${u.typeLabel}) — ${u.nbMoisPayes}/12 mois payés — ${formatNumber(u.montantPaye)} Ar${u.region && u.region !== 'N/A' ? ` — ${u.region}` : ''}`
-        ).join('\n');
-
-        reponse = `🔴 **${enRetard.length} usager(s) en retard pour ${annee}**\n\n` +
-          `📋 **Top 15 des plus en retard** :\n\n${liste}\n\n` +
-          `💡 Actions recommandées :\n` +
-          `1. Contacter les usagers avec le moins de mois payés\n` +
-          `2. Prioriser les gros montants impayés\n` +
-          `3. Envoyer des relances automatiques\n\n` +
-          `👉 Pour la liste complète : \`/api/ia/usagers/retard\``;
+        reponse = `QUITTANCES\n\n`;
+        reponse += `   1) Total ............. : ${diagnostic.global.totalQuittances}\n`;
+        reponse += `   2) Non validées ...... : ${diagnostic.global.quittancesNonValidees}\n`;
+        reponse += `   3) Factures .......... : ${diagnostic.global.totalFactures}`;
       }
     }
 
-    // ============================================================
-    // 7. ✅ MEILLEURS PAYEURS
-    // ============================================================
-    else if (msg.match(/(meilleur|top|bon payeur|bons payeurs|meilleurs payeurs|exemplaire)/i)) {
-      const annee = new Date().getFullYear();
-      const meilleurs = await getMeilleursPayeurs(annee, 10);
-
-      if (meilleurs.length === 0) {
-        reponse = `📊 Aucun usager avec des paiements enregistrés pour ${annee}.`;
-      } else {
-        const liste = meilleurs.map((u, i) =>
-          `${i + 1}. 🏆 **${u.denomination}** (${u.typeLabel}) — ${u.nbMoisPayes}/12 mois — ${formatNumber(u.montantPaye)} Ar`
-        ).join('\n');
-
-        reponse = `🏆 **Top 10 des meilleurs payeurs ${annee}**\n\n${liste}\n\n` +
-          `💡 Félicitez ces usagers et maintenez la relation de confiance.`;
+    // ── ARTISTES ──
+    else if (intent === 'artistes' || intent === 'artistes_statut') {
+      const data = await collecterDonneesCompletes();
+      try {
+        const r = await pool.query(`SELECT id, nom, prenom, role FROM artistes ORDER BY nom LIMIT 50`);
+        reponse = `ARTISTES — ${data.artistesCount}\n\n`;
+        reponse += listeGenerique(r.rows.map(a => `${a.nom || '-'} ${a.prenom || ''} — ${a.role || '-'}`));
+      } catch (e) {
+        reponse = `${data.artistesCount} artistes référencés.`;
       }
     }
 
-    // ============================================================
-    // 8. ✅ PIRES PAYEURS
-    // ============================================================
-    else if (msg.match(/(pire|mauvais|mauvais payeur|pires payeurs|à problème|problematique)/i)) {
-      const annee = new Date().getFullYear();
-      const pires = await getPiresPayeurs(annee, 10);
-
-      if (pires.length === 0) {
-        reponse = `📊 Aucune donnée de paiement pour ${annee}.`;
-      } else {
-        const liste = pires.map((u, i) =>
-          `${i + 1}. ⚠️ **${u.denomination}** (${u.typeLabel}) — ${u.nbMoisPayes}/12 mois — ${formatNumber(u.montantPaye)} Ar${u.region && u.region !== 'N/A' ? ` — ${u.region}` : ''}`
-        ).join('\n');
-
-        reponse = `⚠️ **Top 10 des pires payeurs ${annee}**\n\n${liste}\n\n` +
-          `💡 Actions : relance immédiate, échéancier, visite terrain.`;
+    // ── TOP ARTISTES ──
+    else if (intent === 'top_artistes') {
+      try {
+        const r = await pool.query(
+          `SELECT a.nom, a.prenom, COUNT(ea.event_id) AS nb_events
+           FROM artistes a LEFT JOIN event_artistes ea ON a.id = ea.artiste_id
+           GROUP BY a.id, a.nom, a.prenom ORDER BY nb_events DESC LIMIT 15`
+        );
+        reponse = `TOP ARTISTES\n\n`;
+        reponse += listeGenerique(r.rows.map(a => `${a.nom || '-'} ${a.prenom || ''} — ${a.nb_events} événements`));
+      } catch (e) {
+        reponse = `Erreur : ${e.message}`;
       }
     }
 
-    // ============================================================
-    // 9. ✅ TOP MONTANTS
-    // ============================================================
-    else if (msg.match(/(plus gros|top montant|plus grand montant|gros contributeur|gros payeur)/i)) {
-      const annee = new Date().getFullYear();
-      const top = await getTopMontants(annee, 10);
+    // ── PERFORMANCE ──
+    else if (intent === 'performance' || intent === 'statistiques') {
+      const g = diagnostic.global;
+      reponse = `PERFORMANCE GLOBALE OMDA\n\n`;
+      reponse += `   1) Usagers total ....... : ${g.totalUsagers}\n`;
+      reponse += `   2) Usagers à jour ...... : ${g.totalUsagersPayes}\n`;
+      reponse += `   3) Taux de paiement .... : ${g.tauxGlobal}%\n`;
+      reponse += `   4) Objectif ............ : ${g.objectifTaux}%\n`;
+      reponse += `   5) Montant collecté .... : ${fmtN(g.montantGlobalPaye)} Ar\n`;
+      reponse += `   6) Factures ............ : ${g.totalFactures}\n`;
+      reponse += `   7) Quittances .......... : ${g.totalQuittances}\n`;
+      reponse += `   8) Quittances à valider  : ${g.quittancesNonValidees}\n`;
+      reponse += `   9) Artistes ............ : ${g.totalArtistes}\n\n`;
+      reponse += `   Répartition :\n`;
+      reponse += `   1) Bons payeurs ........ : ${diagnostic.statsStatut.bonPayeur}\n`;
+      reponse += `   2) Payeurs moyens ...... : ${diagnostic.statsStatut.payeurMoyen}\n`;
+      reponse += `   3) Mauvais payeurs ..... : ${diagnostic.statsStatut.mauvaisPayeur}\n`;
+      reponse += `   4) Non payeurs ......... : ${diagnostic.statsStatut.nonPayeur}`;
+    }
 
-      if (top.length === 0) {
-        reponse = `📊 Aucun paiement enregistré pour ${annee}.`;
+    // ── ALERTES ──
+    else if (intent === 'alertes') {
+      reponse = `ALERTES\n\n`;
+      reponse += `   1) "usagers en retard"\n   2) "usagers à risque"\n   3) "usagers critiques"\n   4) "quittances non validées"`;
+    }
+
+    // ── PLAN ──
+    else if (intent === 'plan_action') {
+      reponse = `PLAN D'ACTION RECOMMANDÉ\n\n`;
+      reponse += `   1) Identifier les usagers en retard → "usagers en retard"\n`;
+      reponse += `   2) Envoyer des relances\n`;
+      reponse += `   3) Valider les quittances → "quittances non validées"\n`;
+      reponse += `   4) Suivre le taux → "performance globale"`;
+    }
+
+    // ── PRÉVISIONS ──
+    else if (intent === 'previsions') {
+      reponse = `PRÉVISIONS\n\n   1) "paiements par mois"\n   2) "total recettes"\n   3) "performance globale"`;
+    }
+
+    // ── TENDANCE ──
+    else if (intent === 'tendance') {
+      if (diagnostic.tendance) {
+        reponse = `TENDANCE\n\n   Direction : ${diagnostic.tendance.direction}\n   Variation : ${diagnostic.tendance.pourcentage}%`;
       } else {
-        const liste = top.map((u, i) =>
-          `${i + 1}. 💰 **${u.denomination}** (${u.typeLabel}) — ${formatNumber(u.montantPaye)} Ar — ${u.nbMoisPayes}/12 mois`
-        ).join('\n');
-
-        reponse = `💰 **Top 10 des plus gros contributeurs ${annee}**\n\n${liste}\n\n` +
-          `💡 Ces usagers représentent une part importante de vos revenus.`;
+        reponse = `TENDANCE\n\n   Données insuffisantes.`;
       }
     }
 
-    // ============================================================
-    // 10. PERFORMANCE GLOBALE
-    // ============================================================
-    else if (msg.match(/(performance|global|situation|bilan|résumé|resume)/i)) {
-      const tendanceTexte = diagnostic.tendance
-        ? `La tendance est à la ${diagnostic.tendance.direction} (${diagnostic.tendance.pourcentage}%).`
-        : 'Tendance non disponible.';
-
-      reponse = `📊 **Performance globale**\n\n` +
-        `▪️ **Taux de paiement** : ${diagnostic.global.tauxGlobal}%\n` +
-        `▪️ **Usagers à jour** : ${diagnostic.global.totalUsagersPayes}/${diagnostic.global.totalUsagers}\n` +
-        `▪️ **Montant collecté** : ${formatNumber(diagnostic.global.montantGlobalPaye)} Ar\n` +
-        `▪️ **Factures** : ${diagnostic.global.totalFactures}\n` +
-        `▪️ **Quittances non validées** : ${diagnostic.global.quittancesNonValidees}\n` +
-        `▪️ **Tendance** : ${tendanceTexte}\n\n` +
-        `📈 **Répartition des payeurs** :\n` +
-        `▪️ Bons payeurs : ${diagnostic.statsStatut.bonPayeur}\n` +
-        `▪️ Payeurs moyens : ${diagnostic.statsStatut.payeurMoyen}\n` +
-        `▪️ Mauvais payeurs : ${diagnostic.statsStatut.mauvaisPayeur}\n` +
-        `▪️ Non payeurs : ${diagnostic.statsStatut.nonPayeur}`;
+    // ── SUCCÈS ──
+    else if (intent === 'succes') {
+      reponse = `POINTS POSITIFS\n\n`;
+      reponse += `   1) ${diagnostic.global.tauxGlobal}% des usagers sont à jour\n`;
+      reponse += `   2) ${diagnostic.global.totalArtistes} artiste(s) référencé(s)\n`;
+      reponse += `   3) ${diagnostic.global.totalRegions} région(s) active(s)`;
     }
 
-    // ============================================================
-    // 11. ALERTES
-    // ============================================================
-    else if (msg.match(/(alerte|alert|probleme|problème|urgent|anomalie)/i)) {
-      if (diagnostic.alertes.length === 0) {
-        reponse = `✅ **Aucune alerte active**\n\nTous les indicateurs sont dans les limites acceptables.`;
+    // ── SUGGESTIONS ──
+    else if (intent === 'suggestions') {
+      reponse = `SUGGESTIONS\n\n`;
+      reponse += listeGenerique(diagnostic.suggestions.map(s => `${s.texte} (${s.priorite})`));
+    }
+
+    // ── OBJECTIFS ──
+    else if (intent === 'objectifs') {
+      const g = diagnostic.global;
+      reponse = `OBJECTIFS\n\n   1) Objectif : ${g.objectifTaux}%\n   2) Actuel : ${g.tauxGlobal}%\n   3) Écart : ${(g.objectifTaux - g.tauxGlobal).toFixed(1)} points`;
+    }
+
+    // ── HISTORIQUE ──
+    else if (intent === 'historique') {
+      const h = diagnostic.historique;
+      reponse = `HISTORIQUE\n\n`;
+      reponse += `   Meilleur mois ....... : ${h.meilleurMois ? `${fmtN(h.meilleurMois.montant)} Ar (${h.meilleurMois.periode})` : 'N/A'}\n`;
+      reponse += `   Moyenne mensuelle ... : ${fmtN(h.moyenneMensuelle)} Ar\n`;
+      reponse += `   Croissance annuelle . : ${h.croissanceAnnuelle !== null ? `${h.croissanceAnnuelle > 0 ? '+' : ''}${h.croissanceAnnuelle}%` : 'N/A'}`;
+    }
+
+    // ── TOTAL USAGERS ──
+    else if (intent === 'total_usagers') {
+      const g = diagnostic.global;
+      reponse = `TOTAL USAGERS\n\n   1) Total : ${g.totalUsagers}\n   2) À jour : ${g.totalUsagersPayes}\n   3) Non à jour : ${g.totalUsagers - g.totalUsagersPayes}`;
+    }
+
+    // ── TOTAL RECETTES ──
+    else if (intent === 'total_recettes') {
+      const g = diagnostic.global;
+      reponse = `TOTAL RECETTES\n\n   1) Montant : ${fmtN(g.montantGlobalPaye)} Ar\n   2) Factures : ${g.totalFactures}\n   3) Quittances : ${g.totalQuittances}`;
+    }
+
+    // ── MONTANT IMPAYÉ ──
+    else if (intent === 'montant_impaye') {
+      const enRetard = await getUsagersEnRetard(annee);
+      const total = enRetard.reduce((s, u) => s + (12 - u.nbMoisPayes) * u.montantMensuel, 0);
+      reponse = `${L('totalImpaye')}\n\n   1) Usagers en retard : ${enRetard.length}\n   2) Montant : ${fmtN(total)} Ar`;
+    }
+
+    // ── TAUX ──
+    else if (intent === 'taux_paiement') {
+      const g = diagnostic.global;
+      reponse = `TAUX DE PAIEMENT\n\n   1) Taux : ${g.tauxGlobal}%\n   2) Objectif : ${g.objectifTaux}%\n   3) À jour : ${g.totalUsagersPayes}/${g.totalUsagers}`;
+    }
+
+    // ── LISTE USAGERS ──
+    else if (intent === 'liste_usagers') {
+      const tous = await analyserUsagersParAnnee();
+      reponse = `LISTE — ${tous.length} usagers\n\n`;
+      reponse += listeUsagersTexte(tous.slice(0, 50), langue);
+      if (tous.length > 50) reponse += `\n\n   ... +${tous.length - 50} autres`;
+    }
+
+    // ── NOUVEAUX ──
+    else if (intent === 'usagers_nouveaux') {
+      const data = await collecterDonneesCompletes();
+      const recents = [];
+      for (const [type, usagers] of Object.entries(data.usagers)) {
+        for (const u of usagers) {
+          if (u.created_at) {
+            const jours = (Date.now() - new Date(u.created_at).getTime()) / 86400000;
+            if (jours <= 30) recents.push({
+              denomination: u.denomination || u.nom_evenement || 'Sans nom',
+              typeLabel: TYPE_LABELS[type], region: u.region || 'N/A',
+              nbMoisPayes: 0, montantPaye: 0, statut: 'non-payeur'
+            });
+          }
+        }
+      }
+      reponse = `NOUVEAUX USAGERS (30j) — ${recents.length}\n\n`;
+      reponse += listeUsagersTexte(recents, langue);
+    }
+
+    // ── RECHERCHE ──
+    else if (intent === 'recherche') {
+      const terme = extraireTermeRecherche(message);
+      if (terme.length < 2) {
+        reponse = langue === 'fr' ? 'Précisez au moins 2 caractères.' :
+                  langue === 'en' ? 'Refine your search (min 2 chars).' :
+                  'Lazao farafahakeliny 2 litera.';
       } else {
-        const liste = diagnostic.alertes.map((a, i) =>
-          `${i + 1}. **${a.titre}**\n   ${a.message}`
-        ).join('\n\n');
-        reponse = `🔔 **${diagnostic.alertes.length} alerte(s)**\n\n${liste}\n\n` +
-          `💡 Demandez "plan d'action" pour les résoudre.`;
+        const r = await rechercherUsagers(terme);
+        if (r.length === 0) reponse = `${L('noResult')} "${terme}".`;
+        else if (r.length === 1) reponse = ficheUsagerTexte(r[0], langue);
+        else {
+          reponse = `${r.length} usagers trouvés pour "${terme}"\n\n`;
+          reponse += listeUsagersTexte(r.slice(0, 15), langue);
+        }
       }
     }
 
-    // ============================================================
-    // 12. PLAN D'ACTION
-    // ============================================================
-    else if (msg.match(/(plan|action|résoudre|solution|comment faire|étapes)/i)) {
-      if (diagnostic.alertes.length === 0) {
-        reponse = `✅ Aucun problème à résoudre. Continuez à surveiller les indicateurs.`;
-      } else {
-        const plans = diagnostic.alertes.map((a, i) =>
-          `**${i + 1}. ${a.titre}**\n` +
-          a.plan.map((p, j) => `   ${j + 1}) ${p.etape} — *${p.delai}*`).join('\n')
-        ).join('\n\n');
-        reponse = `📋 **Plan d'action recommandé**\n\n${plans}`;
-      }
-    }
-
-    // ============================================================
-    // 13. PRÉVISIONS
-    // ============================================================
-    else if (msg.match(/(prevision|prévision|avenir|projection|forecast)/i)) {
-      if (diagnostic.forecast.length > 0) {
-        const total = diagnostic.forecast.reduce((s, v) => s + v, 0);
-        const predictions = diagnostic.forecast.map((v, i) =>
-          `▪️ Mois ${i + 1} : ${formatNumber(v)} Ar`
-        ).join('\n');
-        reponse = `🔮 **Prévisions 6 mois**\n\n${predictions}\n\n💰 **Total prévu** : ${formatNumber(total)} Ar`;
-      } else {
-        reponse = `📊 Données insuffisantes pour les prévisions.`;
-      }
-    }
-
-    // ============================================================
-    // 14. RÉGIONS
-    // ============================================================
-    else if (msg.match(/(region|région|regional|ville)/i)) {
-      if (diagnostic.parRegion.length > 0) {
-        const regions = diagnostic.parRegion.map(r =>
-          `▪️ ${r.region} : ${r.nbQuittances} quittance(s), ${formatNumber(r.montant)} Ar`
-        ).join('\n');
-        reponse = `🗺️ **Analyse par région**\n\n${regions}`;
-      } else {
-        reponse = `📊 Aucune donnée régionale.`;
-      }
-    }
-
-    // ============================================================
-    // 15. CATÉGORIES
-    // ============================================================
-    else if (msg.match(/(categorie|catégorie|hotel|hôtel|bus|night|media|grande surface)/i)) {
-      const categories = Object.values(diagnostic.categories).map(c =>
-        `▪️ **${c.label}** : ${c.tauxPaiement}% (${c.payes}/${c.total})`
-      ).join('\n');
-      reponse = `📊 **Toutes les catégories**\n\n${categories}`;
-    }
-
-    // ============================================================
-    // 16. SUCCÈS
-    // ============================================================
-    else if (msg.match(/(succes|succès|positif|point fort|félicitation)/i)) {
-      const points = diagnostic.succes.map(s => `▪️ **${s.titre}** : ${s.message}`).join('\n');
-      reponse = `🏆 **Points positifs**\n\n${points}`;
-    }
-
-    // ============================================================
-    // 17. SUGGESTIONS
-    // ============================================================
-    else if (msg.match(/(suggestion|conseil|recommandation|améliorer|avis)/i)) {
-      const suggestions = diagnostic.suggestions.map((s, i) =>
-        `▪️ ${i + 1}. ${s.texte} ${s.priorite === 'haute' ? '🔴' : s.priorite === 'moyenne' ? '🟡' : '🟢'}`
-      ).join('\n');
-      reponse = `💡 **Suggestions**\n\n${suggestions}`;
-    }
-
-    // ============================================================
-    // 18. QUITTANCES
-    // ============================================================
-    else if (msg.match(/(quittance|facture|validation|invoice)/i)) {
-      reponse = `🧾 **Quittances**\n\n` +
-        `▪️ Total : ${diagnostic.global.totalQuittances}\n` +
-        `▪️ À valider : ${diagnostic.global.quittancesNonValidees}\n` +
-        `▪️ Factures : ${diagnostic.global.totalFactures}`;
-    }
-
-    // ============================================================
-    // 19. RÉPONSE PAR DÉFAUT
-    // ============================================================
+    // ── DÉFAUT ──
     else {
-      reponse = `💡 **Je n'ai pas bien compris votre demande**\n\n` +
-        `Voici ce que je peux faire :\n\n` +
-        `🔍 **Recherche** : "cherche RAKOTO", "analyse usager DUPONT"\n` +
-        `📊 **Listes** : "usagers en retard", "meilleurs payeurs", "pires payeurs"\n` +
-        `💰 **Top** : "top montants", "plus gros contributeurs"\n` +
-        `📈 **Analyse** : "performance globale", "alertes", "régions", "catégories"\n` +
-        `🔮 **Prévisions** : "prévisions", "plan d'action", "suggestions"\n\n` +
-        `💬 Reformulez ou utilisez une de ces commandes.`;
+      reponse = L('notUnderstood') + '\n\n' + texteAide(langue);
     }
 
-    res.json({ success: true, reponse });
+    res.json({ success: true, reponse, langue, intent });
   } catch (error) {
     console.error('❌ Erreur chat IA:', error);
     res.status(500).json({ success: false, message: error.message });
   }
+});
+
+// ============================================================
+// 📌 ROUTES GET
+// ============================================================
+router.get('/ia/diagnostic', async (req, res) => {
+  try { res.json({ success: true, diagnostic: await construireDiagnostic() }); }
+  catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+router.get('/ia/usagers/retard', async (req, res) => {
+  try {
+    const annee = req.query.annee ? parseInt(req.query.annee) : new Date().getFullYear();
+    const usagers = await getUsagersEnRetard(annee);
+    res.json({ success: true, annee, total: usagers.length, usagers });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+router.get('/ia/usagers/meilleurs', async (req, res) => {
+  try {
+    const annee = req.query.annee ? parseInt(req.query.annee) : new Date().getFullYear();
+    const limit = req.query.limit ? parseInt(req.query.limit) : 10;
+    const u = await getMeilleursPayeurs(annee, limit);
+    res.json({ success: true, annee, total: u.length, usagers: u });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+router.get('/ia/top-montants', async (req, res) => {
+  try {
+    const annee = req.query.annee ? parseInt(req.query.annee) : new Date().getFullYear();
+    const limit = req.query.limit ? parseInt(req.query.limit) : 10;
+    const usagers = await getTopMontants(annee, limit);
+    res.json({ success: true, annee, total: usagers.length, usagers });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
 module.exports = router;

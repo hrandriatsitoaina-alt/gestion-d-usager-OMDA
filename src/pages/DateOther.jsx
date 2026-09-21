@@ -1,40 +1,54 @@
 // src/pages/DateOther.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import {
   Package, ArrowLeft, Eye, X, Calendar, MapPin, Phone, Mail,
   FileText, DollarSign, Plus, RefreshCw, AlertCircle,
   Disc, Music, Globe, Sparkles, Video, Users, Repeat,
-  CalendarCheck, FileCheck, RotateCcw, TrendingUp
+  CalendarCheck, FileCheck, RotateCcw, TrendingUp,
 } from 'lucide-react';
 import Header from '../components/Header';
 import MiniSidebar from '../components/MiniSidebar';
-import '../styles/date_grandSurface.css';   // ✅ MÊME CSS QUE BUS
+// ✅ Hook unique de traduction
+import { useT } from '../hooks/useT';
+import '../styles/date_grandSurface.css';
 
 const API_URL = 'http://localhost:3001/api';
 
-// ✅ Icônes par type
+// ✅ Icônes par type (statiques)
 const TYPE_ICONS = {
   cd: Disc,
   mp3: Music,
   'oeuvre-web': Globe,
   hologramme: Sparkles,
   video: Video,
-  autre: Package
-};
-
-const TYPE_LABELS = {
-  cd: 'CD',
-  mp3: 'MP3',
-  'oeuvre-web': 'Œuvre Web',
-  hologramme: 'Hologramme',
-  video: 'Vidéo',
-  autre: 'Autre'
+  autre: Package,
 };
 
 const DateOther = () => {
   const navigate = useNavigate();
+
+  // ✅ LANGUE UNIQUE — vient du Context
+  const { t, langue } = useT();
+
+  // ✅ Locale pour formatage
+  const locale = useMemo(() => {
+    if (langue === 'en') return 'en-US';
+    if (langue === 'mg') return 'fr-MG';
+    return 'fr-FR';
+  }, [langue]);
+
+  // ✅ Labels de type traduits (mémoïsés)
+  const TYPE_LABELS = useMemo(() => ({
+    cd: 'CD',
+    mp3: 'MP3',
+    'oeuvre-web': t('Œuvre Web', 'Asa an-tserasera', 'Web work'),
+    hologramme: t('Hologramme', 'Holograma', 'Hologram'),
+    video: t('Vidéo', 'Lahatsary', 'Video'),
+    autre: t('Autre', 'Hafa', 'Other'),
+  }), [t]);
+
   const [usagers, setUsagers] = useState([]);
   const [filteredUsagers, setFilteredUsagers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +74,7 @@ const DateOther = () => {
   const [apiError, setApiError] = useState(null);
   const [montantTotalRecu, setMontantTotalRecu] = useState(0);
 
-  // ---- Formatage ----
+  // ---- Formatage téléphone (universel) ----
   const formatPhoneNumber = (phone) => {
     if (!phone) return '-';
     const cleaned = phone.replace(/\D/g, '');
@@ -70,19 +84,23 @@ const DateOther = () => {
     return phone;
   };
 
-  const formatNumber = (value) => {
+  // ✅ Formatage nombre avec locale
+  const formatNumber = useCallback((value) => {
     if (!value && value !== 0) return '0';
-    return parseFloat(value).toLocaleString('fr-FR');
-  };
+    return parseFloat(value).toLocaleString(locale);
+  }, [locale]);
 
-  const formatDate = (dateStr) => {
+  // ✅ Formatage date avec locale
+  const formatDate = useCallback((dateStr) => {
     if (!dateStr) return '-';
     try {
       const d = new Date(dateStr);
       if (isNaN(d.getTime())) return dateStr;
-      return d.toLocaleDateString('fr-FR');
-    } catch { return dateStr; }
-  };
+      return d.toLocaleDateString(locale);
+    } catch {
+      return dateStr;
+    }
+  }, [locale]);
 
   // ============================================================
   // CHARGEMENT DES DONNÉES
@@ -96,7 +114,6 @@ const DateOther = () => {
       if (response.data.success) {
         const usagersData = response.data.usagers || [];
 
-        // Calculer le montant total de chaque usager
         const usagersEnrichis = usagersData.map((u) => {
           const lignes = u.lignes || [];
           const paiement = u.paiement || {};
@@ -126,19 +143,28 @@ const DateOther = () => {
       } else {
         setUsagers([]);
         setFilteredUsagers([]);
-        setApiError('Aucun usager événementiel trouvé');
+        setApiError(t(
+          'Aucun usager événementiel trouvé',
+          'Tsy misy mpampiasa hetsika hita',
+          'No event user found'
+        ));
       }
     } catch (error) {
       console.error('❌ Erreur chargement other-usagers:', error);
-      setApiError(error.message || 'Erreur de chargement');
+      setApiError(error.message || t('Erreur de chargement', 'Nisy olana tamin\'ny fakana', 'Loading error'));
       setNotification({
         type: 'error',
-        message: '❌ Erreur de chargement des données événementielles',
+        message: `❌ ${t(
+          'Erreur de chargement des données événementielles',
+          'Nisy olana tamin\'ny fakana ny angona hetsika',
+          'Error loading event data'
+        )}`,
       });
     } finally {
       setLoading(false);
     }
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t]);
 
   const updateStats = (data) => {
     const stats = {
@@ -253,27 +279,26 @@ const DateOther = () => {
             <div className="header-left">
               <h1>
                 <Package className="header-icon" size={28} />
-                Usager événementiel : <span>Suivi des inscriptions</span>
+                {t('Usager événementiel', 'Mpampiasa hetsika', 'Event user')} : <span>{t('Suivi des inscriptions', 'Fanaraha-maso ny fisoratana', 'Registration tracking')}</span>
               </h1>
               <div className="header-stats">
                 <span className="stat-badge">
-                  <strong>{totalUsagers}</strong> Total
+                  <strong>{totalUsagers}</strong> {t('Total', 'Totaly', 'Total')}
                 </span>
                 <span className="stat-badge">
-                  <strong>{mensuels}</strong> Mensuel
+                  <strong>{mensuels}</strong> {t('Mensuel', 'Isam-bolana', 'Monthly')}
                 </span>
                 <span className="stat-badge">
-                  <strong>{uniques}</strong> Unique
+                  <strong>{uniques}</strong> {t('Unique', 'Indray mandeha', 'One-time')}
                 </span>
                 <span className="stat-badge">
-                  <strong>{avecQuittance}</strong> Quittances
+                  <strong>{avecQuittance}</strong> {t('Quittances', 'Taratasy', 'Receipts')}
                 </span>
               </div>
             </div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-
               <button className="btn-back" onClick={handleRetour}>
-                <ArrowLeft size={18} /> Retour
+                <ArrowLeft size={18} /> {t('Retour', 'Hiverina', 'Back')}
               </button>
             </div>
           </div>
@@ -283,14 +308,18 @@ const DateOther = () => {
             <div className="filters-row">
               <div className="filter-item" style={{ flex: '1 1 200px' }}>
                 <label htmlFor="search">
-                  <Users size={14} className="filter-icon" /> Rechercher
+                  <Users size={14} className="filter-icon" /> {t('Rechercher', 'Hikaroka', 'Search')}
                 </label>
                 <input
                   id="search"
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Nom, téléphone, email, région..."
+                  placeholder={t(
+                    'Nom, téléphone, email, région...',
+                    'Anarana, finday, mailaka, faritra...',
+                    'Name, phone, email, region...'
+                  )}
                   className="form-select"
                   style={{ width: '100%' }}
                 />
@@ -298,7 +327,7 @@ const DateOther = () => {
 
               <div className="filter-item">
                 <label htmlFor="typeFilter">
-                  <Package size={14} className="filter-icon" /> Type
+                  <Package size={14} className="filter-icon" /> {t('Type', 'Karazana', 'Type')}
                 </label>
                 <select
                   id="typeFilter"
@@ -306,19 +335,19 @@ const DateOther = () => {
                   onChange={(e) => setFilterType(e.target.value)}
                   className="form-select"
                 >
-                  <option value="tous">Tous les types</option>
+                  <option value="tous">{t('Tous les types', 'Ny karazana rehetra', 'All types')}</option>
                   <option value="cd">CD</option>
                   <option value="mp3">MP3</option>
-                  <option value="oeuvre-web">Œuvre Web</option>
-                  <option value="hologramme">Hologramme</option>
-                  <option value="video">Vidéo</option>
-                  <option value="autre">Autre</option>
+                  <option value="oeuvre-web">{t('Œuvre Web', 'Asa an-tserasera', 'Web work')}</option>
+                  <option value="hologramme">{t('Hologramme', 'Holograma', 'Hologram')}</option>
+                  <option value="video">{t('Vidéo', 'Lahatsary', 'Video')}</option>
+                  <option value="autre">{t('Autre', 'Hafa', 'Other')}</option>
                 </select>
               </div>
 
               <div className="filter-item">
                 <label htmlFor="modeFilter">
-                  <DollarSign size={14} className="filter-icon" /> Mode paiement
+                  <DollarSign size={14} className="filter-icon" /> {t('Mode paiement', 'Fomba fandoavana', 'Payment mode')}
                 </label>
                 <select
                   id="modeFilter"
@@ -326,9 +355,9 @@ const DateOther = () => {
                   onChange={(e) => setFilterMode(e.target.value)}
                   className="form-select"
                 >
-                  <option value="tous">Tous</option>
-                  <option value="mensuel">Mensuel</option>
-                  <option value="unique">Unique</option>
+                  <option value="tous">{t('Tous', 'Rehetra', 'All')}</option>
+                  <option value="mensuel">{t('Mensuel', 'Isam-bolana', 'Monthly')}</option>
+                  <option value="unique">{t('Unique', 'Indray mandeha', 'One-time')}</option>
                 </select>
               </div>
 
@@ -336,10 +365,10 @@ const DateOther = () => {
                 <label>&nbsp;</label>
                 <div className="filter-buttons">
                   <button className="btn-reset" onClick={resetFilters}>
-                    <RotateCcw size={16} /> Réinitialiser
+                    <RotateCcw size={16} /> {t('Réinitialiser', 'Averina', 'Reset')}
                   </button>
                   <button className="btn-refresh" onClick={refreshData}>
-                    <RefreshCw size={16} /> Rafraîchir
+                    <RefreshCw size={16} /> {t('Rafraîchir', 'Havaozy', 'Refresh')}
                   </button>
                 </div>
               </div>
@@ -349,23 +378,23 @@ const DateOther = () => {
           {/* ===== INDICATEUR ===== */}
           <div className="indicator-bar">
             <span className="indicator-item">
-              <Users size={14} className="indicator-icon" /> Total : <strong>{totalUsagers}</strong>
+              <Users size={14} className="indicator-icon" /> {t('Total', 'Totaly', 'Total')} : <strong>{totalUsagers}</strong>
             </span>
             <span className="indicator-item">
-              <Repeat size={14} className="indicator-icon" /> Mensuel : <strong>{mensuels}</strong>
+              <Repeat size={14} className="indicator-icon" /> {t('Mensuel', 'Isam-bolana', 'Monthly')} : <strong>{mensuels}</strong>
             </span>
             <span className="indicator-item">
-              <CalendarCheck size={14} className="indicator-icon" /> Unique : <strong>{uniques}</strong>
+              <CalendarCheck size={14} className="indicator-icon" /> {t('Unique', 'Indray mandeha', 'One-time')} : <strong>{uniques}</strong>
             </span>
             <span className="indicator-item">
-              <DollarSign size={14} className="indicator-icon" /> Total reçu :{' '}
-              <strong>{montantTotalRecu.toLocaleString()} Ar</strong>
+              <DollarSign size={14} className="indicator-icon" /> {t('Total reçu', 'Totaly voaray', 'Total received')} :{' '}
+              <strong>{montantTotalRecu.toLocaleString(locale)} Ar</strong>
             </span>
             <span className="indicator-item indicator-total">
-              <TrendingUp size={14} className="indicator-icon" /> Montant moyen :{' '}
+              <TrendingUp size={14} className="indicator-icon" /> {t('Montant moyen', 'Vola antonony', 'Average amount')} :{' '}
               <strong>
                 {totalUsagers > 0
-                  ? Math.round(montantTotalRecu / totalUsagers).toLocaleString()
+                  ? Math.round(montantTotalRecu / totalUsagers).toLocaleString(locale)
                   : 0}{' '}
                 Ar
               </strong>
@@ -377,22 +406,22 @@ const DateOther = () => {
             {loading ? (
               <div className="loading-state">
                 <div className="spinner" />
-                <p>Chargement des données…</p>
+                <p>{t('Chargement des données…', 'Maka ny angona…', 'Loading data…')}</p>
               </div>
             ) : apiError ? (
               <div className="error-state">
                 <AlertCircle size={32} />
                 <p>{apiError}</p>
                 <button className="btn-retry" onClick={refreshData}>
-                  <RefreshCw size={16} /> Réessayer
+                  <RefreshCw size={16} /> {t('Réessayer', 'Andramo indray', 'Retry')}
                 </button>
               </div>
             ) : currentUsagers.length === 0 ? (
               <div className="empty-state">
                 <Package size={48} color="#94a3b8" />
-                <p>Aucun usager événementiel trouvé</p>
+                <p>{t('Aucun usager événementiel trouvé', 'Tsy misy mpampiasa hetsika hita', 'No event user found')}</p>
                 <button className="btn-retry" onClick={handleAjouter}>
-                  <Plus size={16} /> Ajouter un usager événementiel
+                  <Plus size={16} /> {t('Ajouter un usager événementiel', 'Hanampy mpampiasa hetsika', 'Add event user')}
                 </button>
               </div>
             ) : (
@@ -401,16 +430,16 @@ const DateOther = () => {
                   <thead>
                     <tr>
                       <th className="sticky-id">ID</th>
-                      <th className="sticky-nom">Dénomination</th>
-                      <th>Type</th>
-                      <th>Représentant</th>
-                      <th>Téléphone</th>
-                      <th>Région</th>
-                      <th>Mode</th>
-                      <th>Lignes</th>
-                      <th>Quittance</th>
-                      <th>Montant (Ar)</th>
-                      <th>Action</th>
+                      <th className="sticky-nom">{t('Dénomination', 'Anarana', 'Name')}</th>
+                      <th>{t('Type', 'Karazana', 'Type')}</th>
+                      <th>{t('Représentant', 'Mpisolo tena', 'Representative')}</th>
+                      <th>{t('Téléphone', 'Finday', 'Phone')}</th>
+                      <th>{t('Région', 'Faritra', 'Region')}</th>
+                      <th>{t('Mode', 'Fomba', 'Mode')}</th>
+                      <th>{t('Lignes', 'Andalana', 'Lines')}</th>
+                      <th>{t('Quittance', 'Taratasy', 'Receipt')}</th>
+                      <th>{t('Montant (Ar)', 'Vola (Ar)', 'Amount (Ar)')}</th>
+                      <th>{t('Action', 'Hetsika', 'Action')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -430,7 +459,7 @@ const DateOther = () => {
                             #{String(usager.id).padStart(3, '0')}
                           </td>
                           <td className="sticky-nom">
-                            <strong>{usager.denomination || 'Sans nom'}</strong>
+                            <strong>{usager.denomination || t('Sans nom', 'Tsy misy anarana', 'No name')}</strong>
                             {usager.nom && (
                               <div style={{ fontSize: '0.75em', color: '#666' }}>
                                 {usager.nom} {usager.prenom || ''}
@@ -468,9 +497,9 @@ const DateOther = () => {
                               }}
                             >
                               {isUnique ? (
-                                <><CalendarCheck size={12} /> Unique</>
+                                <><CalendarCheck size={12} /> {t('Unique', 'Indray mandeha', 'One-time')}</>
                               ) : (
-                                <><Repeat size={12} /> Mensuel</>
+                                <><Repeat size={12} /> {t('Mensuel', 'Isam-bolana', 'Monthly')}</>
                               )}
                             </span>
                           </td>
@@ -541,7 +570,7 @@ const DateOther = () => {
                 </button>
               </div>
               <div className="pagination-info">
-                {indexOfFirstItem + 1} - {Math.min(indexOfLastItem, filteredUsagers.length)} sur {filteredUsagers.length}
+                {indexOfFirstItem + 1} - {Math.min(indexOfLastItem, filteredUsagers.length)} {t('sur', 'amin\'ny', 'of')} {filteredUsagers.length}
               </div>
             </div>
           )}
@@ -554,7 +583,7 @@ const DateOther = () => {
           <div className="modal-container" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>
-                <Package size={18} /> {selectedUsager.denomination || 'Usager événementiel'}
+                <Package size={18} /> {selectedUsager.denomination || t('Usager événementiel', 'Mpampiasa hetsika', 'Event user')}
               </h3>
               <button className="modal-close" onClick={closeModal}>
                 <X size={20} />
@@ -562,33 +591,32 @@ const DateOther = () => {
             </div>
 
             <div className="modal-body">
-              {/* Informations */}
               <div className="modal-section">
                 <h4>
-                  <Users size={16} /> Informations
+                  <Users size={16} /> {t('Informations', 'Fampahalalana', 'Information')}
                 </h4>
                 <div className="modal-row">
                   <span>ID</span>
                   <strong>#{String(selectedUsager.id).padStart(3, '0')}</strong>
                 </div>
                 <div className="modal-row">
-                  <span>Dénomination</span>
+                  <span>{t('Dénomination', 'Anarana', 'Name')}</span>
                   <strong>{selectedUsager.denomination || '-'}</strong>
                 </div>
                 <div className="modal-row">
-                  <span>Nom / Prénom</span>
+                  <span>{t('Nom / Prénom', 'Anarana / Fanampin\'anarana', 'Name / First name')}</span>
                   <strong>
                     {selectedUsager.nom || '-'} {selectedUsager.prenom || ''}
                   </strong>
                 </div>
                 <div className="modal-row">
-                  <span>Type</span>
+                  <span>{t('Type', 'Karazana', 'Type')}</span>
                   <strong>
                     {TYPE_LABELS[selectedUsager.type_usager] || selectedUsager.type_usager}
                   </strong>
                 </div>
                 <div className="modal-row">
-                  <span>Téléphone</span>
+                  <span>{t('Téléphone', 'Finday', 'Phone')}</span>
                   <strong>{formatPhoneNumber(selectedUsager.telephone)}</strong>
                 </div>
                 <div className="modal-row">
@@ -596,22 +624,21 @@ const DateOther = () => {
                   <strong>{selectedUsager.email || '-'}</strong>
                 </div>
                 <div className="modal-row">
-                  <span>Région</span>
+                  <span>{t('Région', 'Faritra', 'Region')}</span>
                   <strong>{selectedUsager.region || '-'}</strong>
                 </div>
                 <div className="modal-row">
-                  <span>Adresse</span>
+                  <span>{t('Adresse', 'Adiresy', 'Address')}</span>
                   <strong>{selectedUsager.adresse || '-'}</strong>
                 </div>
               </div>
 
-              {/* Représentant */}
               <div className="modal-section">
                 <h4>
-                  <Users size={16} /> Représentant
+                  <Users size={16} /> {t('Représentant', 'Mpisolo tena', 'Representative')}
                 </h4>
                 <div className="modal-row">
-                  <span>Représenté par</span>
+                  <span>{t('Représenté par', 'Solontenan\'ny', 'Represented by')}</span>
                   <strong>{selectedUsager.representant_par || '-'}</strong>
                 </div>
                 <div className="modal-row">
@@ -619,28 +646,27 @@ const DateOther = () => {
                   <strong>{selectedUsager.representant_cin || '-'}</strong>
                 </div>
                 <div className="modal-row">
-                  <span>CIN délivrée le</span>
+                  <span>{t('CIN délivrée le', 'CIN nomena ny', 'ID issued on')}</span>
                   <strong>{formatDate(selectedUsager.representant_cin_delivree)}</strong>
                 </div>
                 <div className="modal-row">
-                  <span>Lieu de délivrance</span>
+                  <span>{t('Lieu de délivrance', 'Toerana nanomezana', 'Place of issue')}</span>
                   <strong>{selectedUsager.representant_cin_lieu || '-'}</strong>
                 </div>
               </div>
 
-              {/* Lignes de facture */}
               {selectedUsager.lignes && selectedUsager.lignes.length > 0 && (
                 <div className="modal-section">
                   <h4>
-                    <FileText size={16} /> Détail de la facture
+                    <FileText size={16} /> {t('Détail de la facture', 'Antsipirian\'ny faktiora', 'Invoice details')}
                   </h4>
                   <table className="data-table" style={{ marginTop: '8px' }}>
                     <thead>
                       <tr>
-                        <th>Description</th>
+                        <th>{t('Description', 'Fanazavana', 'Description')}</th>
                         <th style={{ textAlign: 'center' }}>U.</th>
                         <th style={{ textAlign: 'right' }}>P.U.</th>
-                        <th style={{ textAlign: 'right' }}>Montant</th>
+                        <th style={{ textAlign: 'right' }}>{t('Montant', 'Vola', 'Amount')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -659,49 +685,47 @@ const DateOther = () => {
                 </div>
               )}
 
-              {/* Paiement */}
               <div className="modal-section">
                 <h4>
-                  <DollarSign size={16} /> Paiement
+                  <DollarSign size={16} /> {t('Paiement', 'Fandoavana', 'Payment')}
                 </h4>
                 <div className="modal-row">
-                  <span>Mode paiement</span>
+                  <span>{t('Mode paiement', 'Fomba fandoavana', 'Payment mode')}</span>
                   <strong>
                     {selectedUsager.mode_paiement === 'unique'
-                      ? 'Paiement unique'
-                      : 'Paiement mensuel'}
+                      ? t('Paiement unique', 'Fandoavana indray mandeha', 'One-time payment')
+                      : t('Paiement mensuel', 'Fandoavana isam-bolana', 'Monthly payment')}
                   </strong>
                 </div>
                 {selectedUsager.paiement && (
                   <>
                     <div className="modal-row">
-                      <span>Montant</span>
+                      <span>{t('Montant', 'Vola', 'Amount')}</span>
                       <strong style={{ color: '#28a745' }}>
                         {formatNumber(selectedUsager.paiement.montant)} Ar
                       </strong>
                     </div>
                     <div className="modal-row">
-                      <span>Date paiement</span>
+                      <span>{t('Date paiement', 'Daty nandoavana', 'Payment date')}</span>
                       <strong>{formatDate(selectedUsager.paiement.date_paiement)}</strong>
                     </div>
                   </>
                 )}
                 {selectedUsager.quittance && (
                   <div className="modal-row">
-                    <span>Quittance</span>
+                    <span>{t('Quittance', 'Taratasy', 'Receipt')}</span>
                     <strong>{String(selectedUsager.quittance).padStart(7, '0')}</strong>
                   </div>
                 )}
               </div>
 
-              {/* Réception */}
               {selectedUsager.personne_recu && (
                 <div className="modal-section">
                   <h4>
-                    <CalendarCheck size={16} /> Réception
+                    <CalendarCheck size={16} /> {t('Réception', 'Fandraisana', 'Reception')}
                   </h4>
                   <div className="modal-row">
-                    <span>Personne qui reçoit</span>
+                    <span>{t('Personne qui reçoit', 'Mpandray', 'Receiver')}</span>
                     <strong>{selectedUsager.personne_recu}</strong>
                   </div>
                 </div>
@@ -710,7 +734,7 @@ const DateOther = () => {
 
             <div className="modal-footer">
               <button className="btn-modal-close" onClick={closeModal}>
-                Fermer
+                {t('Fermer', 'Hidio', 'Close')}
               </button>
             </div>
           </div>

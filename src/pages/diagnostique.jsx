@@ -1,75 +1,63 @@
 // src/pages/diagnostique.jsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import {
-  Brain,
-  TrendingUp,
-  AlertTriangle,
-  Clock,
-  DollarSign,
-  Users,
-  MapPin,
-  Activity,
-  PieChart,
-  Target,
-  RefreshCw,
-  Loader2,
-  X,
-  Lightbulb,
-  AlertCircle,
-  LineChart as LineChartIcon,
-  Sparkles,
-  Bot,
-  Send,
-  ChevronRight,
-  ChevronDown,
-  Compass,
-  Globe,
-  User,
-  ClipboardList,
-  Trophy,
-  FileWarning,
-  BarChart3,
-  ArrowUp,
-  ArrowDown,
-  Minus,
-  Home,
-  CheckCircle,
-  Zap,
-  MessageSquare,
-  Info
+  Brain, TrendingUp, AlertTriangle, Clock, DollarSign, Users, MapPin,
+  Activity, PieChart, Target, RefreshCw, Loader2, X, Lightbulb,
+  AlertCircle, LineChart as LineChartIcon, Sparkles, Bot, Send,
+  ChevronRight, ChevronDown, Compass, Globe, User, ClipboardList,
+  Trophy, FileWarning, BarChart3, ArrowUp, ArrowDown, Minus, Home,
+  CheckCircle, Zap, MessageSquare
 } from 'lucide-react';
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-  LineChart,
-  Line,
-  Area,
-  PieChart as RePieChart,
-  Pie,
-  Cell
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  CartesianGrid, LineChart, Line, Area,
+  PieChart as RePieChart, Pie, Cell
 } from 'recharts';
 
 import '../styles/diagnostique.css';
+// ✅ Hook unique de traduction
+import { useT } from '../hooks/useT';
 
 const API_BASE = 'http://localhost:3001/api';
 
-const PRIORITY_ICON = {
-  haute: '🔴',
-  moyenne: '🟡',
-  basse: '🟢'
+const PRIORITY_ICON = { haute: '🔴', moyenne: '🟡', basse: '🟢' };
+const COLORS = ['#3d99f5', '#6bc1ff', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6'];
+
+// ===== ÉCHAPPEMENT HTML POUR MESSAGES UTILISATEUR =====
+const escapeHtml = (text) => {
+  if (!text) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/\n/g, '<br>');
 };
 
-const COLORS = ['#3d99f5', '#6bc1ff', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6'];
+// ===== NETTOYAGE DES BALISES <pre> DANS LA RÉPONSE BACKEND =====
+const nettoyerReponse = (texte) => {
+  if (!texte) return '';
+  return texte
+    .replace(/^<pre>/i, '')
+    .replace(/<\/pre>$/i, '')
+    .trim();
+};
 
 const Diagnostique = () => {
   const navigate = useNavigate();
+
+  // ✅ LANGUE UNIQUE — vient du Context
+  const { t, langue } = useT();
+
+  // ✅ Locale pour formatage
+  const locale = useMemo(() => {
+    if (langue === 'en') return 'en-US';
+    if (langue === 'mg') return 'fr-MG';
+    return 'fr-FR';
+  }, [langue]);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -86,9 +74,7 @@ const Diagnostique = () => {
   const chatMessagesRef = useRef(null);
   const chatContainerRef = useRef(null);
 
-  useEffect(() => {
-    fetchDiagnostic();
-  }, []);
+  useEffect(() => { fetchDiagnostic(); }, []);
 
   useEffect(() => {
     if (chatMessagesRef.current) {
@@ -102,13 +88,9 @@ const Diagnostique = () => {
     setError(null);
     try {
       const res = await axios.get(`${API_BASE}/ia/diagnostic`);
-      if (res.data.success) {
-        setDiagnostic(res.data.diagnostic);
-      } else {
-        setError(res.data.message || 'Erreur lors de la génération du diagnostic');
-      }
+      if (res.data.success) setDiagnostic(res.data.diagnostic);
+      else setError(res.data.message || t('Erreur', 'Olana', 'Error'));
     } catch (err) {
-      console.error('❌ Erreur chargement diagnostic IA:', err);
       setError(err.response?.data?.message || err.message);
     } finally {
       setLoading(false);
@@ -126,26 +108,27 @@ const Diagnostique = () => {
     setIaLoading(true);
 
     try {
-      const res = await axios.post(`${API_BASE}/ia/chat`, { message });
+      const res = await axios.post(`${API_BASE}/ia/chat`, { message, langue });
       const reponse = res.data.success
-        ? res.data.reponse
-        : `⚠️ ${res.data.message || "Je n'ai pas pu traiter cette demande."}`;
+        ? nettoyerReponse(res.data.reponse)
+        : `⚠️ ${res.data.message || t('Erreur', 'Olana', 'Error')}`;
       setChatHistory(prev => [...prev, { role: 'assistant', content: reponse }]);
     } catch (err) {
-      console.error('❌ Erreur chat IA:', err);
-      setChatHistory(prev => [
-        ...prev,
-        { role: 'assistant', content: "⚠️ Le service IA est momentanément indisponible. Réessayez dans un instant." }
-      ]);
+      setChatHistory(prev => [...prev, {
+        role: 'assistant',
+        content: t(
+          '⚠️ Service IA indisponible. Réessayez.',
+          '⚠️ Tsy misy ny serivisy IA. Andramo indray.',
+          '⚠️ AI service unavailable. Try again.'
+        )
+      }]);
     } finally {
       setIaLoading(false);
     }
   };
 
   const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !iaLoading && userInput.trim()) {
-      envoyerMessage();
-    }
+    if (e.key === 'Enter' && !iaLoading && userInput.trim()) envoyerMessage();
   };
 
   const toggleExpand = (alertId) => {
@@ -157,19 +140,31 @@ const Diagnostique = () => {
       navigate(`/verification-usager?type=${alert.categorie}`);
       return;
     }
-    if (alert.action === 'voir-quittances') {
-      navigate('/quitance');
-      return;
-    }
-    let requete = `Explique-moi comment résoudre : ${alert.titre}`;
+    if (alert.action === 'voir-quittances') { navigate('/quitance'); return; }
+
+    let requete = t(
+      `Explique-moi comment résoudre : ${alert.titre}`,
+      `Hazavao ahy ny fomba hamahana : ${alert.titre}`,
+      `Explain how to resolve: ${alert.titre}`
+    );
     if (alert.action === 'mission' && alert.region) {
-      requete = `Planifier une mission de prospection dans la région ${alert.region}`;
+      requete = t(
+        `Planifier une mission de prospection dans la région ${alert.region}`,
+        `Handamina iraka fikarohana ao amin'ny faritra ${alert.region}`,
+        `Plan a prospecting mission in region ${alert.region}`
+      );
     } else if (alert.action === 'relance-globale') {
-      requete = 'Je veux lancer une campagne de relance pour les usagers en retard';
+      requete = t(
+        'Je veux lancer une campagne de relance pour les usagers en retard',
+        'Te hanomboka fanentanana ho an\'ny mpampiasa tara aho',
+        'I want to launch a reminder campaign for late users'
+      );
     } else if (alert.action === 'analyser-tendance') {
-      requete = 'Analyser les causes de la baisse des revenus';
-    } else if (alert.action === 'voir-anomalies') {
-      requete = 'Voir les anomalies détectées dans les paiements';
+      requete = t(
+        'Analyser les causes de la baisse des revenus',
+        'Fandinihana ny anton\'ny fihenan\'ny vola miditra',
+        'Analyze the causes of declining revenue'
+      );
     }
     envoyerMessage(requete);
   };
@@ -177,21 +172,25 @@ const Diagnostique = () => {
   // ===== RENDU DU CHAT =====
   const renderChat = () => (
     <>
-      {showChat && (
-        <div className="ia-chat-overlay" onClick={() => setShowChat(false)} />
-      )}
+      {showChat && <div className="ia-chat-overlay" onClick={() => setShowChat(false)} />}
       <div className={`ia-chat-container ${showChat ? 'active' : ''}`} ref={chatContainerRef}>
         <div className="ia-chat-header">
           <div className="ia-chat-header-left">
-            <div className="ia-chat-header-avatar">
-              <Bot size={18} />
-            </div>
+            <div className="ia-chat-header-avatar"><Bot size={18} /></div>
             <div className="ia-chat-header-info">
-              <span className="ia-chat-title">Assistant IA OMDA</span>
-              <span className="ia-online-badge">● En ligne</span>
+              <span className="ia-chat-title">
+                {t('Assistant IA OMDA', 'Mpanampy IA OMDA', 'OMDA AI Assistant')}
+              </span>
+              <span className="ia-online-badge">
+                ● {t('En ligne', 'Mifandray', 'Online')}
+              </span>
             </div>
           </div>
-          <button className="ia-chat-close" onClick={() => setShowChat(false)} title="Fermer">
+          <button
+            className="ia-chat-close"
+            onClick={() => setShowChat(false)}
+            title={t('Fermer', 'Hidio', 'Close')}
+          >
             <X size={18} />
           </button>
         </div>
@@ -199,29 +198,63 @@ const Diagnostique = () => {
         <div className="ia-chat-messages" ref={chatMessagesRef}>
           {chatHistory.length === 0 ? (
             <div className="ia-chat-empty">
-              <div className="ia-chat-empty-icon">
-                <Bot size={40} />
-              </div>
-              <p className="ia-chat-empty-title">Bonjour ! Je suis votre assistant IA OMDA.</p>
-              <p className="ia-chat-empty-sub">Posez-moi une question sur vos données ou choisissez une action rapide</p>
+              <div className="ia-chat-empty-icon"><Bot size={40} /></div>
+              <p className="ia-chat-empty-title">
+                {t(
+                  'Bonjour ! Je suis votre assistant IA OMDA.',
+                  'Manao ahoana ! Izaho no mpanampy IA OMDA.',
+                  'Hello! I am your OMDA AI assistant.'
+                )}
+              </p>
+              <p className="ia-chat-empty-sub">
+                {t(
+                  'Posez-moi une question sur vos données ou choisissez une action rapide',
+                  'Manontania momba ny angona na misafidiana hetsika haingana',
+                  'Ask me a question about your data or choose a quick action'
+                )}
+              </p>
               <div className="ia-chat-quick-actions">
-                <button onClick={() => envoyerMessage('Quelle est la performance globale ?')}>
-                  <Target size={14} /> Performance
+                <button onClick={() => envoyerMessage(t(
+                  'Quelle est la performance globale ?',
+                  'Manao ahoana ny fahombiazana ankapobeny ?',
+                  'What is the overall performance?'
+                ))}>
+                  <Target size={14} /> {t('Performance', 'Fahombiazana', 'Performance')}
                 </button>
-                <button onClick={() => envoyerMessage('Voir les alertes')}>
-                  <AlertCircle size={14} /> Alertes
+                <button onClick={() => envoyerMessage(t(
+                  'Voir les alertes',
+                  'Jereo ny fampandrenesana',
+                  'Show alerts'
+                ))}>
+                  <AlertCircle size={14} /> {t('Alertes', 'Fampandrenesana', 'Alerts')}
                 </button>
-                <button onClick={() => envoyerMessage('Suggestions IA')}>
-                  <Lightbulb size={14} /> Suggestions
+                <button onClick={() => envoyerMessage(t(
+                  'Suggestions IA',
+                  'Soso-kevitra IA',
+                  'AI suggestions'
+                ))}>
+                  <Lightbulb size={14} /> {t('Suggestions', 'Soso-kevitra', 'Suggestions')}
                 </button>
-                <button onClick={() => envoyerMessage('Prévisions des revenus')}>
-                  <TrendingUp size={14} /> Prévisions
+                <button onClick={() => envoyerMessage(t(
+                  'Prévisions des revenus',
+                  'Vinavina ny vola miditra',
+                  'Revenue forecast'
+                ))}>
+                  <TrendingUp size={14} /> {t('Prévisions', 'Vinavina', 'Forecast')}
                 </button>
-                <button onClick={() => envoyerMessage('Quels sont les succès ?')}>
-                  <Trophy size={14} /> Succès
+                <button onClick={() => envoyerMessage(t(
+                  'Usagers en retard',
+                  'Mpampiasa tara',
+                  'Late users'
+                ))}>
+                  <Users size={14} /> {t('Usagers', 'Mpampiasa', 'Users')}
                 </button>
-                <button onClick={() => envoyerMessage("Donne-moi le plan d'action")}>
-                  <ClipboardList size={14} /> Plan d'action
+                <button onClick={() => envoyerMessage(t(
+                  "Donne-moi le plan d'action",
+                  'Omeo ahy ny tetikasa',
+                  'Give me the action plan'
+                ))}>
+                  <ClipboardList size={14} /> {t("Plan d'action", 'Tetikasa', 'Action plan')}
                 </button>
               </div>
             </div>
@@ -231,20 +264,28 @@ const Diagnostique = () => {
                 <div className={`ia-chat-avatar ${msg.role}`}>
                   {msg.role === 'assistant' ? <Bot size={16} /> : <User size={16} />}
                 </div>
-                <div className={`ia-chat-bubble ${msg.role}`}>
-                  {msg.content}
-                </div>
+
+                {msg.role === 'assistant' ? (
+                  <div className={`ia-chat-bubble ${msg.role}`}>
+                    <div className="ia-texte-structure">
+                      {msg.content}
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    className={`ia-chat-bubble ${msg.role}`}
+                    dangerouslySetInnerHTML={{ __html: escapeHtml(msg.content) }}
+                  />
+                )}
               </div>
             ))
           )}
           {iaLoading && (
             <div className="ia-chat-msg assistant">
-              <div className="ia-chat-avatar assistant">
-                <Bot size={16} />
-              </div>
+              <div className="ia-chat-avatar assistant"><Bot size={16} /></div>
               <div className="ia-chat-bubble assistant loading">
                 <Loader2 size={16} className="spinning" />
-                <span>Réflexion en cours...</span>
+                <span>{t('Réflexion en cours...', 'Mieritreritra...', 'Thinking...')}</span>
               </div>
             </div>
           )}
@@ -253,7 +294,7 @@ const Diagnostique = () => {
         <div className="ia-chat-input">
           <input
             type="text"
-            placeholder="Posez une question à l'IA..."
+            placeholder={t("Posez une question à l'IA...", 'Manontania ny IA...', 'Ask the AI a question...')}
             value={userInput}
             onChange={(e) => setUserInput(e.target.value)}
             onKeyPress={handleKeyPress}
@@ -262,7 +303,7 @@ const Diagnostique = () => {
           <button
             onClick={() => envoyerMessage()}
             disabled={iaLoading || !userInput.trim()}
-            title="Envoyer"
+            title={t('Envoyer', 'Alefa', 'Send')}
           >
             <Send size={18} />
           </button>
@@ -275,7 +316,9 @@ const Diagnostique = () => {
     <button
       onClick={() => setShowChat(!showChat)}
       className={`ia-notification ${showChat ? 'active' : ''}`}
-      title={showChat ? 'Fermer le chat' : 'Ouvrir l’assistant IA'}
+      title={showChat
+        ? t('Fermer le chat', 'Hidio ny resaka', 'Close chat')
+        : t("Ouvrir l'assistant IA", 'Hanokatra ny mpanampy IA', 'Open AI assistant')}
     >
       <MessageSquare size={24} />
       {diagnostic?.alertes?.length > 0 && !showChat && (
@@ -289,8 +332,12 @@ const Diagnostique = () => {
     return (
       <div className="diagnostique-loading">
         <div className="spinner"></div>
-        <div className="loading-text">Analyse IA des données en cours...</div>
-        <div className="loading-sub">Cela peut prendre quelques secondes</div>
+        <div className="loading-text">
+          {t('Analyse IA des données en cours...', 'Fandinihana IA ny angona...', 'AI data analysis in progress...')}
+        </div>
+        <div className="loading-sub">
+          {t('Cela peut prendre quelques secondes', 'Mety haharitra segondra vitsy', 'This may take a few seconds')}
+        </div>
       </div>
     );
   }
@@ -298,13 +345,11 @@ const Diagnostique = () => {
   if (error) {
     return (
       <div className="diagnostique-error">
-        <div className="error-icon-wrap">
-          <AlertCircle size={48} />
-        </div>
-        <h2>Impossible de charger le diagnostic</h2>
+        <div className="error-icon-wrap"><AlertCircle size={48} /></div>
+        <h2>{t('Impossible de charger le diagnostic', 'Tsy afaka maka ny fandalinana', 'Unable to load diagnostic')}</h2>
         <p>{error}</p>
         <button onClick={() => fetchDiagnostic()}>
-          <RefreshCw size={16} /> Réessayer
+          <RefreshCw size={16} /> {t('Réessayer', 'Andramo indray', 'Retry')}
         </button>
       </div>
     );
@@ -314,30 +359,26 @@ const Diagnostique = () => {
 
   const { global, categories, tendance, forecast, parRegion, historique, alertes, succes, suggestions } = diagnostic;
 
-  const regionsDisponibles = ['Toutes', ...(parRegion || []).map(r => r.region)];
+  const regionsDisponibles = [
+    t('Toutes', 'Rehetra', 'All'),
+    ...(parRegion || []).map(r => r.region)
+  ];
   const regionsAffichees = selectedRegion === 'Toutes'
     ? (parRegion || [])
     : (parRegion || []).filter(r => r.region === selectedRegion);
 
-  const dateGeneration = new Date(diagnostic.genereLe).toLocaleString('fr-FR', {
-    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  const dateGeneration = new Date(diagnostic.genereLe).toLocaleString(locale, {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 
-  // Données pour les graphiques
-  const pieData = Object.entries(categories || {}).map(([key, c]) => ({
-    name: c.label,
-    value: c.tauxPaiement
-  }));
-
-  const barData = Object.entries(categories || {}).map(([key, c]) => ({
-    name: c.label,
-    payes: c.payes,
-    nonPayes: c.nonPayes
-  }));
+  const pieData = Object.entries(categories || {}).map(([, c]) => ({ name: c.label, value: c.tauxPaiement }));
+  const barData = Object.entries(categories || {}).map(([, c]) => ({ name: c.label, payes: c.payes, nonPayes: c.nonPayes }));
 
   const forecastData = (forecast || []).map((v, i) => ({
     mois: `M${i + 1}`,
-    valeur: v
+    valeur: v.valeur !== undefined ? v.valeur : v,
+    borneInf: v.borneInf !== undefined ? v.borneInf : null,
+    borneSup: v.borneSup !== undefined ? v.borneSup : null,
   }));
 
   const getTendanceIcon = () => {
@@ -354,35 +395,32 @@ const Diagnostique = () => {
     return '#f59e0b';
   };
 
+  // ✅ Labels des graphiques traduits
+  const labelPayes = t('Payés', 'Nandoa', 'Paid');
+  const labelNonPayes = t('Non payés', 'Tsy nandoa', 'Unpaid');
+  const labelActuel = t('Actuel', 'Ankehitriny', 'Current');
+  const labelPrevu = t('Prévu', 'Vinavina', 'Forecast');
+
   return (
     <div className="diagnostique-page">
       {/* HEADER */}
       <div className="diagnostique-header">
         <div className="header-left">
-          <div className="header-icon-wrap">
-            <Brain size={26} />
-          </div>
+          <div className="header-icon-wrap"><Brain size={26} /></div>
           <div className="header-titles">
-            <h1>Diagnostic IA</h1>
-            <span className="subtitle">Analyse avancée des données OMDA</span>
+            <h1>{t('Diagnostic IA', 'Fandinihana IA', 'AI Diagnostic')}</h1>
+            <span className="subtitle">
+              {t('Analyse avancée des données OMDA', 'Fanadihadiana lalina ny angona OMDA', 'Advanced OMDA data analysis')}
+            </span>
           </div>
-          <span className="ia-badge">
-            <Sparkles size={14} /> IA Actif
-          </span>
+          <span className="ia-badge"><Sparkles size={14} /> {t('IA Actif', 'IA Mavitrika', 'AI Active')}</span>
         </div>
         <div className="header-right">
-          <select
-            value={selectedRegion}
-            onChange={(e) => setSelectedRegion(e.target.value)}
-            className="filter-select"
-          >
-            {regionsDisponibles.map(region => (
-              <option key={region} value={region}>{region}</option>
-            ))}
+          <select value={selectedRegion} onChange={(e) => setSelectedRegion(e.target.value)} className="filter-select">
+            {regionsDisponibles.map(region => (<option key={region} value={region}>{region}</option>))}
           </select>
-
           <button onClick={() => navigate('/dashboard')} className="btn-header btn-dashboard">
-            <Home size={16} /> Dashboard
+            <Home size={16} /> {t('Dashboard', 'Tabilao', 'Dashboard')}
           </button>
         </div>
       </div>
@@ -390,35 +428,35 @@ const Diagnostique = () => {
       {/* BANDEAU IA */}
       <div className="ia-header-banner">
         <div className="ia-header-content">
-          <div className="ia-header-avatar">
-            <Bot size={28} />
-          </div>
+          <div className="ia-header-avatar"><Bot size={28} /></div>
           <div>
-            <h3>Assistant IA — Diagnostic Intelligent</h3>
-            <p>Dernière analyse : {dateGeneration}</p>
+            <h3>
+              {t('Assistant IA', 'Mpanampy IA', 'AI Assistant')} — {t('Diagnostic IA', 'Fandinihana IA', 'AI Diagnostic')}
+            </h3>
+            <p>{t('Dernière analyse', 'Fanadihadiana farany', 'Last analysis')} : {dateGeneration}</p>
           </div>
         </div>
         <div className="ia-header-stats">
           <div className="ia-stat">
             <Activity size={16} />
-            <span>{global.totalUsagers} usagers</span>
+            <span>{global.totalUsagers} {t('usagers', 'mpampiasa', 'users')}</span>
           </div>
           <div className="ia-stat">
             <DollarSign size={16} />
-            <span>{global.totalUsagersPayes} à jour</span>
+            <span>{global.totalUsagersPayes} {t('à jour', 'voaloa', 'up to date')}</span>
           </div>
           <div className="ia-stat highlight">
             <Target size={16} />
-            <span>{global.tauxGlobal}% taux</span>
+            <span>{global.tauxGlobal}% {t('taux', 'taham', 'rate')}</span>
           </div>
         </div>
       </div>
 
-      {/* SUGGESTIONS IA */}
+      {/* SUGGESTIONS */}
       {suggestions?.length > 0 && (
         <div className="ia-suggestions-container">
           <div className="section-header">
-            <h4><Lightbulb size={18} /> Suggestions IA</h4>
+            <h4><Lightbulb size={18} /> {t('Suggestions IA', 'Soso-kevitra IA', 'AI Suggestions')}</h4>
             <span className="section-count">{suggestions.length}</span>
           </div>
           <div className="ia-suggestions-grid">
@@ -427,83 +465,72 @@ const Diagnostique = () => {
                 key={idx}
                 className={`ia-suggestion-item ${sug.priorite || 'basse'}`}
                 onClick={() => envoyerMessage(sug.texte)}
-                title="Demander plus de détails à l'IA"
               >
-                <div className="suggestion-icon">
-                  <Zap size={15} />
-                </div>
+                <div className="suggestion-icon"><Zap size={15} /></div>
                 <span className="suggestion-text">{sug.texte}</span>
-                <span className="ia-suggestion-priority">
-                  {PRIORITY_ICON[sug.priorite] || '🟢'}
-                </span>
+                <span className="ia-suggestion-priority">{PRIORITY_ICON[sug.priorite] || '🟢'}</span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* STATS GLOBALES */}
+      {/* STATS */}
       <div className="diagnostique-stats">
         <div className="stat-card">
-          <div className="stat-icon users">
-            <Users size={22} />
-          </div>
+          <div className="stat-icon users"><Users size={22} /></div>
           <div className="stat-info">
             <span className="stat-value">{global.totalUsagers}</span>
-            <span className="stat-label">Usagers</span>
+            <span className="stat-label">{t('Usagers', 'Mpampiasa', 'Users')}</span>
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon success">
-            <DollarSign size={22} />
-          </div>
+          <div className="stat-icon success"><DollarSign size={22} /></div>
           <div className="stat-info">
             <span className="stat-value">{global.totalUsagersPayes}</span>
-            <span className="stat-label">À jour</span>
+            <span className="stat-label">{t('À jour', 'Voaloa', 'Up to date')}</span>
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon primary">
-            <Activity size={22} />
-          </div>
+          <div className="stat-icon primary"><Activity size={22} /></div>
           <div className="stat-info">
             <span className="stat-value">{global.tauxGlobal}%</span>
-            <span className="stat-label">Taux de paiement</span>
+            <span className="stat-label">{t('Taux de paiement', 'Taham fandoavana', 'Payment rate')}</span>
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon warning">
-            <Clock size={22} />
-          </div>
+          <div className="stat-icon warning"><Clock size={22} /></div>
           <div className="stat-info">
             <span className="stat-value">{global.quittancesNonValidees}</span>
-            <span className="stat-label">Quittances à valider</span>
+            <span className="stat-label">{t('Quittances à valider', 'Taratasy hamarinina', 'Receipts to validate')}</span>
           </div>
         </div>
       </div>
 
-      {/* ALERTES IA */}
+      {/* ALERTES */}
       {alertes?.length > 0 && (
         <div className="alerts-container">
           <div className="alerts-header">
-            <h4><AlertTriangle size={18} /> Alertes IA</h4>
-            <span className="alerts-count">{alertes.length} alerte{alertes.length > 1 ? 's' : ''}</span>
+            <h4><AlertTriangle size={18} /> {t('Alertes IA', 'Fampandrenesana IA', 'AI Alerts')}</h4>
+            <span className="alerts-count">
+              {alertes.length} {t('alerte', 'fampandrenesana', 'alert')}{alertes.length > 1 ? 's' : ''}
+            </span>
           </div>
           <div className="alerts-list">
             {alertes.map((alert) => (
               <div key={alert.id} className={`alert-item-simple ${alert.type}`}>
                 <div className="alert-icon-simple">
-                  {alert.type === 'critique' ? (
-                    <AlertTriangle size={20} />
-                  ) : (
-                    <AlertCircle size={20} />
-                  )}
+                  {alert.type === 'critique' ? <AlertTriangle size={20} /> : <AlertCircle size={20} />}
                 </div>
                 <div className="alert-content-simple">
                   <div className="alert-header-simple">
                     <span className="alert-title-simple">{alert.titre}</span>
                     <span className={`alert-badge-simple ${alert.type}`}>
-                      {alert.type === 'critique' ? 'Critique' : alert.type === 'warning' ? 'Avertissement' : 'Info'}
+                      {alert.type === 'critique'
+                        ? t('Critique', 'Mafy', 'Critical')
+                        : alert.type === 'warning'
+                        ? t('Avertissement', 'Fampitandremana', 'Warning')
+                        : t('Info', 'Vaovao', 'Info')}
                     </span>
                   </div>
                   <div className="alert-message-simple">{alert.message}</div>
@@ -511,7 +538,7 @@ const Diagnostique = () => {
                 <div className="alert-actions-simple">
                   <button className="alert-action-simple" onClick={() => toggleExpand(alert.id)}>
                     {expandedAlert === alert.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    Plan
+                    {t('Plan', 'Tetikasa', 'Plan')}
                   </button>
                   <button className="alert-action-simple secondary" onClick={() => handleAlertAction(alert)}>
                     <Bot size={14} /> IA
@@ -521,12 +548,12 @@ const Diagnostique = () => {
                       className="alert-action-simple outline"
                       onClick={() => navigate(`/verification-usager?type=${alert.categorie}`)}
                     >
-                      <Users size={14} /> Usagers
+                      <Users size={14} /> {t('Usagers', 'Mpampiasa', 'Users')}
                     </button>
                   )}
                   {alert.action === 'voir-quittances' && (
                     <button className="alert-action-simple outline" onClick={() => navigate('/quitance')}>
-                      <FileWarning size={14} /> Quittances
+                      <FileWarning size={14} /> {t('Quittances', 'Taratasy', 'Receipts')}
                     </button>
                   )}
                 </div>
@@ -553,11 +580,11 @@ const Diagnostique = () => {
       {succes?.length > 0 && (
         <div className="ia-message-container">
           <div className="ia-message">
-            <div className="ia-icon-wrap">
-              <Trophy size={22} />
-            </div>
+            <div className="ia-icon-wrap"><Trophy size={22} /></div>
             <div className="ia-content">
-              <strong className="ia-content-title">Points positifs détectés</strong>
+              <strong className="ia-content-title">
+                {t('Points positifs détectés', 'Zavatra tsara hita', 'Positive points detected')}
+              </strong>
               <ul>
                 {succes.map((s, i) => (
                   <li key={i}>
@@ -575,23 +602,14 @@ const Diagnostique = () => {
       <div className="diagnostique-charts">
         {forecastData.length > 0 && (
           <div className="chart-card">
-            <h4><TrendingUp size={18} /> Prévisions 6 mois</h4>
+            <h4><TrendingUp size={18} /> {t('Prévisions 6 mois', 'Vinavina 6 volana', '6-month forecast')}</h4>
             <div className="chart-wrapper">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={forecastData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e8ecf0" />
                   <XAxis dataKey="mois" tick={{ fontSize: 12, fill: '#6b8a9a' }} />
                   <YAxis tick={{ fontSize: 12, fill: '#6b8a9a' }} />
-                  <Tooltip
-                    formatter={(value) => `${Math.round(value).toLocaleString()} Ar`}
-                    contentStyle={{
-                      borderRadius: 10,
-                      border: 'none',
-                      boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
-                      fontSize: 13,
-                      padding: '10px 14px'
-                    }}
-                  />
+                  <Tooltip formatter={(v) => `${Math.round(v).toLocaleString(locale)} Ar`} />
                   <defs>
                     <linearGradient id="forecastGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#3d99f5" stopOpacity={0.35} />
@@ -599,14 +617,8 @@ const Diagnostique = () => {
                     </linearGradient>
                   </defs>
                   <Area type="monotone" dataKey="valeur" fill="url(#forecastGradient)" stroke="none" />
-                  <Line
-                    type="monotone"
-                    dataKey="valeur"
-                    stroke="#3d99f5"
-                    strokeWidth={2.8}
-                    dot={{ fill: '#3d99f5', r: 4, strokeWidth: 0 }}
-                    activeDot={{ r: 6 }}
-                  />
+                  <Line type="monotone" dataKey="valeur" stroke="#3d99f5" strokeWidth={2.8}
+                    dot={{ fill: '#3d99f5', r: 4, strokeWidth: 0 }} activeDot={{ r: 6 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -615,23 +627,16 @@ const Diagnostique = () => {
 
         {barData.length > 0 && (
           <div className="chart-card">
-            <h4><PieChart size={18} /> Paiements par catégorie</h4>
+            <h4><PieChart size={18} /> {t('Paiements par catégorie', 'Fandoavana isaky ny sokajy', 'Payments by category')}</h4>
             <div className="chart-wrapper">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={barData} barGap={6}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e8ecf0" />
                   <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#6b8a9a' }} />
                   <YAxis tick={{ fontSize: 12, fill: '#6b8a9a' }} />
-                  <Tooltip
-                    contentStyle={{
-                      borderRadius: 10,
-                      border: 'none',
-                      boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
-                      fontSize: 13
-                    }}
-                  />
-                  <Bar dataKey="payes" fill="#22c55e" name="Payés" radius={[5, 5, 0, 0]} />
-                  <Bar dataKey="nonPayes" fill="#ef4444" name="Non payés" radius={[5, 5, 0, 0]} />
+                  <Tooltip />
+                  <Bar dataKey="payes" fill="#22c55e" name={labelPayes} radius={[5, 5, 0, 0]} />
+                  <Bar dataKey="nonPayes" fill="#ef4444" name={labelNonPayes} radius={[5, 5, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -640,35 +645,18 @@ const Diagnostique = () => {
 
         {pieData.length > 0 && (
           <div className="chart-card">
-            <h4><BarChart3 size={18} /> Taux par catégorie</h4>
+            <h4><BarChart3 size={18} /> {t('Taux par catégorie', 'Taham isaky ny sokajy', 'Rate by category')}</h4>
             <div className="chart-wrapper">
               <ResponsiveContainer width="100%" height="100%">
                 <RePieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={48}
-                    outerRadius={78}
-                    paddingAngle={3}
-                    dataKey="value"
-                    label={({ name, value }) => `${name} ${value}%`}
-                    labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }}
-                    fontSize={11}
-                  >
+                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={48} outerRadius={78}
+                    paddingAngle={3} dataKey="value"
+                    label={({ name, value }) => `${name} ${value}%`} fontSize={11}>
                     {pieData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip
-                    formatter={(value) => `${value}%`}
-                    contentStyle={{
-                      borderRadius: 10,
-                      border: 'none',
-                      boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
-                      fontSize: 13
-                    }}
-                  />
+                  <Tooltip formatter={(v) => `${v}%`} />
                 </RePieChart>
               </ResponsiveContainer>
             </div>
@@ -679,53 +667,44 @@ const Diagnostique = () => {
           <div className="chart-card">
             <h4 className="chart-title-with-trend">
               <span className="chart-title-left">
-                <LineChartIcon size={18} /> Tendance
+                <LineChartIcon size={18} /> {t('Tendance', 'Fironana', 'Trend')}
               </span>
               <span className="trend-badge" style={{ color: getTendanceColor() }}>
-                {getTendanceIcon()}
-                {tendance.pourcentage}%
+                {getTendanceIcon()} {tendance.pourcentage}%
               </span>
             </h4>
             <div className="chart-wrapper">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart
-                  data={[
-                    { periode: 'Actuel', valeur: 100 },
-                    { periode: 'Prévu', valeur: 100 + (tendance.pourcentage || 0) }
-                  ]}
-                >
+                <LineChart data={[
+                  { periode: labelActuel, valeur: 100 },
+                  { periode: labelPrevu, valeur: 100 + (tendance.pourcentage || 0) },
+                ]}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e8ecf0" />
                   <XAxis dataKey="periode" tick={{ fontSize: 12, fill: '#6b8a9a' }} />
                   <YAxis tick={{ fontSize: 12, fill: '#6b8a9a' }} />
-                  <Tooltip
-                    formatter={(value) => `${value}%`}
-                    contentStyle={{
-                      borderRadius: 10,
-                      border: 'none',
-                      boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
-                      fontSize: 13
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="valeur"
-                    stroke={getTendanceColor()}
-                    strokeWidth={3}
-                    dot={{ fill: getTendanceColor(), r: 6 }}
-                  />
+                  <Tooltip formatter={(v) => `${v}%`} />
+                  <Line type="monotone" dataKey="valeur" stroke={getTendanceColor()} strokeWidth={3}
+                    dot={{ fill: getTendanceColor(), r: 6 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
+            {tendance.r2 !== undefined && (
+              <div style={{ fontSize: 12, color: '#6b8a9a', textAlign: 'center', marginTop: 4 }}>
+                R² = {tendance.r2}
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* RÉPARTITION PAR RÉGION */}
+      {/* RÉGIONS */}
       {regionsAffichees.length > 0 && (
         <div className="detail-section full-width">
           <h4>
-            <MapPin size={18} /> Répartition par région
-            {selectedRegion !== 'Toutes' && <span className="region-tag">— {selectedRegion}</span>}
+            <MapPin size={18} /> {t('Répartition par région', 'Fizarana isaky ny faritra', 'Distribution by region')}
+            {selectedRegion !== 'Toutes' && (
+              <span className="region-tag">— {selectedRegion}</span>
+            )}
           </h4>
           <ul className="detail-list region-list">
             {regionsAffichees.map((r, i) => (
@@ -733,7 +712,7 @@ const Diagnostique = () => {
                 <Globe size={16} />
                 <span className="region-name">{r.region}</span>
                 <span className="region-meta">
-                  {r.nbQuittances} quittance{r.nbQuittances > 1 ? 's' : ''} · {Math.round(r.montant).toLocaleString()} Ar
+                  {r.nbQuittances} · {Math.round(r.montant).toLocaleString(locale)} Ar
                 </span>
               </li>
             ))}
@@ -741,37 +720,34 @@ const Diagnostique = () => {
         </div>
       )}
 
-      {/* OBJECTIFS ET RECOMMANDATIONS */}
+      {/* OBJECTIFS + SUGGESTIONS */}
       <div className="diagnostique-details">
         <div className="detail-section">
-          <h4><Target size={18} /> Objectifs</h4>
+          <h4><Target size={18} /> {t('Objectifs', 'Tanjona', 'Objectives')}</h4>
           <ul className="detail-list">
             <li>
               <Target size={16} />
-              <span>Atteindre <strong>{global.objectifTaux}%</strong> de taux de paiement</span>
+              <span>{t('Atteindre', 'Mahatratra', 'Reach')} <strong>{global.objectifTaux}%</strong> {t('taux', 'taham', 'rate')}</span>
             </li>
             {tendance && (
               <li>
                 <Compass size={16} />
-                <span>
-                  Tendance : <strong>{tendance.direction}</strong> ({tendance.pourcentage}%)
-                  <span className="trend-emoji" style={{ color: getTendanceColor() }}>
-                    {tendance.direction === 'croissance' ? ' 📈' : tendance.direction === 'décroissance' ? ' 📉' : ' ➡️'}
-                  </span>
-                </span>
+                <span>{t('Tendance', 'Fironana', 'Trend')} : <strong>{tendance.direction}</strong> ({tendance.pourcentage}%)</span>
               </li>
             )}
             <li>
               <Clock size={16} />
               <span>
-                <strong>{global.quittancesNonValidees}</strong> quittance{global.quittancesNonValidees > 1 ? 's' : ''} à valider
+                <strong>{global.quittancesNonValidees}</strong>{' '}
+                {t('quittance non validée', 'taratasy tsy mbola voamarina', 'unvalidated receipt')}
+                {global.quittancesNonValidees > 1 ? 's' : ''}
               </span>
             </li>
           </ul>
         </div>
 
         <div className="detail-section">
-          <h4><Lightbulb size={18} /> Suggestions</h4>
+          <h4><Lightbulb size={18} /> {t('Suggestions', 'Soso-kevitra', 'Suggestions')}</h4>
           <ul className="detail-list">
             {(suggestions || []).map((s, i) => (
               <li key={i} className="suggestion-list-item">
@@ -783,40 +759,29 @@ const Diagnostique = () => {
         </div>
       </div>
 
-      {/* HISTORIQUE PERFORMANCE */}
+      {/* HISTORIQUE */}
       <div className="performance-history">
-        <h4><LineChartIcon size={18} /> Historique de performance</h4>
+        <h4><LineChartIcon size={18} /> {t('Historique de performance', "Tantaran'ny fahombiazana", 'Performance history')}</h4>
         <div className="performance-stats">
           <div className="perf-item">
-            <span className="perf-label">Meilleur mois</span>
+            <span className="perf-label">{t('Meilleur mois', 'Volana tsara indrindra', 'Best month')}</span>
             <span className="perf-value">
               {historique?.meilleurMois
-                ? `${historique.meilleurMois.montant.toLocaleString()} Ar`
-                : 'Pas assez de données'}
+                ? `${historique.meilleurMois.montant.toLocaleString(locale)} Ar`
+                : t('Pas assez de données', 'Tsy ampy angona', 'Not enough data')}
             </span>
-            {historique?.meilleurMois && (
-              <span className="perf-sub">{historique.meilleurMois.periode}</span>
-            )}
+            {historique?.meilleurMois && <span className="perf-sub">{historique.meilleurMois.periode}</span>}
           </div>
           <div className="perf-item">
-            <span className="perf-label">Moyenne mensuelle</span>
-            <span className="perf-value">
-              {(historique?.moyenneMensuelle || 0).toLocaleString()} Ar
-            </span>
+            <span className="perf-label">{t('Moyenne mensuelle', 'Antonony isam-bolana', 'Monthly average')}</span>
+            <span className="perf-value">{(historique?.moyenneMensuelle || 0).toLocaleString(locale)} Ar</span>
           </div>
           <div className="perf-item">
-            <span className="perf-label">Croissance annuelle</span>
-            <span
-              className="perf-value"
-              style={{
-                color:
-                  historique?.croissanceAnnuelle > 0
-                    ? '#22c55e'
-                    : historique?.croissanceAnnuelle < 0
-                    ? '#ef4444'
-                    : '#f59e0b'
-              }}
-            >
+            <span className="perf-label">{t('Croissance annuelle', 'Fitomboana isan-taona', 'Annual growth')}</span>
+            <span className="perf-value" style={{
+              color: historique?.croissanceAnnuelle > 0 ? '#22c55e'
+                : historique?.croissanceAnnuelle < 0 ? '#ef4444' : '#f59e0b'
+            }}>
               {historique?.croissanceAnnuelle !== null && historique?.croissanceAnnuelle !== undefined
                 ? `${historique.croissanceAnnuelle > 0 ? '+' : ''}${historique.croissanceAnnuelle}%`
                 : 'N/A'}

@@ -1,255 +1,117 @@
 const express = require('express');
 const router = express.Router();
-const bcrypt = require('bcrypt');
 const pool = require('../database');
-const { verifyAdminToken } = require('../middleware');
 
-// ============================================
-// GET /api/profile/:userId
-// ============================================
-router.get('/profile/:userId', async (req, res) => {
-  const { userId } = req.params;
-  
+// ============================================================
+// GET /api/profile/:id  -> récupérer le profil
+// ============================================================
+router.get('/profile/:id', async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (isNaN(userId)) {
+    return res.status(400).json({ success: false, message: 'ID invalide' });
+  }
+
   try {
-    console.log('📡 Récupération profil pour userId:', userId);
-    
-    const userResult = await pool.query(
+    const result = await pool.query(
       `SELECT id, nom, email, role, statut, prefix, created_at, derniere_connexion
-       FROM utilisateurs 
+       FROM utilisateurs
        WHERE id = $1`,
       [userId]
     );
-    
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Utilisateur non trouvé' 
-      });
-    }
-    
-    const user = userResult.rows[0];
-    console.log('✅ Utilisateur trouvé:', user.nom);
-    
-    // ============================================
-    // STATISTIQUES DES DOSSIERS PAR TYPE
-    // ============================================
-    const stats = {
-      totalDossiers: 0,
-      dossiers: {}
-    };
-    
-    const types = ['Hôtel', 'Grand Surface', 'Télé/Radio', 'OCC', 'Bus', 'Night club'];
-    const tables = {
-      'Hôtel': 'usagers_hotel',
-      'Grand Surface': 'usagers_magasin',
-      'Télé/Radio': 'usagers_media',
-      'OCC': 'usagers_occasionnel',
-      'Bus': 'usagers_bus',
-      'Night club': 'usagers_nightclub'
-    };
-    
-    let total = 0;
-    
-    for (const type of types) {
-      const tableName = tables[type];
-      try {
-        const result = await pool.query(
-          `SELECT COUNT(*) as count FROM ${tableName} WHERE created_by = $1`,
-          [userId]
-        );
-        const count = parseInt(result.rows[0].count) || 0;
-        stats.dossiers[type] = count;
-        total += count;
-      } catch (err) {
-        console.error(`❌ Erreur comptage ${type}:`, err.message);
-        stats.dossiers[type] = 0;
-      }
-    }
-    
-    stats.totalDossiers = total;
-    console.log(`📊 Statistiques: ${total} dossiers au total`);
 
-    res.json({
-      success: true,
-      user: {
-        ...user,
-        totalDossiers: stats.totalDossiers,
-        dossiers: stats.dossiers
-      }
-    });
-    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
+    }
+
+    res.json({ success: true, user: result.rows[0] });
   } catch (error) {
-    console.error('❌ Erreur récupération profil:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: error.message 
-    });
+    console.error('Erreur GET profile:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
 
-// ============================================
-// PUT /api/profile/:userId
-// ============================================
-router.put('/profile/:userId', async (req, res) => {
-  const { userId } = req.params;
+// ============================================================
+// PUT /api/profile/:id  -> modifier nom, email, mot de passe
+// Le mot de passe est stocké EN CLAIR (4 caractères), comme
+// dans /auth/login et /admin/users, pour que le login marche.
+// ============================================================
+router.put('/profile/:id', async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (isNaN(userId)) {
+    return res.status(400).json({ success: false, message: 'ID invalide' });
+  }
+
   const { nom, email, mot_de_passe } = req.body;
-  
+
   try {
-    console.log('📝 Mise à jour profil pour userId:', userId);
-    
-    const userCheck = await pool.query(
-      'SELECT id FROM utilisateurs WHERE id = $1',
+    // 1. L'utilisateur existe ?
+    const current = await pool.query(
+      'SELECT id, nom, email FROM utilisateurs WHERE id = $1',
       [userId]
     );
-    
-    if (userCheck.rows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Utilisateur non trouvé' 
-      });
+    if (current.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
     }
-    
-    if (email) {
+    const currentUser = current.rows[0];
+
+    // 2. Valeurs finales (on garde l'ancien si vide)
+    const newNom = nom && nom.trim() !== '' ? nom.trim() : currentUser.nom;
+    const newEmail = email && email.trim() !== '' ? email.trim() : currentUser.email;
+
+    // 3. Email déjà utilisé par quelqu'un d'autre ?
+    if (newEmail !== currentUser.email) {
       const emailCheck = await pool.query(
         'SELECT id FROM utilisateurs WHERE email = $1 AND id != $2',
-        [email, userId]
+        [newEmail, userId]
       );
-      
       if (emailCheck.rows.length > 0) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Cet email est déjà utilisé par un autre compte' 
-        });
+        return res.status(409).json({ success: false, message: 'Cet email est déjà utilisé' });
       }
     }
-    
-    let query = 'UPDATE utilisateurs SET ';
-    const params = [];
-    let paramIndex = 1;
-    
-    if (nom) {
-      query += `nom = $${paramIndex}, `;
-      params.push(nom);
-      paramIndex++;
-    }
-    
-    if (email) {
-      query += `email = $${paramIndex}, `;
-      params.push(email);
-      paramIndex++;
-    }
-    
-    if (mot_de_passe && mot_de_passe.length >= 4) {
-      const hashedPassword = await bcrypt.hash(mot_de_passe, 10);
-      query += `mot_de_passe = $${paramIndex}, `;
-      params.push(hashedPassword);
-      paramIndex++;
-    }
-    
-    query = query.slice(0, -2);
-    query += ` WHERE id = $${paramIndex} RETURNING id, nom, email, role, statut, prefix`;
-    params.push(userId);
-    
-    const result = await pool.query(query, params);
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Utilisateur non trouvé' 
+
+    // 4. Mot de passe (optionnel)
+    const hasPassword =
+      typeof mot_de_passe === 'string' && mot_de_passe.length > 0;
+
+    if (hasPassword && mot_de_passe.length !== 4) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le mot de passe doit contenir exactement 4 caractères',
       });
     }
-    
-    console.log('✅ Profil mis à jour pour:', result.rows[0].nom);
-    
+
+    // 5. UPDATE
+    let result;
+    if (hasPassword) {
+      result = await pool.query(
+        `UPDATE utilisateurs
+         SET nom = $1, email = $2, mot_de_passe = $3
+         WHERE id = $4
+         RETURNING id, nom, email, role, statut, prefix, created_at, derniere_connexion`,
+        [newNom, newEmail, mot_de_passe, userId]
+      );
+    } else {
+      result = await pool.query(
+        `UPDATE utilisateurs
+         SET nom = $1, email = $2
+         WHERE id = $3
+         RETURNING id, nom, email, role, statut, prefix, created_at, derniere_connexion`,
+        [newNom, newEmail, userId]
+      );
+    }
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ success: false, message: 'Mise à jour impossible' });
+    }
+
     res.json({
       success: true,
       message: 'Profil mis à jour avec succès',
-      user: result.rows[0]
+      user: result.rows[0],
     });
-    
   } catch (error) {
-    console.error('❌ Erreur mise à jour profil:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: error.message 
-    });
-  }
-});
-
-// ============================================
-// GET /api/profile/me
-// ============================================
-router.get('/profile/me', verifyAdminToken, async (req, res) => {
-  try {
-    const userId = req.userId;
-    
-    console.log('📡 Récupération profil courant, userId:', userId);
-    
-    if (!userId) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Non authentifié' 
-      });
-    }
-    
-    const userResult = await pool.query(
-      `SELECT id, nom, email, role, statut, prefix, created_at, derniere_connexion
-       FROM utilisateurs 
-       WHERE id = $1`,
-      [userId]
-    );
-    
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Utilisateur non trouvé' 
-      });
-    }
-    
-    const user = userResult.rows[0];
-    
-    // Statistiques
-    const stats = { totalDossiers: 0, dossiers: {} };
-    const types = ['Hôtel', 'Grand Surface', 'Télé/Radio', 'OCC', 'Bus', 'Night club'];
-    const tables = {
-      'Hôtel': 'usagers_hotel',
-      'Grand Surface': 'usagers_magasin',
-      'Télé/Radio': 'usagers_media',
-      'OCC': 'usagers_occasionnel',
-      'Bus': 'usagers_bus',
-      'Night club': 'usagers_nightclub'
-    };
-    
-    let total = 0;
-    for (const type of types) {
-      try {
-        const result = await pool.query(
-          `SELECT COUNT(*) as count FROM ${tables[type]} WHERE created_by = $1`,
-          [userId]
-        );
-        const count = parseInt(result.rows[0].count) || 0;
-        stats.dossiers[type] = count;
-        total += count;
-      } catch (err) {
-        stats.dossiers[type] = 0;
-      }
-    }
-    stats.totalDossiers = total;
-    
-    res.json({
-      success: true,
-      user: {
-        ...user,
-        ...stats
-      }
-    });
-    
-  } catch (error) {
-    console.error('❌ Erreur récupération profil courant:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: error.message 
-    });
+    console.error('Erreur PUT profile:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
 
